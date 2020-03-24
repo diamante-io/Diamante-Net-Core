@@ -1,0 +1,26 @@
+Source: medida
+Section: libs
+Priority: optional
+Maintainer: Daniel Lundin <dln@eintr.org>
+Homepage: https://github.com/dln/medida/
+Standards-Version: 3.9.2
+Build-Depends: debhelper (>= 8), cmake (>= 2.8.8), doxygen, pkg-config
+
+Package: libmedida-dev
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Medida metrics library
+
+Package: libmedida0
+Architecture: any
+Recommends: libmedida-dbg (= ${binary:Version})
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Medida metrics library.
+
+Package: libmedida-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}, libmedida0 (= ${binary:Version})
+Description: Medida metrics library. Debug symbols.
+

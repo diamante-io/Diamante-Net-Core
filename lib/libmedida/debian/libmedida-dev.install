@@ -1,0 +1,4 @@
+usr/include/*
+usr/lib/libmedida.so
+usr/lib/pkgconfig/libmedida.pc
+usr/share/doc/libmedida-dev

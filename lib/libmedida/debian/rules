@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+
+DEB_CMAKE_EXTRA_FLAGS := -DBUILD_DOCS=ON
+
+include /usr/share/cdbs/1/class/cmake.mk 
+include /usr/share/cdbs/1/rules/debhelper.mk
+
+override_dh_strip:
+	dh_strip --dbg-package=libmedida-dbg
+
+.PHONY: override_dh_strip

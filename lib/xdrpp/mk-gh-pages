@@ -1,0 +1,15 @@
+#!/bin/sh -xe
+
+# Create an orphan commit containing the contents of $DOCROOT, then
+# force branch gh-pages to point to it.
+
+DOCROOT=doc/html
+
+GIT_DIR=$(git rev-parse --git-dir)
+export GIT_INDEX_FILE="$GIT_DIR/index.gh-pages"
+rm -f "$GIT_INDEX_FILE"
+git add -f "$DOCROOT"
+tree=$(git write-tree --prefix="$DOCROOT")
+rm -f "$GIT_INDEX_FILE"
+commit=$(echo 'doxygen output' | git commit-tree $tree)
+git branch -f gh-pages $commit

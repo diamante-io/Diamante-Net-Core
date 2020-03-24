@@ -1,0 +1,19 @@
+language: cpp
+compiler:
+  - gcc
+before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq cmake
+before_script:
+  cmake --config=Debug .
+script:
+  cmake --build . && ctest -V
+branches:
+  only:
+    - master
+notifications:
+  recipients:
+    - dln@eintr.org
+  email:
+    on_success: change
+    on_failure: always

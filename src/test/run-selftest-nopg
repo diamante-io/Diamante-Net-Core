@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Copyright 2018 HcNet Development Foundation and contributors. Licensed
+# under the Apache License, Version 2.0. See the COPYING file at the root
+# of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
+
+BASE_INSTANCE="$1"
+TESTS="$2"
+
+if [[ "$ALL_VERSIONS" != "" ]]; then
+    ./HcNet-core test --ll fatal --base-instance $BASE_INSTANCE --all-versions -a -r simple "$TESTS" 2> /dev/null
+else
+    ./HcNet-core test --ll fatal --base-instance $BASE_INSTANCE -a -r simple "$TESTS" 2> /dev/null
+fi

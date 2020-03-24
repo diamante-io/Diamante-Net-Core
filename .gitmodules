@@ -1,0 +1,15 @@
+[submodule "lib/libsodium"]
+	path = lib/libsodium
+	url = https://github.com/HashCash-Consultants/libsodium.git
+[submodule "lib/xdrpp"]
+	path = lib/xdrpp
+	url = https://github.com/xdrpp/xdrpp.git
+[submodule "lib/libmedida"]
+	path = lib/libmedida
+	url = https://github.com/HashCash-Consultants/medida.git
+[submodule "lib/cereal"]
+	path = lib/cereal
+	url = https://github.com/USCiLab/cereal
+[submodule "lib/asio"]
+	path = lib/asio
+	url = https://github.com/chriskohlhoff/asio.git

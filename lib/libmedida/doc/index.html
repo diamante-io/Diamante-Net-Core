@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Medida</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Simple metrics for C++ programs">
+    <meta name="author" content="Daniel Lundin">
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/medida.css" rel="stylesheet">
+    <style type="text/css">
+      body {
+        padding-top: 60px;
+        padding-bottom: 40px;
+      }
+    </style>
+    <link href="css/bootstrap-responsive.min.css" rel="stylesheet">
+
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <!-- Le fav and touch icons -->
+    <link rel="shortcut icon" href="ico/favicon.ico">
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="ico/apple-touch-icon-144-precomposed.png">
+    <link rel="apple-touch-icon-precomposed" sizes="114x114" href="ico/apple-touch-icon-114-precomposed.png">
+    <link rel="apple-touch-icon-precomposed" sizes="72x72" href="ico/apple-touch-icon-72-precomposed.png">
+    <link rel="apple-touch-icon-precomposed" href="ico/apple-touch-icon-57-precomposed.png">
+  </head>
+
+  <body>
+
+    <div class="navbar navbar-inverse navbar-fixed-top">
+      <div class="navbar-inner">
+        <div class="container">
+          <a class="brand" href="#">Medida</a>
+          <ul class="nav">
+            <li><a href="api/index.html">API Docs</a></li>
+            <li><a href="https://github.com/dln/medida/issues">Bugs</a></li>
+            <li><a href="https://github.com/dln/medida/">GitHub</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div id="header" class="hero-unit">
+        <h1>Medida</h1>
+        <p>A library to simply collect and report metrics in C++ programs.
+          Heavily based on the excellent <a href="http://metrics.codahale.com/">Metrics</a> Java library.</p>
+        <p><a class="btn btn-primary btn-large" href="api/index.html">API Docs &raquo;</a></p>
+      </div>
+
+      <div class="row">
+        <div class="span4">
+          <h2>Simple</h2>
+          <p>Medida is easy to get started with, the API small and concise.</p>
+          <p>Just drop it in, add some metrics, enjoy statistics using the built-in reporters:</p>
+          <ul>
+            <li><a href="http://collectd.org/">Collectd</a></li>
+            <li>JSON</li>
+            <li>Basic console reporting</li>
+          </ul>
+          <!-- <p><a class="btn" href="#">View Example &raquo;</a></p> -->
+        </div>
+        <div class="span4">
+          <h2>Flexible</h2>
+          <p>Supported metrics include:</p>
+          <ul>
+            <li>Counters</li>
+            <li>Histograms</li>
+            <li>Timers</li>
+            <li>Meters</li>
+          </ul>
+          <p>The core library and reporting plugins have no external dependencies.</p>
+       </div>
+        <div class="span4">
+          <h2>Open Source</h2>
+          <p>Medida is released under the <a href="http://github.com/dln/medida/blob/master/LICENSE">Apache License 2.0</a>.
+          <p>Patches and bug reports are most welcome to bring the project forward.</p>
+          <p><a class="btn" href="http://github.com/dln/medida/">Project on GitHub &raquo;</a></p>
+        </div>
+      </div>
+
+
+      <div class="row">
+        <div class="span12">
+          <h2>Usage Example</h2>
+          <script src="http://gist.github.com/3844663.js?file=medida_example1.cc"></script>
+        </div>
+      </div>
+
+      <hr>
+
+      <footer>
+        <p>&copy; Copyright 2012, <a href="http://eintr.org">Daniel Lundin</a></p>
+      </footer>
+
+    </div> <!-- /container -->
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+  </body>
+</html>

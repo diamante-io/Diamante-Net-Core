@@ -1,0 +1,182 @@
+Copyright 2014, 2015 HcNet Development Foundation and contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+As well as the file LICENSE-APACHE.txt adjacent to this file.
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+
+Additional files found in the subdirectory lib are copies of liberally
+licensed external libraries (that we believe to be compatible with the license
+text of the collective work, above). The following are restatements of license
+information found in those files and/or their respective upstream repositories:
+
+lib/autocheck:
+
+  The Autocheck library,
+  Copyright 2012-2013 John Freeman
+  (https://github.com/thejohnfreeman)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/asio:
+
+  The ASIO library,
+  Copyright 2003-2015 Christopher M. Kohlhoff
+  (chris at kohlhoff dot com)
+  (http://think-async.com/Asio)
+  Licensed under the Boost Software License 1.0
+  (http://www.boost.org/LICENSE_1_0.txt)
+
+lib/catch.hpp:
+
+  The Catch library,
+  Copyright 2012 Two Blue Cubes Ltd.
+  (https://github.com/philsquared)
+  Licensed under the Boost Software License 1.0
+  (http://www.boost.org/LICENSE_1_0.txt)
+
+lib/http:
+
+  Example HTTP server from the ASIO library,
+  Copyright 2003-2014 Christopher M. Kohlhoff
+  (chris at kohlhoff dot com)
+  (http://think-async.com/Asio)
+  Licensed under the Boost Software License 1.0
+  (http://www.boost.org/LICENSE_1_0.txt)
+
+lib/util/easylogging++.h:
+
+  The EasyLogging++ library,
+  Copyright 2014 Majid Khan
+  (support@easylogging.org)
+  (http://easylogging.muflihun.com/)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/util/getopt.h and getopt_long.c:
+
+  NetBSD's getopt/getopt_long libraries,
+  Copyright 2000 The NetBSD Foundation, Inc.
+  Copyright 2002 2002 Todd C. Miller <Todd.Miller@courtesan.com>
+  Licensed under the 2-clause BSD license
+  (http://opensource.org/licenses/BSD-2-Clause)
+
+lib/util/cpptoml.h:
+
+  The cpptoml library,
+  Copyright 2013-2014 Chase Geigle
+  (https://github.com/skystrife)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/util/format.cc and format.h:
+
+  The cppformat library,
+  Copyright 2012, Victor Zverovich
+  (victor.zverovich@gmail.com)
+  (https://github.com/cppformat/cppformat)
+  Licensed under the 2-clause BSD license
+  (http://opensource.org/licenses/BSD-2-Clause)
+
+lib/json/:
+
+  The JsonCpp library,
+  Copyright (c) 2007-2010 Baptiste Lepilleur
+  (blep@users.sourceforge.net)
+  (https://github.com/open-source-parsers/jsoncpp)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/cereal:
+
+  The cereal library,
+  Copyright 2014, Randolph Voorhies, Shane Grant
+  (voorhies@usc.edu, wgrant@usc.edu)
+  (https://github.com/USCiLab/cereal)
+  Licensed under the 3-clause BSD license
+  (http://opensource.org/licenses/BSD-3-Clause)
+
+lib/cereal/external/rapidjson:
+
+  The RapidJSON library,
+  Copyright 2011 Milo Yip
+  (miloyip@gmail.com)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/sqlite:
+
+  The SQLite library,
+  dedicated to the public domain
+  (http://sqlite.org/)
+  (https://www.sqlite.org/copyright.html)
+
+lib/soci:
+
+  The SOCI library,
+  Copyright 2008 Maciej Sobczak
+  (maciej@msobczak.com)
+  (https://github.com/SOCI/soci)
+  Licensed under the Boost Software License 1.0
+  (http://www.boost.org/LICENSE_1_0.txt)
+
+lib/libmedida:
+
+  The Medida library,
+  Copyright 2012 Daniel Lundin
+  (https://github.com/dln/medida)
+  Licensed under the Apache License, Version 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0)
+
+lib/util/uint128_t.{cpp,h}
+
+  The uint128_t library,
+  Copyright 2013 2014 Jason Lee
+  (calccrypto@gmail.com)
+  (https://github.com/calccrypto/uint128_t)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/util/lrucache.hpp
+
+  The LRUCache libary
+  Copyright 2014 Alexander Ponomarev
+  (https://github.com/lamerman/cpp-lru-cache)
+  Licensed under the 3-clause BSD license
+  (http://opensource.org/licenses/BSD-3-Clause)
+
+lib/util/basen.h
+
+  The Base-n library
+  Copyright 2012 Andrzej Zawadzki
+  (azawadzki@gmail.com)
+  (https://github.com/azawadzki/base-n)
+  Licensed under the MIT license
+  (http://opensource.org/licenses/MIT)
+
+lib/util/crc16.cpp
+
+  CRC16 function
+  Copyright 2001-2010 Georges Menie
+  (http://www.menie.org/georges/embedded/crc16.html)
+  Copyright 2010-2012 Salvatore Sanfilippo
+  Licensed under the 3-clause BSD license
+  (http://opensource.org/licenses/BSD-3-Clause)
+
+lib/util/cbitset.{c,h} and cbitset_portability.h
+
+  A simple bitset library in C
+  2016-2019 Daniel Lemire (lemire@gmail.com)
+  https://github.com/lemire/cbitset
+  Licensed under the Apache License, Version 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0)

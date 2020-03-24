@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+bindir=@bindir@
+xdrc=${bindir}/xdrc
+
+Name: xdrpp
+Description: RFC5531 RPC library
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -lxdrpp
+Cflags: -I${includedir}

@@ -1,0 +1,62 @@
+language: cpp
+sudo: false
+dist: xenial
+
+compiler:
+- clang
+- gcc
+
+addons:
+  postgresql: "9.5"
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - autoconf
+    - automake
+    - bison
+    - clang-5.0
+    - cpp-6
+    - flex
+    - gcc-6
+    - g++-6
+    - libpq-dev
+    - libpq5
+    - libstdc++6
+    - libtool
+    - llvm-5.0
+    - pkg-config
+    - clang-format-5.0
+    - pandoc
+    - perl
+    - parallel
+
+script: ./travis-build.sh
+
+cache:
+  directories:
+  - $HOME/.ccache
+
+notifications:
+  email: false
+  slack:
+    secure: VYA87p8f6PgmOhL8b8DM4t6k8vPYjULpT7LBhvmNBNe8iiNDtTzLpRbUXg6t6Ij7Y3MU4uOJ5K617hCqs81VfRoOakbiYTWHeYSsMmIrUM4+d5MZM4pVP0/bCE49qt06bZINorh6IHChhfuvod3uyUqbgNrwRf/qDIIboFDIty8=
+
+branches:
+ only:
+ - auto
+
+stages:
+  - compile
+  - test
+
+matrix:
+  fast_finish: true
+  include:
+    - stage: compile
+      compiler: clang
+      script: ./travis-build.sh --disable-tests
+    - stage: compile
+      compiler: gcc
+      script: ./travis-build.sh --disable-tests
+

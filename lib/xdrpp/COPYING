@@ -1,0 +1,30 @@
+Copyright (C) 2014 David Mazieres.  All rights reserved.
+
+
+Anyone is premitted to distribute this software under the terms of the
+GNU General Public License (GPL) version 3 or later.  An acceptable
+version of this license is available at the following URL:
+
+        http://www.gnu.org/licenses/gpl-3.0.html
+
+If the Free Software Foundation publishes a higher-numbered GPL
+license, you may at your option distribute this software under the
+terms of that license as well.
+
+
+HcNet Development Foundation may, at the foundation's option,
+relicense any version of this software under any license the
+foundation sees fit.
+
+
+If you took CS244b from David Mazieres at Stanford and received credit
+for the class, you may at your option re-license this software under
+the Apache 2.0 license available at the following URL:
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+To relicense the software, you must change this COPYING file to add a
+line of the form "Relicensed by YOURNAME under Apache 2.0 on DATE"
+(substituting YOURNAME and DATE as appropriate).  The Apache 2.0
+license lets you incorporate this software into proprietary systems,
+but only if you have taken CS244b (or hired someone who took CS244b).
