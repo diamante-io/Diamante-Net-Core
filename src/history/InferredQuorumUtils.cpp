@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,16 +9,16 @@
 #include "main/Config.h"
 #include "util/Logging.h"
 #include "util/XDROperators.h"
-#include "xdr/HcNet-SCP.h"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-SCP.h"
+#include "xdr/DiamNet-types.h"
 
 #include <algorithm>
 #include <set>
 
-namespace HcNet
+namespace DiamNet
 {
 
-static HcNet::QuorumTracker::QuorumMap
+static DiamNet::QuorumTracker::QuorumMap
 getQuorumMapForLedger(Application::pointer app, uint32_t ledgerNum)
 {
     if (ledgerNum == 0)

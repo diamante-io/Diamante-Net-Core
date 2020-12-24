@@ -2,7 +2,7 @@
 title: Ledger
 ---
 
-- **Ledger**: A ledger is the state of the distributed HcNet database at a
+- **Ledger**: A ledger is the state of the distributed DiamNet database at a
   particular point in time. It is composed of a set of _ledger entries_,
   including (1) accounts and their balances, (2) buy and sell offers, (3) and
   trust lines, as well as a _ledger header_ that records some additional meta
@@ -15,10 +15,10 @@ title: Ledger
 
 - **Ledger header**: The ledger's header contains meta data about the ledger,
   including the hash of the previous ledger (thus recording the chain) and its
-  own hash. (See [`src/xdr/HcNet-ledger.x`](/src/xdr/HcNet-ledger.x))
+  own hash. (See [`src/xdr/DiamNet-ledger.x`](/src/xdr/DiamNet-ledger.x))
 
 
-`HcNet-core` maintains the content of the latest ledger and of the ledger
+`DiamNet-core` maintains the content of the latest ledger and of the ledger
 chain in a number of different representations in order to satisfy competing
 performance needs.
 
@@ -47,7 +47,7 @@ performance needs.
 	concatenating all the entries, it is not the same value since the bucket
 	list deduplicates changed entries incrementally.
 
- 4. Finally, `HcNet-core` can be configured to upload detailed historical
+ 4. Finally, `DiamNet-core` can be configured to upload detailed historical
     records of all the transactions, including all or most of the ledgers'
     content, to persistent long-term storage. This record can be used to audit
     the full ledger chain's history, and is used to catch-up new nodes and nodes

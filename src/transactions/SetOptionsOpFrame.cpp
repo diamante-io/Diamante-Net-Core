@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 static const uint32 allAccountFlags =
@@ -51,7 +51,7 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
         AccountID inflationID = *mSetOptions.inflationDest;
         if (!(inflationID == getSourceID()))
         {
-            if (!HcNet::loadAccountWithoutRecord(ltx, inflationID))
+            if (!DiamNet::loadAccountWithoutRecord(ltx, inflationID))
             {
                 innerResult().code(SET_OPTIONS_INVALID_INFLATION);
                 return false;

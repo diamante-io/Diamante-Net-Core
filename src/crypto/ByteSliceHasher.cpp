@@ -1,11 +1,11 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ByteSliceHasher.h"
 #include <sodium.h>
 
-namespace HcNet
+namespace DiamNet
 {
 namespace shortHash
 {
@@ -16,7 +16,7 @@ initialize()
     crypto_shorthash_keygen(sKey);
 }
 uint64_t
-computeHash(HcNet::ByteSlice const& b)
+computeHash(DiamNet::ByteSlice const& b)
 {
     uint64_t res;
     static_assert(sizeof(res) == crypto_shorthash_BYTES, "unexpected size");

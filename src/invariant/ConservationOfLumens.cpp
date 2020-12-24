@@ -1,4 +1,4 @@
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 #include "main/Application.h"
 #include <numeric>
 
-namespace HcNet
+namespace DiamNet
 {
 
 static int64_t
@@ -55,7 +55,7 @@ ConservationOfLumens::checkOnOperationApply(Operation const& operation,
     int64_t deltaBalances = std::accumulate(
         ltxDelta.entry.begin(), ltxDelta.entry.end(), static_cast<int64_t>(0),
         [](int64_t lhs, decltype(ltxDelta.entry)::value_type const& rhs) {
-            return lhs + HcNet::calculateDeltaBalance(rhs.second.current,
+            return lhs + DiamNet::calculateDeltaBalance(rhs.second.current,
                                                         rhs.second.previous);
         });
 

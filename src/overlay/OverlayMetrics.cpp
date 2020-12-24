@@ -5,7 +5,7 @@
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 OverlayMetrics::OverlayMetrics(Application& app)

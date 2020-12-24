@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -28,7 +28,7 @@
 #include <lib/catch.hpp>
 #include <lib/util/format.h>
 
-using namespace HcNet;
+using namespace DiamNet;
 using namespace historytestutils;
 
 TEST_CASE("next checkpoint ledger", "[history]")
@@ -738,8 +738,8 @@ TEST_CASE("Catchup non-initentry buckets to initentry-supporting works",
                 << txSet->size(lm.getLastClosedLedgerHeader().header)
                 << " txs (txhash:" << hexAbbrev(txSet->getContentsHash())
                 << ")";
-            HcNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                            HcNet_VALUE_BASIC);
+            DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                            DiamNet_VALUE_BASIC);
             lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         }
 
@@ -1038,9 +1038,9 @@ TEST_CASE("Catchup manual", "[history][catchup][acceptance]")
     auto dbMode = Config::TESTDB_IN_MEMORY_SQLITE;
 
     // Test every 10th scenario
-    for (auto i = 0; i < HcNet::gCatchupRangeCases.size(); i += 10)
+    for (auto i = 0; i < DiamNet::gCatchupRangeCases.size(); i += 10)
     {
-        auto test = HcNet::gCatchupRangeCases[i];
+        auto test = DiamNet::gCatchupRangeCases[i];
         auto configuration = test.second;
         auto name =
             fmt::format("lcl = {}, to ledger = {}, count = {}", test.first,

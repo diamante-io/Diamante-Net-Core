@@ -1,4 +1,4 @@
-// Copyright 2016 HcNet Development Foundation and contributors. Licensed
+// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,7 +13,7 @@
 
 #include <lib/catch.hpp>
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace txtest;
@@ -31,7 +31,7 @@ TestAccount::updateSequenceNumber()
     if (mSn == 0)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto entry = HcNet::loadAccount(ltx, getPublicKey());
+        auto entry = DiamNet::loadAccount(ltx, getPublicKey());
         if (entry)
         {
             mSn = entry.current().data.account().seqNum;
@@ -43,7 +43,7 @@ int64_t
 TestAccount::getBalance() const
 {
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    auto entry = HcNet::loadAccount(ltx, getPublicKey());
+    auto entry = DiamNet::loadAccount(ltx, getPublicKey());
     return entry.current().data.account().balance;
 }
 
@@ -86,7 +86,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
     std::unique_ptr<LedgerEntry> destBefore;
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto entry = HcNet::loadAccount(ltx, publicKey);
+        auto entry = DiamNet::loadAccount(ltx, publicKey);
         if (entry)
         {
             destBefore = std::make_unique<LedgerEntry>(entry.current());
@@ -100,7 +100,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
     catch (...)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto destAfter = HcNet::loadAccount(ltx, publicKey);
+        auto destAfter = DiamNet::loadAccount(ltx, publicKey);
         // check that the target account didn't change
         REQUIRE(!!destBefore == !!destAfter);
         if (destBefore && destAfter)
@@ -112,7 +112,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
 
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        REQUIRE(HcNet::loadAccount(ltx, publicKey));
+        REQUIRE(DiamNet::loadAccount(ltx, publicKey));
     }
     return TestAccount{mApp, secretKey};
 }
@@ -129,8 +129,8 @@ TestAccount::merge(PublicKey const& into)
     applyTx(tx({accountMerge(into)}), mApp);
 
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    REQUIRE(HcNet::loadAccount(ltx, into));
-    REQUIRE(!HcNet::loadAccount(ltx, getPublicKey()));
+    REQUIRE(DiamNet::loadAccount(ltx, into));
+    REQUIRE(!DiamNet::loadAccount(ltx, getPublicKey()));
 }
 
 void
@@ -195,7 +195,7 @@ TestAccount::manageData(std::string const& name, DataValue* value)
     applyTx(tx({txtest::manageData(name, value)}), mApp);
 
     LedgerTxn ls(mApp.getLedgerTxnRoot());
-    auto data = HcNet::loadData(ls, getPublicKey(), name);
+    auto data = DiamNet::loadData(ls, getPublicKey(), name);
     if (value)
     {
         REQUIRE(data);
@@ -249,7 +249,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     std::unique_ptr<LedgerEntry> toAccount;
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto toAccountEntry = HcNet::loadAccount(ltx, destination);
+        auto toAccountEntry = DiamNet::loadAccount(ltx, destination);
         toAccount =
             toAccountEntry
                 ? std::make_unique<LedgerEntry>(toAccountEntry.current())
@@ -260,7 +260,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
         }
         else
         {
-            REQUIRE(HcNet::loadAccount(ltx, getPublicKey()));
+            REQUIRE(DiamNet::loadAccount(ltx, getPublicKey()));
         }
     }
 
@@ -273,7 +273,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     catch (...)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto toAccountAfter = HcNet::loadAccount(ltx, destination);
+        auto toAccountAfter = DiamNet::loadAccount(ltx, destination);
         // check that the target account didn't change
         REQUIRE(!!toAccount == !!toAccountAfter);
         if (toAccount && toAccountAfter &&
@@ -286,7 +286,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     }
 
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    auto toAccountAfter = HcNet::loadAccount(ltx, destination);
+    auto toAccountAfter = DiamNet::loadAccount(ltx, destination);
     REQUIRE(toAccount);
     REQUIRE(toAccountAfter);
 }

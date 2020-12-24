@@ -1,4 +1,4 @@
-// Copyright 2016 HcNet Development Foundation and contributors. Licensed
+// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "test/test.h"
 #include "util/format.h"
 
-using namespace HcNet;
+using namespace DiamNet;
 
 namespace
 {
@@ -143,7 +143,7 @@ TEST_CASE("resolve node id", "[config]")
 TEST_CASE("load validators config", "[config]")
 {
     Config c;
-    c.load("testdata/HcNet-core_example_validators.cfg");
+    c.load("testdata/DiamNet-core_example_validators.cfg");
     auto actualS = c.toString(c.QUORUM_SET);
     std::string expected = R"({
    "t" : 3,
@@ -367,8 +367,8 @@ TEST_CASE("load example configs", "[config]")
 {
     Config c;
     std::vector<std::string> testFiles = {
-        "HcNet-core_example.cfg", "HcNet-core_standalone.cfg",
-        "HcNet-core_testnet_legacy.cfg", "HcNet-core_testnet.cfg"};
+        "DiamNet-core_example.cfg", "DiamNet-core_standalone.cfg",
+        "DiamNet-core_testnet_legacy.cfg", "DiamNet-core_testnet.cfg"};
     for (auto const& fn : testFiles)
     {
         std::string fnPath = "testdata/";

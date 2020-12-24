@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "ledger/LedgerManager.h"
 #include "main/Application.h"
 #include "main/Config.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/Fs.h"
 #include "util/LogSlowExecution.h"
 #include "util/Logging.h"
@@ -27,7 +27,7 @@
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 std::unique_ptr<BucketManager>
@@ -65,7 +65,7 @@ BucketManagerImpl::initialize()
     {
         throw std::runtime_error(
             fmt::format("{}. This can be caused by access rights issues or "
-                        "another HcNet-core process already running",
+                        "another DiamNet-core process already running",
                         e.what()));
     }
 
@@ -109,7 +109,7 @@ BucketManagerImpl::BucketManagerImpl(Application& app)
 {
 }
 
-const std::string BucketManagerImpl::kLockFilename = "HcNet-core.lock";
+const std::string BucketManagerImpl::kLockFilename = "DiamNet-core.lock";
 
 namespace
 {

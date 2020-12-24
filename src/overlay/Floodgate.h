@@ -1,11 +1,11 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/Peer.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include <map>
 
 /**
@@ -26,7 +26,7 @@ namespace medida
 class Counter;
 }
 
-namespace HcNet
+namespace DiamNet
 {
 
 class Floodgate
@@ -37,10 +37,10 @@ class Floodgate
         typedef std::shared_ptr<FloodRecord> pointer;
 
         uint32_t mLedgerSeq;
-        HcNetMessage mMessage;
+        DiamNetMessage mMessage;
         std::set<std::string> mPeersTold;
 
-        FloodRecord(HcNetMessage const& msg, uint32_t ledger,
+        FloodRecord(DiamNetMessage const& msg, uint32_t ledger,
                     Peer::pointer peer);
     };
 
@@ -55,9 +55,9 @@ class Floodgate
     // Floodgate will be cleared after every ledger close
     void clearBelow(uint32_t currentLedger);
     // returns true if this is a new record
-    bool addRecord(HcNetMessage const& msg, Peer::pointer fromPeer);
+    bool addRecord(DiamNetMessage const& msg, Peer::pointer fromPeer);
 
-    void broadcast(HcNetMessage const& msg, bool force);
+    void broadcast(DiamNetMessage const& msg, bool force);
 
     // returns the list of peers that sent us the item with hash `h`
     std::set<Peer::pointer> getPeersKnows(Hash const& h);

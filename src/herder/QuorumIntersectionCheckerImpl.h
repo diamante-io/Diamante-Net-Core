@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -344,7 +344,7 @@
 // go as fast as possible. For this, we use graph and set representations that
 // minimize allocation, hashing, indirection and so forth: vectors of dense
 // bitsets and bitwise operations. These are not the same representations used
-// elsewhere in HcNet-core so there's a little work up front converting
+// elsewhere in DiamNet-core so there's a little work up front converting
 // representations.
 //
 // Remaining details of the implementation are noted as we go, but the above
@@ -353,8 +353,8 @@
 #include "QuorumIntersectionChecker.h"
 #include "main/Config.h"
 #include "util/BitSet.h"
-#include "xdr/HcNet-SCP.h"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-SCP.h"
+#include "xdr/DiamNet-types.h"
 
 namespace
 {
@@ -456,10 +456,10 @@ class MinQuorumEnumerator
 // QuorumIntersectionChecker on a given QuorumMap. The QuorumIntersectionChecker
 // builds a QGraph of the nodes, uses TarjanSCCCalculator to calculate its SCCs,
 // and then runs a MinQuorumEnumerator to recursively scan the powerset.
-class QuorumIntersectionCheckerImpl : public HcNet::QuorumIntersectionChecker
+class QuorumIntersectionCheckerImpl : public DiamNet::QuorumIntersectionChecker
 {
 
-    HcNet::Config const& mCfg;
+    DiamNet::Config const& mCfg;
 
     struct Stats
     {
@@ -492,14 +492,14 @@ class QuorumIntersectionCheckerImpl : public HcNet::QuorumIntersectionChecker
 
     // State to capture a counterexample found during search, for later
     // reporting.
-    mutable std::pair<std::vector<HcNet::PublicKey>,
-                      std::vector<HcNet::PublicKey>>
+    mutable std::pair<std::vector<DiamNet::PublicKey>,
+                      std::vector<DiamNet::PublicKey>>
         mPotentialSplit;
 
     // These are the key state of the checker: the mapping from node public keys
     // to graph node numbers, and the graph of QBitSets itself.
-    std::vector<HcNet::PublicKey> mBitNumPubKeys;
-    std::unordered_map<HcNet::PublicKey, size_t> mPubKeyBitNums;
+    std::vector<DiamNet::PublicKey> mBitNumPubKeys;
+    std::unordered_map<DiamNet::PublicKey, size_t> mPubKeyBitNums;
     QGraph mGraph;
 
     // This just calculates SCCs and stores the maximal one, which we use for
@@ -507,8 +507,8 @@ class QuorumIntersectionCheckerImpl : public HcNet::QuorumIntersectionChecker
     TarjanSCCCalculator mTSC;
     BitSet mMaxSCC;
 
-    QBitSet convertSCPQuorumSet(HcNet::SCPQuorumSet const& sqs);
-    void buildGraph(HcNet::QuorumTracker::QuorumMap const& qmap);
+    QBitSet convertSCPQuorumSet(DiamNet::SCPQuorumSet const& sqs);
+    void buildGraph(DiamNet::QuorumTracker::QuorumMap const& qmap);
     void buildSCCs();
 
     bool containsQuorumSlice(BitSet const& bs, QBitSet const& qbs) const;
@@ -524,12 +524,12 @@ class QuorumIntersectionCheckerImpl : public HcNet::QuorumIntersectionChecker
     friend class MinQuorumEnumerator;
 
   public:
-    QuorumIntersectionCheckerImpl(HcNet::QuorumTracker::QuorumMap const& qmap,
-                                  HcNet::Config const& cfg,
+    QuorumIntersectionCheckerImpl(DiamNet::QuorumTracker::QuorumMap const& qmap,
+                                  DiamNet::Config const& cfg,
                                   bool quiet = false);
     bool networkEnjoysQuorumIntersection() const override;
 
-    std::pair<std::vector<HcNet::PublicKey>, std::vector<HcNet::PublicKey>>
+    std::pair<std::vector<DiamNet::PublicKey>, std::vector<DiamNet::PublicKey>>
     getPotentialSplit() const override;
     size_t getMaxQuorumsFound() const override;
 };

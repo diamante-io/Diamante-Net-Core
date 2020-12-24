@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "util/NonCopyable.h"
 #include <unordered_map>
 
-namespace HcNet
+namespace DiamNet
 {
 
 // helper class to help track the overall quorum over time

@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,14 +15,14 @@
 #include "main/ExternalQueue.h"
 #include "main/Maintainer.h"
 #include "main/PersistentState.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "util/Logging.h"
 #include "work/WorkScheduler.h"
 
 #include <lib/http/HttpClient.h>
 #include <locale>
 
-namespace HcNet
+namespace DiamNet
 {
 
 int
@@ -32,7 +32,7 @@ runWithConfig(Config cfg)
     {
         if (!cfg.NODE_IS_VALIDATOR)
         {
-            LOG(ERROR) << "Starting HcNet-core in MANUAL_CLOSE mode requires "
+            LOG(ERROR) << "Starting DiamNet-core in MANUAL_CLOSE mode requires "
                           "NODE_IS_VALIDATOR to be set";
             return 1;
         }
@@ -43,7 +43,7 @@ runWithConfig(Config cfg)
         cfg.FORCE_SCP = true;
     }
 
-    LOG(INFO) << "Starting HcNet-core " << HcNet_CORE_VERSION;
+    LOG(INFO) << "Starting DiamNet-core " << DiamNet_CORE_VERSION;
     VirtualClock clock(VirtualClock::REAL_TIME);
     Application::pointer app;
     try
@@ -373,7 +373,7 @@ catchup(Application::pointer app, CatchupConfiguration cc,
                   << app->getLedgerManager().getLastClosedLedgerNum()
                   << " - nothing to do";
         LOG(INFO) << "* If you really want to catchup to " << cc.toLedger()
-                  << " run HcNet-core new-db";
+                  << " run DiamNet-core new-db";
         LOG(INFO) << "*";
         return 2;
     }

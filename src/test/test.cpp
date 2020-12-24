@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Config.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "test.h"
 #include "test/TestUtils.h"
 #include "util/Logging.h"
@@ -41,7 +41,7 @@ SimpleTestReporter::~SimpleTestReporter()
 }
 }
 
-namespace HcNet
+namespace DiamNet
 {
 
 // We use a Catch event-listener to re-seed all the PRNGs we know about on every
@@ -84,7 +84,7 @@ static bool gTestAllVersions{false};
 static std::vector<uint32> gVersionsToTest;
 static int gBaseInstance{0};
 
-bool force_sqlite = (std::getenv("HcNet_FORCE_SQLITE") != nullptr);
+bool force_sqlite = (std::getenv("DiamNet_FORCE_SQLITE") != nullptr);
 
 Config const&
 getTestConfig(int instanceNumber, Config::TestDbMode mode)
@@ -106,7 +106,7 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
 
     if (!cfgs[instanceNumber])
     {
-        gTestRoots.emplace_back("HcNet-core-test");
+        gTestRoots.emplace_back("DiamNet-core-test");
 
         std::string rootDir = gTestRoots.back().getName();
         rootDir += "/";
@@ -117,7 +117,7 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
 
         std::ostringstream sstream;
 
-        sstream << "HcNet" << instanceNumber << ".log";
+        sstream << "DiamNet" << instanceNumber << ".log";
         thisConfig.LOG_FILE_PATH = sstream.str();
         thisConfig.BUCKET_DIR_PATH = rootDir + "bucket";
 
@@ -216,7 +216,7 @@ runTest(CommandLineArgs const& args)
         "test specific version(s)");
     parser |= Catch::clara::Opt(gBaseInstance, "offset")["--base-instance"](
         "instance number offset so multiple instances of "
-        "HcNet-core can run tests concurrently");
+        "DiamNet-core can run tests concurrently");
     session.cli(parser);
 
     auto result = session.cli().parse(
@@ -244,7 +244,7 @@ runTest(CommandLineArgs const& args)
     }
 
     // Note: Have to setLogLevel twice here to ensure --list-test-names-only is
-    // not mixed with HcNet-core logging.
+    // not mixed with DiamNet-core logging.
     Logging::setFmt("<test>");
     Logging::setLogLevel(logLevel, nullptr);
     Config const& cfg = getTestConfig();
@@ -252,7 +252,7 @@ runTest(CommandLineArgs const& args)
     Logging::setLogLevel(logLevel, nullptr);
     auto seed = session.configData().rngSeed;
 
-    LOG(INFO) << "Testing HcNet-core " << HcNet_CORE_VERSION;
+    LOG(INFO) << "Testing DiamNet-core " << DiamNet_CORE_VERSION;
     LOG(INFO) << "Logging to " << cfg.LOG_FILE_PATH;
 
     if (gVersionsToTest.empty())
@@ -261,7 +261,7 @@ runTest(CommandLineArgs const& args)
     }
     if (seed != 0)
     {
-        HcNet::gRandomEngine.seed(seed);
+        DiamNet::gRandomEngine.seed(seed);
     }
 
     auto r = session.run();

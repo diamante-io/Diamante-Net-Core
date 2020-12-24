@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,8 +24,8 @@
 #include "util/Logging.h"
 #include "util/Timer.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 // *XLM Payment
 // *Credit Payment
@@ -275,9 +275,9 @@ TEST_CASE("payment", "[tx][payment]")
 
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto rootAccount2 = HcNet::loadAccount(ltx, root);
+                auto rootAccount2 = DiamNet::loadAccount(ltx, root);
                 auto rootAcc2 = rootAccount2.current().data.account();
-                auto a1Account2 = HcNet::loadAccount(ltx, a1);
+                auto a1Account2 = DiamNet::loadAccount(ltx, a1);
                 auto a1Acc2 = a1Account2.current().data.account();
                 REQUIRE(a1Acc2.balance == a1Acc.balance + morePayment);
 
@@ -298,7 +298,7 @@ TEST_CASE("payment", "[tx][payment]")
 
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto rootAccount2 = HcNet::loadAccount(ltx, root);
+                auto rootAccount2 = DiamNet::loadAccount(ltx, root);
                 auto rootAcc2 = rootAccount2.current().data.account();
                 REQUIRE(rootAcc2.balance == (rootAcc.balance - txfee));
             }
@@ -310,7 +310,7 @@ TEST_CASE("payment", "[tx][payment]")
         for_all_versions(*app, [&] {
             auto getMinBalance = [&] {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                return HcNet::getMinBalance(ltx.loadHeader(), 0);
+                return DiamNet::getMinBalance(ltx.loadHeader(), 0);
             };
 
             int64 orgReserve = getMinBalance();
@@ -1611,7 +1611,7 @@ TEST_CASE("payment", "[tx][payment]")
                         auto account = txtest::loadAccount(ltx, sendToSelf);
                         auto const& ae = account.current().data.account();
                         REQUIRE(ae.balance == minBalance2 - txfee);
-                        REQUIRE(!HcNet::loadTrustLine(ltx, sendToSelf,
+                        REQUIRE(!DiamNet::loadTrustLine(ltx, sendToSelf,
                                                         data.asset));
                     }
                 }
@@ -1650,7 +1650,7 @@ TEST_CASE("payment", "[tx][payment]")
                         auto const& ae = account.current().data.account();
                         REQUIRE(ae.balance == minBalance2 - 4 * txfee);
                         auto trust =
-                            HcNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 0);
                     }
@@ -1677,7 +1677,7 @@ TEST_CASE("payment", "[tx][payment]")
                         auto const& ae = account.current().data.account();
                         REQUIRE(ae.balance == minBalance2 - 4 * txfee);
                         auto trust =
-                            HcNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 500);
                     }
@@ -1704,7 +1704,7 @@ TEST_CASE("payment", "[tx][payment]")
                         auto const& ae = account.current().data.account();
                         REQUIRE(ae.balance == minBalance2 - 4 * txfee);
                         auto trust =
-                            HcNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 1000);
                     }

@@ -3,7 +3,7 @@ title: Fuzzing
 ---
 
 This is a little howto on using the [AFL][0] (["American Fuzzy Lop"][1])
-fuzzer with HcNet-core. Support for this is still preliminary but it has
+fuzzer with DiamNet-core. Support for this is still preliminary but it has
 already shaken a couple bugs out and will no doubt find more the further down
 this road we go, so you're encouraged to give this a try.
 
@@ -34,9 +34,9 @@ in binary form and (c) be guided toward interesting edge cases just enough. We
 currently have two fuzz modes, `tx` and `overlay`, and they **do not** perform the
 above equally well. For starters, we have enabled [llvm_mode][9]'s persistent mode
 for a modest 10x-100x improvement in execution/sec for *both* fuzz modes. Thus both
-perform well in area (a) and with simple modifications we made to HcNet-core, (b)
+perform well in area (a) and with simple modifications we made to DiamNet-core, (b)
 too. However, we've spent more energy with (c) for the `tx` fuzz mode, modifying
-HcNet-core such that it is more deterministic -- caches are cleared and randomness
+DiamNet-core such that it is more deterministic -- caches are cleared and randomness
 seeded -- and it skips wasteful and inconsequential processes -- anything related to
 signatures. For both modes, there is still much room for improvement in regards to
 (a) and (c), one example being an isolation of the subsystem.
@@ -51,7 +51,7 @@ compile with the fuzzer's branch-tracking machinery (the later being necessary f
 improvements described above).
 
 
-## Building an instrumented HcNet-core
+## Building an instrumented DiamNet-core
 
 Start with a clean workspace, `make clean` or cleaner; then just do `./configure
 --enable-afl && make` and make sure you have not enabled `asan` and `ccache`;
@@ -65,13 +65,13 @@ The simplest way is to set the environment variable `FUZZER_MODE` to `tx` or
 to `overlay` and then `make fuzz`; this will do the following:
 
   - Create a directory `fuzz-testcases` for storing the initial corpus input
-  - Run `HcNet-core gen-fuzz fuzz-testcases/fuzz$i.xdr` ten thousand times
+  - Run `DiamNet-core gen-fuzz fuzz-testcases/fuzz$i.xdr` ten thousand times
     to produce some basic seed input for the corpus
   - Run `afl-cmin` on the generated `fuzz-testcases`, minimizing the corpus
     to a unique, interesting subset, which will be put into a directory named
     `min-testcases`
   - Create a directory `fuzz-findings` for storing crash-producing inputs
-  - Run `afl-fuzz` on `HcNet-core fuzz`, using those corpus directories
+  - Run `afl-fuzz` on `DiamNet-core fuzz`, using those corpus directories
 
 You should get a nice old-school textmode TUI to monitor the fuzzer's progress;
 it might be partly hidden depending on the color scheme of your terminal, as it
@@ -80,12 +80,12 @@ displayed here.
 
 While it runs, it will write new crashes to files in `fuzz-findings`; before
 pouncing on these as definite evidence of a flaw, you should confirm the crash
-by feeding it to an instance of `HcNet-core fuzz` run by hand, elsewhere (in
+by feeding it to an instance of `DiamNet-core fuzz` run by hand, elsewhere (in
 particular, not fighting for control over tmpdirs with the fuzzer's
-`HcNet-core` instances). Often a fuzzer "crash" is just the subprocess hitting
+`DiamNet-core` instances). Often a fuzzer "crash" is just the subprocess hitting
 a ulimit; by default we use an 250mb virtual-address ulimit, thus it is
 possible to exceed this. It is also useful to keep a separate build of
-`HcNet-core` in a different directory with `--enable-asan`, or valgrind, in
+`DiamNet-core` in a different directory with `--enable-asan`, or valgrind, in
 order to diagnose crashes. For more information on the [output][4] or [triaging
 crashes][5] click the hyperlinks. 
 
@@ -107,7 +107,7 @@ part of staging-tests", here are some directions I think we should take fuzzing:
 
   - Try AFL_NO_VAR_CHECK and see if it speeds things up.
 
-  - Try limiting the instrumentation to `HcNet-core` itself, not libsodium,
+  - Try limiting the instrumentation to `DiamNet-core` itself, not libsodium,
     soci, sqlite, medida, and so forth.
 
   - Measure and shave-down the startup path for fuzzing so it's as fast as
@@ -127,7 +127,7 @@ part of staging-tests", here are some directions I think we should take fuzzing:
 
   - Make startup-modes at different points in the process: instantiate an
     application and feed it transactions to run directly, not full
-    `HcNetMessage`s. Let the fuzzer generte bucket ledger entries, and try to
+    `DiamNetMessage`s. Let the fuzzer generte bucket ledger entries, and try to
     apply them to the database as one would during catchup. This sort of thing.
 
   - Make a "postprocessor" using the AFL_POST_LIBRARY facility. This permits

@@ -1,10 +1,10 @@
 #pragma once
-#include <xdr/HcNet-types.h>
+#include <xdr/DiamNet-types.h>
 
 namespace std
 {
-template <> struct hash<HcNet::uint256>
+template <> struct hash<DiamNet::uint256>
 {
-    size_t operator()(HcNet::uint256 const& x) const noexcept;
+    size_t operator()(DiamNet::uint256 const& x) const noexcept;
 };
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 
 #include <lib/catch.hpp>
 
-using namespace HcNet;
+using namespace DiamNet;
 
 TEST_CASE("cannot close ledger with unsupported ledger version", "[ledger]")
 {
@@ -21,8 +21,8 @@ TEST_CASE("cannot close ledger with unsupported ledger version", "[ledger]")
         auto const& lcl = app->getLedgerManager().getLastClosedLedgerHeader();
         auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
 
-        HcNetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
-                        HcNet_VALUE_BASIC);
+        DiamNetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
+                        DiamNet_VALUE_BASIC);
         LedgerCloseData ledgerData(lcl.header.ledgerSeq + 1, txSet, sv);
         app->getLedgerManager().closeLedger(ledgerData);
     };

@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 
 using namespace soci;
 
-namespace HcNet
+namespace DiamNet
 {
 
 MergeOpFrame::MergeOpFrame(Operation const& op, OperationResult& res,
@@ -50,7 +50,7 @@ MergeOpFrame::doApply(AbstractLedgerTxn& ltx)
     auto header = ltx.loadHeader();
 
     auto otherAccount =
-        HcNet::loadAccount(ltx, mOperation.body.destination());
+        DiamNet::loadAccount(ltx, mOperation.body.destination());
     if (!otherAccount)
     {
         innerResult().code(ACCOUNT_MERGE_NO_ACCOUNT);

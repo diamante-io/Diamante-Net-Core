@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 #include "util/XDROperators.h"
 #include "util/types.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 LedgerKey
@@ -126,7 +126,7 @@ acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,
     auto const& sellerID = offer.sellerID;
 
     auto loadAccountAndValidate = [&ltx, &sellerID]() {
-        auto account = HcNet::loadAccount(ltx, sellerID);
+        auto account = DiamNet::loadAccount(ltx, sellerID);
         if (!account)
         {
             throw std::runtime_error("account does not exist");
@@ -135,7 +135,7 @@ acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,
     };
 
     auto loadTrustAndValidate = [&ltx, &sellerID](Asset const& asset) {
-        auto trust = HcNet::loadTrustLine(ltx, sellerID, asset);
+        auto trust = DiamNet::loadTrustLine(ltx, sellerID, asset);
         if (!trust)
         {
             throw std::runtime_error("trustline does not exist");
@@ -203,7 +203,7 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
 
         auto& acc = entry.current().data.account();
         auto newBalance = acc.balance;
-        if (!HcNet::addBalance(newBalance, delta))
+        if (!DiamNet::addBalance(newBalance, delta))
         {
             return false;
         }
@@ -237,7 +237,7 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
 
         auto& tl = entry.current().data.trustLine();
         auto newBalance = tl.balance;
-        if (!HcNet::addBalance(newBalance, delta, tl.limit))
+        if (!DiamNet::addBalance(newBalance, delta, tl.limit))
         {
             return false;
         }
@@ -279,7 +279,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         auto& acc = entry.current().data.account();
 
         int64_t maxLiabilities = INT64_MAX - acc.balance;
-        bool res = HcNet::addBalance(buyingLiab, delta, maxLiabilities);
+        bool res = DiamNet::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
             if (acc.ext.v() == 0)
@@ -300,7 +300,7 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         }
 
         int64_t maxLiabilities = tl.limit - tl.balance;
-        bool res = HcNet::addBalance(buyingLiab, delta, maxLiabilities);
+        bool res = DiamNet::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
             if (tl.ext.v() == 0)
@@ -372,7 +372,7 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
             return false;
         }
 
-        bool res = HcNet::addBalance(sellingLiab, delta, maxLiabilities);
+        bool res = DiamNet::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
             if (acc.ext.v() == 0)
@@ -393,7 +393,7 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         }
 
         int64_t maxLiabilities = tl.balance;
-        bool res = HcNet::addBalance(sellingLiab, delta, maxLiabilities);
+        bool res = DiamNet::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
             if (tl.ext.v() == 0)

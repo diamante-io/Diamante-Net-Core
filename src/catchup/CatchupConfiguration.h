@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <string>
 
-namespace HcNet
+namespace DiamNet
 {
 
 // Each catchup can be configured by two parameters destination ledger
@@ -27,7 +27,7 @@ namespace HcNet
 // Value of destination ledger can be also set to CatchupConfiguration::CURRENT
 // which means that CatchupWork will get latest checkpoint from history archive
 // and catchup to that instead of destination ledger. This is usefull when
-// doing offline commandline catchups with HcNet-core catchup command.
+// doing offline commandline catchups with DiamNet-core catchup command.
 //
 // Catchup can be done in two modes - ONLINE nad OFFLINE. In ONLINE mode node
 // is connected to the network. If receives ledgers during catchup and applies

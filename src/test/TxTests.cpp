@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,10 +23,10 @@
 
 #include <lib/catch.hpp>
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
-namespace HcNet
+namespace DiamNet
 {
 namespace txtest
 {
@@ -326,8 +326,8 @@ closeLedgerOn(Application& app, uint32 ledgerSeq, int day, int month, int year,
     txSet->sortForHash();
     REQUIRE(txSet->checkValid(app));
 
-    HcNetValue sv(txSet->getContentsHash(), getTestDate(day, month, year),
-                    emptyUpgradeSteps, HcNet_VALUE_BASIC);
+    DiamNetValue sv(txSet->getContentsHash(), getTestDate(day, month, year),
+                    emptyUpgradeSteps, DiamNet_VALUE_BASIC);
     LedgerCloseData ledgerData(ledgerSeq, txSet, sv);
     app.getLedgerManager().closeLedger(ledgerData);
 
@@ -374,7 +374,7 @@ makeSigner(SecretKey key, int weight)
 ConstLedgerTxnEntry
 loadAccount(AbstractLedgerTxn& ltx, PublicKey const& k, bool mustExist)
 {
-    auto res = HcNet::loadAccountWithoutRecord(ltx, k);
+    auto res = DiamNet::loadAccountWithoutRecord(ltx, k);
     if (mustExist)
     {
         REQUIRE(res);
@@ -386,14 +386,14 @@ bool
 doesAccountExist(Application& app, PublicKey const& k)
 {
     LedgerTxn ltx(app.getLedgerTxnRoot());
-    return (bool)HcNet::loadAccountWithoutRecord(ltx, k);
+    return (bool)DiamNet::loadAccountWithoutRecord(ltx, k);
 }
 
 xdr::xvector<Signer, 20>
 getAccountSigners(PublicKey const& k, Application& app)
 {
     LedgerTxn ltx(app.getLedgerTxnRoot());
-    auto account = HcNet::loadAccount(ltx, k);
+    auto account = DiamNet::loadAccount(ltx, k);
     return account.current().data.account().signers;
 }
 
@@ -642,7 +642,7 @@ applyCreateOfferHelper(Application& app, int64 offerId, SecretKey const& source,
     {
         LedgerTxn ltx(app.getLedgerTxnRoot());
         auto offer =
-            HcNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
+            DiamNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
         REQUIRE(offer);
         auto& offerEntry = offer.current().data.offer();
         REQUIRE(offerEntry == offerResult.offer());
@@ -655,7 +655,7 @@ applyCreateOfferHelper(Application& app, int64 offerId, SecretKey const& source,
     {
         LedgerTxn ltx(app.getLedgerTxnRoot());
         REQUIRE(
-            !HcNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID));
+            !DiamNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID));
     }
     break;
     default:
@@ -723,7 +723,7 @@ applyManageBuyOffer(Application& app, int64 offerId, SecretKey const& source,
     {
         LedgerTxn ltx(app.getLedgerTxnRoot());
         auto offer =
-            HcNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
+            DiamNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
         REQUIRE(offer);
         auto& offerEntry = offer.current().data.offer();
         REQUIRE(offerEntry == success.offer());
@@ -736,7 +736,7 @@ applyManageBuyOffer(Application& app, int64 offerId, SecretKey const& source,
     {
         LedgerTxn ltx(app.getLedgerTxnRoot());
         REQUIRE(
-            !HcNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID));
+            !DiamNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID));
     }
     break;
     default:
@@ -791,7 +791,7 @@ applyCreatePassiveOffer(Application& app, SecretKey const& source,
         {
             LedgerTxn ltx(app.getLedgerTxnRoot());
             auto offer =
-                HcNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
+                DiamNet::loadOffer(ltx, source.getPublicKey(), expectedOfferID);
             REQUIRE(offer);
             auto& offerEntry = offer.current().data.offer();
             REQUIRE(offerEntry == offerResult.offer());
@@ -804,7 +804,7 @@ applyCreatePassiveOffer(Application& app, SecretKey const& source,
         case MANAGE_OFFER_DELETED:
         {
             LedgerTxn ltx(app.getLedgerTxnRoot());
-            REQUIRE(!HcNet::loadOffer(ltx, source.getPublicKey(),
+            REQUIRE(!DiamNet::loadOffer(ltx, source.getPublicKey(),
                                         expectedOfferID));
         }
         break;

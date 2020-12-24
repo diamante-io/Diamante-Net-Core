@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 #include "main/Application.h"
 #include "transactions/TransactionUtils.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
@@ -49,7 +49,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CHANGE_TRUST_INVALID_LIMIT);
             return false;
         }
-        else if (!HcNet::loadAccountWithoutRecord(ltx, issuerID))
+        else if (!DiamNet::loadAccountWithoutRecord(ltx, issuerID))
         {
             innerResult().code(CHANGE_TRUST_NO_ISSUER);
             return false;
@@ -80,7 +80,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
         }
         else
         {
-            auto issuer = HcNet::loadAccountWithoutRecord(ltx, issuerID);
+            auto issuer = DiamNet::loadAccountWithoutRecord(ltx, issuerID);
             if (!issuer)
             {
                 innerResult().code(CHANGE_TRUST_NO_ISSUER);
@@ -98,7 +98,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CHANGE_TRUST_INVALID_LIMIT);
             return false;
         }
-        auto issuer = HcNet::loadAccountWithoutRecord(ltx, issuerID);
+        auto issuer = DiamNet::loadAccountWithoutRecord(ltx, issuerID);
         if (!issuer)
         {
             innerResult().code(CHANGE_TRUST_NO_ISSUER);

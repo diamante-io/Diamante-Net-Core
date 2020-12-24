@@ -1,12 +1,12 @@
 # -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-# Copyright 2015 HcNet Development Foundation and contributors. Licensed
+# Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 # under the Apache License, Version 2.0. See the COPYING file at the root
 # of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 AC_PREREQ([2.68])
-AC_INIT([HcNet-core],[0.1],[],[],[http://www.HcNet.org])
+AC_INIT([DiamNet-core],[0.1],[],[],[http://www.DiamNet.org])
 # tar-ustar is required for long file names when libsodium is bundled
 AM_INIT_AUTOMAKE([-Wall -Wextra -Wconversion subdir-objects tar-ustar silent-rules])
 AC_CONFIG_SRCDIR([configure.ac])
@@ -74,7 +74,7 @@ return !((weak1.expired()) && (weak1.lock() == nullptr));
 
 AC_ARG_ENABLE([sdfprefs],
     AS_HELP_STRING([--enable-sdfprefs],
-        [Enable build settings preferred by HcNet developers]))
+        [Enable build settings preferred by DiamNet developers]))
 
 AS_IF([test xyes = "x$enable_sdfprefs"],
         [AM_SILENT_RULES([yes])
@@ -195,14 +195,14 @@ AS_IF([test "x$enable_afl" = "xyes"], [
                      CC="afl-clang-fast"
                      # below we hard code -std=c++14 since updates to AX_CXX_COMPILE_STDCXX circa 2015 append it to
                      # CXX, not to CXXFLAGS and thus when setting CXX we override this. For a more detailed explanation
-                     # see: https://github.com/HcNet/docker-HcNet-core/pull/66#issuecomment-521886881
+                     # see: https://github.com/DiamNet/docker-DiamNet-core/pull/66#issuecomment-521886881
                      CXX="afl-clang-fast++ -std=c++14 -DAFL_LLVM_MODE=1"],
           [gcc*],   [AC_CHECK_PROGS([AFL_GCC], [afl-gcc])
                      AC_CHECK_PROGS([AFL_GPP], [afl-g++])
                      CC="afl-gcc"
                      # below we hard code -std=c++14 since updates to AX_CXX_COMPILE_STDCXX circa 2015 append it to
                      # CXX, not to CXXFLAGS and thus when setting CXX we override this. For a more detailed explanation
-                     # see: https://github.com/HcNet/docker-HcNet-core/pull/66#issuecomment-521886881
+                     # see: https://github.com/DiamNet/docker-DiamNet-core/pull/66#issuecomment-521886881
                      CXX="afl-g++ -std=c++14"],
           [AC_MSG_ERROR([Don't know how to instrument CC=$CC with AFL])])
 ])

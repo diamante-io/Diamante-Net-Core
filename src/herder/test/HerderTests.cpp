@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -28,8 +28,8 @@
 #include "xdrpp/marshal.h"
 #include <algorithm>
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 TEST_CASE("standalone", "[herder][acceptance]")
 {
@@ -225,10 +225,10 @@ TEST_CASE("standalone", "[herder][acceptance]")
 }
 
 static TransactionFramePtr
-makeMultiPayment(HcNet::TestAccount& destAccount, HcNet::TestAccount& src,
+makeMultiPayment(DiamNet::TestAccount& destAccount, DiamNet::TestAccount& src,
                  int nbOps, int64 paymentBase, uint32 extraFee, uint32 feeMult)
 {
-    std::vector<HcNet::Operation> ops;
+    std::vector<DiamNet::Operation> ops;
     for (int i = 0; i < nbOps; i++)
     {
         ops.emplace_back(payment(destAccount, i + paymentBase));
@@ -813,11 +813,11 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
     auto makeTxPair = [&](HerderImpl& herder, TxSetFramePtr txSet,
                           uint64_t closeTime, bool sig) {
         txSet->sortForHash();
-        auto sv = HcNetValue(txSet->getContentsHash(), closeTime,
-                               emptyUpgradeSteps, HcNet_VALUE_BASIC);
+        auto sv = DiamNetValue(txSet->getContentsHash(), closeTime,
+                               emptyUpgradeSteps, DiamNet_VALUE_BASIC);
         if (sig)
         {
-            herder.signHcNetValue(root.getSecretKey(), sv);
+            herder.signDiamNetValue(root.getSecretKey(), sv);
         }
         auto v = xdr::xdr_to_opaque(sv);
 
@@ -882,11 +882,11 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
         addToCandidates(makeTxPair(herder, txSet0, 10, withSCPsignature));
 
         Value v;
-        HcNetValue sv;
+        DiamNetValue sv;
 
         v = herder.getHerderSCPDriver().combineCandidates(1, candidates);
         xdr::xdr_from_opaque(v, sv);
-        REQUIRE(sv.ext.v() == HcNet_VALUE_BASIC);
+        REQUIRE(sv.ext.v() == DiamNet_VALUE_BASIC);
         REQUIRE(sv.closeTime == 10);
         REQUIRE(sv.txSetHash == txSet0->getContentsHash());
 
@@ -895,7 +895,7 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
         addToCandidates(makeTxPair(herder, txSet1, 5, withSCPsignature));
         v = herder.getHerderSCPDriver().combineCandidates(1, candidates);
         xdr::xdr_from_opaque(v, sv);
-        REQUIRE(sv.ext.v() == HcNet_VALUE_BASIC);
+        REQUIRE(sv.ext.v() == DiamNet_VALUE_BASIC);
         REQUIRE(sv.closeTime == 10);
         REQUIRE(sv.txSetHash == txSet1->getContentsHash());
 
@@ -911,7 +911,7 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
         // picks the biggest set, highest time
         v = herder.getHerderSCPDriver().combineCandidates(1, candidates);
         xdr::xdr_from_opaque(v, sv);
-        REQUIRE(sv.ext.v() == HcNet_VALUE_BASIC);
+        REQUIRE(sv.ext.v() == DiamNet_VALUE_BASIC);
         REQUIRE(sv.closeTime == 20);
         REQUIRE(sv.txSetHash == biggestTxSet->getContentsHash());
         REQUIRE(biggestTxSet->sizeOp() == expectedOps);
@@ -926,7 +926,7 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
             addToCandidates(makeTxPair(herder, txSetL2, 20, withSCPsignature));
             v = herder.getHerderSCPDriver().combineCandidates(1, candidates);
             xdr::xdr_from_opaque(v, sv);
-            REQUIRE(sv.ext.v() == HcNet_VALUE_BASIC);
+            REQUIRE(sv.ext.v() == DiamNet_VALUE_BASIC);
             REQUIRE(sv.txSetHash == txSetL2->getContentsHash());
         }
     }
@@ -973,10 +973,10 @@ testSCPDriver(uint32 protocolVersion, uint32_t maxTxSize, size_t expectedOps,
             if (withSCPsignature)
             {
                 auto p = makeTxPair(herder, txSet0, ct, withSCPsignature);
-                HcNetValue sv;
+                DiamNetValue sv;
                 xdr::xdr_from_opaque(p.first, sv);
 
-                auto checkInvalid = [&](HcNetValue const& sv) {
+                auto checkInvalid = [&](DiamNetValue const& sv) {
                     auto v = xdr::xdr_to_opaque(sv);
                     REQUIRE(scp.validateValue(seq, v, true) ==
                             SCPDriver::kInvalidValue);

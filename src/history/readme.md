@@ -9,22 +9,22 @@ History archives are defined by the user by adding sections of the form
 logging prefix, and to permit more than one history archive in a single config
 file.
 
-The `get` and `put` commands define subprocesses that `HcNet-core` will
+The `get` and `put` commands define subprocesses that `DiamNet-core` will
 execute in order to deposit historical records and retrieve them when catching
 up. The form of each `get` or `put` command specified in the config file is a
 string template defining a command to execute, with template parameters `{0}`
 and `{1}` in place of the files being retrieved or transmitted.
 
 For example, the following entry in a config file would define a history archive
-called `s3HcNet` based on the [AWS S3](https://aws.amazon.com/s3/) storage system:
+called `s3DiamNet` based on the [AWS S3](https://aws.amazon.com/s3/) storage system:
 
 ~~~~
-[HISTORY.s3HcNet]
-get="curl http://history.HcNet.org/{0} -o {1}"
-put="aws s3 cp {0} s3://history.HcNet.org/{1}"
+[HISTORY.s3DiamNet]
+get="curl http://history.DiamNet.org/{0} -o {1}"
+put="aws s3 cp {0} s3://history.DiamNet.org/{1}"
 ~~~~
 
-In this example, `HcNet-core` will use the `curl` command to fetch history and
+In this example, `DiamNet-core` will use the `curl` command to fetch history and
 the `aws` utility to publish history.
 
 Records are generally XDR files ([RFC 4506](https://tools.ietf.org/html/rfc4506))

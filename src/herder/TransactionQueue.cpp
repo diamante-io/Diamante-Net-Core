@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,7 +16,7 @@
 #include <medida/metrics_registry.h>
 #include <numeric>
 
-namespace HcNet
+namespace DiamNet
 {
 
 TransactionQueue::TransactionQueue(Application& app, int pendingDepth,
@@ -50,7 +50,7 @@ TransactionQueue::tryAdd(TransactionFramePtr tx)
         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
     }
 
-    auto sourceAccount = HcNet::loadAccount(ltx, tx->getSourceID());
+    auto sourceAccount = DiamNet::loadAccount(ltx, tx->getSourceID());
     if (getAvailableBalance(ltx.loadHeader(), sourceAccount) - tx->getFeeBid() <
         info.mTotalFees)
     {

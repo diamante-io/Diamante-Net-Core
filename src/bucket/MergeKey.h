@@ -1,15 +1,15 @@
 #pragma once
 
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 #include "bucket/Bucket.h"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-types.h"
 #include <cstdint>
 #include <iosfwd>
 #include <vector>
 
-namespace HcNet
+namespace DiamNet
 {
 // Key type for cache of merges-in-progress. These only exist to enable
 // re-attaching a deserialized FutureBucket to a std::shared_future, or (if the
@@ -39,8 +39,8 @@ std::ostream& operator<<(std::ostream& out, MergeKey const& b);
 
 namespace std
 {
-template <> struct hash<HcNet::MergeKey>
+template <> struct hash<DiamNet::MergeKey>
 {
-    size_t operator()(HcNet::MergeKey const& k) const noexcept;
+    size_t operator()(DiamNet::MergeKey const& k) const noexcept;
 };
 }

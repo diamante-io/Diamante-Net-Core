@@ -1,11 +1,11 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/Peer.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 
 /**
  * OverlayManager maintains a virtual broadcast network, consisting of a set of
@@ -14,13 +14,13 @@
  * pairs (ItemFetcher).
  *
  * Overlay network messages are defined as the XDR structure type
- * `HcNetMessage`, in the file src/xdr/HcNet-overlay.x
+ * `DiamNetMessage`, in the file src/xdr/DiamNet-overlay.x
  *
  * They are minimally framed using the Record Marking (RM) standard of RFC5531
  * (https://tools.ietf.org/html/rfc5531#page-16) and the RM-framed messages are
  * transmitted over TCP/IP sockets, between peers.
  *
- * The `HcNetMessage` union contains 3 logically distinct kinds of message:
+ * The `DiamNetMessage` union contains 3 logically distinct kinds of message:
  *
  *  - Messages directed to or from a specific peer, with or without a response:
  *    HELLO, GET_PEERS, PEERS, DONT_HAVE, ERROR_MSG
@@ -43,7 +43,7 @@
  * records with other peers when asked.
  */
 
-namespace HcNet
+namespace DiamNet
 {
 
 class LoadManager;
@@ -66,14 +66,14 @@ class OverlayManager
 
     // Send a given message to all peers, via the FloodGate. This is called by
     // Herder.
-    virtual void broadcastMessage(HcNetMessage const& msg,
+    virtual void broadcastMessage(DiamNetMessage const& msg,
                                   bool force = false) = 0;
 
     // Make a note in the FloodGate that a given peer has provided us with a
     // given broadcast message, so that it is inhibited from being resent to
     // that peer. This does _not_ cause the message to be broadcast anew; to do
     // that, call broadcastMessage, above.
-    virtual void recvFloodedMsg(HcNetMessage const& msg,
+    virtual void recvFloodedMsg(DiamNetMessage const& msg,
                                 Peer::pointer peer) = 0;
 
     // Return a list of random peers from the set of authenticated peers.
@@ -157,7 +157,7 @@ class OverlayManager
     virtual bool isShuttingDown() const = 0;
 
     virtual void
-    recordDuplicateMessageMetric(HcNetMessage const& HcNetMsg) = 0;
+    recordDuplicateMessageMetric(DiamNetMessage const& DiamNetMsg) = 0;
 
     virtual ~OverlayManager()
     {

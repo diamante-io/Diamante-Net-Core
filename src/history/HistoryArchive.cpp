@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,7 +15,7 @@
 #include "history/HistoryManager.h"
 #include "lib/util/format.h"
 #include "main/Application.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "process/ProcessManager.h"
 #include "util/Fs.h"
 #include "util/Logging.h"
@@ -32,7 +32,7 @@
 #include <set>
 #include <sstream>
 
-namespace HcNet
+namespace DiamNet
 {
 
 unsigned const HistoryArchiveState::HISTORY_ARCHIVE_STATE_VERSION = 1;
@@ -147,7 +147,7 @@ HistoryArchiveState::fromString(std::string const& str)
 std::string
 HistoryArchiveState::baseName()
 {
-    return std::string("HcNet-history.json");
+    return std::string("DiamNet-history.json");
 }
 
 std::string
@@ -339,7 +339,7 @@ HistoryArchiveState::prepareForPublish(Application& app)
     }
 }
 
-HistoryArchiveState::HistoryArchiveState() : server(HcNet_CORE_VERSION)
+HistoryArchiveState::HistoryArchiveState() : server(DiamNet_CORE_VERSION)
 {
     uint256 u;
     std::string s = binToHex(u);
@@ -354,7 +354,7 @@ HistoryArchiveState::HistoryArchiveState() : server(HcNet_CORE_VERSION)
 
 HistoryArchiveState::HistoryArchiveState(uint32_t ledgerSeq,
                                          BucketList const& buckets)
-    : server(HcNet_CORE_VERSION), currentLedger(ledgerSeq)
+    : server(DiamNet_CORE_VERSION), currentLedger(ledgerSeq)
 {
     for (uint32_t i = 0; i < BucketList::kNumLevels; ++i)
     {

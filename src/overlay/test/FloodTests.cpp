@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -22,7 +22,7 @@
 #include "util/Timer.h"
 #include "xdrpp/marshal.h"
 
-namespace HcNet
+namespace DiamNet
 {
 using namespace txtest;
 
@@ -60,7 +60,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             LedgerEntry gen;
             {
                 LedgerTxn ltx(app0->getLedgerTxnRoot());
-                gen = HcNet::loadAccount(ltx, root.getPublicKey()).current();
+                gen = DiamNet::loadAccount(ltx, root.getPublicKey()).current();
             }
 
             for (int i = 0; i < nbTx; i++)
@@ -143,7 +143,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
                 {createAccount(dest.getPublicKey(), txAmount)}, expectedSeq);
 
             // this is basically a modified version of Peer::recvTransaction
-            auto msg = tx1->toHcNetMessage();
+            auto msg = tx1->toDiamNetMessage();
             auto res = inApp->getHerder().recvTransaction(tx1);
             REQUIRE(res == TransactionQueue::AddResult::ADD_STATUS_PENDING);
             inApp->getOverlayManager().broadcastMessage(msg);
@@ -247,8 +247,8 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             auto ct = std::max<uint64>(
                 lcl.header.scpValue.closeTime + 1,
                 VirtualClock::to_time_t(inApp->getClock().now()));
-            HcNetValue sv(txSet.getContentsHash(), ct, emptyUpgradeSteps,
-                            HcNet_VALUE_BASIC);
+            DiamNetValue sv(txSet.getContentsHash(), ct, emptyUpgradeSteps,
+                            DiamNet_VALUE_BASIC);
 
             SCPEnvelope envelope;
 

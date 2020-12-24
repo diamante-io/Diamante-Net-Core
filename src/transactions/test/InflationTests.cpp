@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,8 +23,8 @@
 #include "util/XDROperators.h"
 #include <functional>
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 static const unsigned maxWinners = 2000u;
 
@@ -53,7 +53,7 @@ createTestAccounts(Application& app, int nbAccounts,
             root.create(to, bal);
 
             LedgerTxn ltx(app.getLedgerTxnRoot());
-            auto account = HcNet::loadAccount(ltx, to.getPublicKey());
+            auto account = DiamNet::loadAccount(ltx, to.getPublicKey());
             auto& ae = account.current().data.account();
             ae.inflationDest.activate() =
                 getTestAccount(getVote(i)).getPublicKey();
@@ -141,7 +141,7 @@ simulateInflation(int ledgerVersion, int nbAccounts, int64& totCoins,
             LedgerTxn ltx(app.getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto winner =
-                HcNet::loadAccount(ltx, getTestAccount(w).getPublicKey());
+                DiamNet::loadAccount(ltx, getTestAccount(w).getPublicKey());
             toDoleToThis =
                 std::min(getMaxAmountReceive(header, winner), toDoleToThis);
         }
@@ -199,7 +199,7 @@ doInflation(Application& app, int ledgerVersion, int nbAccounts,
         {
             LedgerTxn ltx(app.getLedgerTxnRoot());
             auto account =
-                HcNet::loadAccount(ltx, getTestAccount(i).getPublicKey());
+                DiamNet::loadAccount(ltx, getTestAccount(i).getPublicKey());
             auto const& ae = account.current().data.account();
             balances[i] = ae.balance;
             // double check that inflationDest is setup properly
@@ -254,7 +254,7 @@ doInflation(Application& app, int ledgerVersion, int nbAccounts,
         {
             {
                 LedgerTxn ltx(app.getLedgerTxnRoot());
-                auto account = HcNet::loadAccount(ltx, k.getPublicKey());
+                auto account = DiamNet::loadAccount(ltx, k.getPublicKey());
                 auto const& ae = account.current().data.account();
                 REQUIRE(expectedBalances[i] == ae.balance);
             }

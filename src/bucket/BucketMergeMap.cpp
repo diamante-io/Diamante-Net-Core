@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,10 +8,10 @@
 
 namespace
 {
-std::unordered_set<HcNet::Hash>
-getMergeKeyHashes(HcNet::MergeKey const& key)
+std::unordered_set<DiamNet::Hash>
+getMergeKeyHashes(DiamNet::MergeKey const& key)
 {
-    std::unordered_set<HcNet::Hash> hashes;
+    std::unordered_set<DiamNet::Hash> hashes;
     hashes.emplace(key.mInputCurrBucket);
     hashes.emplace(key.mInputSnapBucket);
     for (auto const& in : key.mInputShadowBuckets)
@@ -22,7 +22,7 @@ getMergeKeyHashes(HcNet::MergeKey const& key)
 }
 }
 
-namespace HcNet
+namespace DiamNet
 {
 
 void

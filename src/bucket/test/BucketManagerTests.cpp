@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -29,7 +29,7 @@
 
 #include <cstdio>
 
-using namespace HcNet;
+using namespace DiamNet;
 using namespace BucketTests;
 
 namespace BucketManagerTests
@@ -163,8 +163,8 @@ closeLedger(Application& app)
         << " with lcl=" << hexAbbrev(lcl.hash) << ", buckets="
         << hexAbbrev(app.getBucketManager().getBucketList().getHash());
     auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
-    HcNetValue sv(txSet->getContentsHash(), lcl.header.scpValue.closeTime,
-                    emptyUpgradeSteps, HcNet_VALUE_BASIC);
+    DiamNetValue sv(txSet->getContentsHash(), lcl.header.scpValue.closeTime,
+                    emptyUpgradeSteps, DiamNet_VALUE_BASIC);
     LedgerCloseData lcd(ledgerNum, txSet, sv);
     lm.valueExternalized(lcd);
     return lm.getLastClosedLedgerHeader().hash;
@@ -517,7 +517,7 @@ TEST_CASE("bucketmanager reattach HAS from publish queue to finished merge",
     cfg.MAX_CONCURRENT_SUBPROCESSES = 1;
     cfg.ARTIFICIALLY_ACCELERATE_TIME_FOR_TESTING = true;
     cfg.ARTIFICIALLY_PESSIMIZE_MERGES_FOR_TESTING = true;
-    HcNet::historytestutils::TmpDirHistoryConfigurator tcfg;
+    DiamNet::historytestutils::TmpDirHistoryConfigurator tcfg;
     cfg = tcfg.configure(cfg, true);
 
     {
@@ -1307,8 +1307,8 @@ TEST_CASE("bucket persistence over app restart with initentry - extended",
 TEST_CASE("bucket persistence over app restart",
           "[bucket][bucketmanager][bucketpersist]")
 {
-    std::vector<HcNet::LedgerKey> emptySet;
-    std::vector<HcNet::LedgerEntry> emptySetEntry;
+    std::vector<DiamNet::LedgerKey> emptySet;
+    std::vector<DiamNet::LedgerEntry> emptySetEntry;
 
     Config cfg0(getTestConfig(0, Config::TESTDB_ON_DISK_SQLITE));
     for_versions_with_differing_bucket_logic(cfg0, [&](Config const& cfg0) {

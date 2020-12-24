@@ -1,4 +1,4 @@
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -25,9 +25,9 @@ namespace cereal
 {
 template <class Archive>
 void
-save(Archive& ar, HcNet::Upgrades::UpgradeParameters const& p)
+save(Archive& ar, DiamNet::Upgrades::UpgradeParameters const& p)
 {
-    ar(make_nvp("time", HcNet::VirtualClock::to_time_t(p.mUpgradeTime)));
+    ar(make_nvp("time", DiamNet::VirtualClock::to_time_t(p.mUpgradeTime)));
     ar(make_nvp("version", p.mProtocolVersion));
     ar(make_nvp("fee", p.mBaseFee));
     ar(make_nvp("maxtxsize", p.mMaxTxSize));
@@ -36,11 +36,11 @@ save(Archive& ar, HcNet::Upgrades::UpgradeParameters const& p)
 
 template <class Archive>
 void
-load(Archive& ar, HcNet::Upgrades::UpgradeParameters& o)
+load(Archive& ar, DiamNet::Upgrades::UpgradeParameters& o)
 {
     time_t t;
     ar(make_nvp("time", t));
-    o.mUpgradeTime = HcNet::VirtualClock::from_time_t(t);
+    o.mUpgradeTime = DiamNet::VirtualClock::from_time_t(t);
     ar(make_nvp("version", o.mProtocolVersion));
     ar(make_nvp("fee", o.mBaseFee));
     ar(make_nvp("maxtxsize", o.mMaxTxSize));
@@ -48,7 +48,7 @@ load(Archive& ar, HcNet::Upgrades::UpgradeParameters& o)
 }
 } // namespace cereal
 
-namespace HcNet
+namespace DiamNet
 {
 std::string
 Upgrades::UpgradeParameters::toJson() const
@@ -410,7 +410,7 @@ addLiabilities(std::map<Asset, std::unique_ptr<int64_t>>& liabilities,
     }
     if (iter->second)
     {
-        if (!HcNet::addBalance(*iter->second, delta))
+        if (!DiamNet::addBalance(*iter->second, delta))
         {
             iter->second.reset();
         }
@@ -434,7 +434,7 @@ getAvailableBalanceExcludingLiabilities(AccountID const& accountID,
     }
     else
     {
-        auto trust = HcNet::loadTrustLineWithoutRecord(ltx, accountID, asset);
+        auto trust = DiamNet::loadTrustLineWithoutRecord(ltx, accountID, asset);
         if (trust && trust.isAuthorized())
         {
             return trust.getBalance();
@@ -560,7 +560,7 @@ updateOffer(
         if (offer.buying.type() == ASSET_TYPE_NATIVE ||
             !(offer.sellerID == getIssuer(offer.buying)))
         {
-            if (!HcNet::addBalance(
+            if (!DiamNet::addBalance(
                     liabilities[offer.buying].buying,
                     getOfferBuyingLiabilities(header, offerEntry)))
             {
@@ -571,7 +571,7 @@ updateOffer(
         if (offer.selling.type() == ASSET_TYPE_NATIVE ||
             !(offer.sellerID == getIssuer(offer.selling)))
         {
-            if (!HcNet::addBalance(
+            if (!DiamNet::addBalance(
                     liabilities[offer.selling].selling,
                     getOfferSellingLiabilities(header, offerEntry)))
             {
@@ -623,7 +623,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
                            getOfferSellingLiabilities(header, offerEntry));
         }
 
-        auto accountEntry = HcNet::loadAccount(ltx, accountOffers.first);
+        auto accountEntry = DiamNet::loadAccount(ltx, accountOffers.first);
         if (!accountEntry)
         {
             throw std::runtime_error("account does not exist");
@@ -647,7 +647,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
             if (res == UpdateOfferResult::AdjustedToZero ||
                 res == UpdateOfferResult::Erased)
             {
-                HcNet::addNumEntries(header, accountEntry, -1);
+                DiamNet::addNumEntries(header, accountEntry, -1);
             }
 
             ++nUpdatedOffers[res];
@@ -697,7 +697,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
             else
             {
                 auto trustEntry =
-                    HcNet::loadTrustLine(ltx, accountOffers.first, asset);
+                    DiamNet::loadTrustLine(ltx, accountOffers.first, asset);
                 int64_t deltaSelling =
                     liab.selling - trustEntry.getSellingLiabilities(header);
                 int64_t deltaBuying =

@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -30,7 +30,7 @@
 #include <iomanip>
 #include <set>
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace std;
@@ -389,7 +389,7 @@ bool
 LoadGenerator::loadAccount(TestAccount& account, Application& app)
 {
     LedgerTxn ltx(app.getLedgerTxnRoot());
-    auto entry = HcNet::loadAccount(ltx, account.getPublicKey());
+    auto entry = DiamNet::loadAccount(ltx, account.getPublicKey());
     if (!entry)
     {
         return false;
@@ -625,7 +625,7 @@ LoadGenerator::TxInfo::execute(Application& app, bool isCreate,
     }
     txm.mTxnAttempted.Mark();
 
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(TRANSACTION);
     msg.transaction() = txf->getEnvelope();
     txm.mTxnBytes.Mark(xdr::xdr_argpack_size(msg));

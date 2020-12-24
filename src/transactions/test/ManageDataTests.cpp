@@ -1,4 +1,4 @@
-// Copyright 2016 HcNet Development Foundation and contributors. Licensed
+// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
 // under the ISC License. See the COPYING file at the top-level directory of
 // this distribution or at http://opensource.org/licenses/ISC
 
@@ -14,8 +14,8 @@
 #include "util/Logging.h"
 #include "xdrpp/marshal.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 // add data
 // change data

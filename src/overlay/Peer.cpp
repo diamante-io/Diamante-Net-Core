@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,7 +19,7 @@
 #include "overlay/OverlayMetrics.h"
 #include "overlay/PeerAuth.h"
 #include "overlay/PeerManager.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/Logging.h"
 #include "util/XDROperators.h"
 
@@ -35,7 +35,7 @@
 // LATER: need to add some way of docking peers that are misbehaving by sending
 // you bad data
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace std;
@@ -62,7 +62,7 @@ Peer::sendHello()
 {
     CLOG(DEBUG, "Overlay") << "Peer::sendHello to " << toString() << " @"
                            << mApp.getConfig().PEER_PORT;
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(HELLO);
     Hello& elo = msg.hello();
     elo.ledgerVersion = mApp.getConfig().LEDGER_PROTOCOL_VERSION;
@@ -169,7 +169,7 @@ Peer::idleTimerExpired(asio::error_code const& error)
 void
 Peer::sendAuth()
 {
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(AUTH);
     sendMessage(msg);
 }
@@ -202,7 +202,7 @@ Peer::connectHandler(asio::error_code const& error)
 void
 Peer::sendDontHave(MessageType type, uint256 const& itemID)
 {
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(DONT_HAVE);
     msg.dontHave().reqHash = itemID;
     msg.dontHave().type = type;
@@ -213,7 +213,7 @@ Peer::sendDontHave(MessageType type, uint256 const& itemID)
 void
 Peer::sendSCPQuorumSet(SCPQuorumSetPtr qSet)
 {
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(SCP_QUORUMSET);
     msg.qSet() = *qSet;
 
@@ -223,7 +223,7 @@ Peer::sendSCPQuorumSet(SCPQuorumSetPtr qSet)
 void
 Peer::sendGetTxSet(uint256 const& setID)
 {
-    HcNetMessage newMsg;
+    DiamNetMessage newMsg;
     newMsg.type(GET_TX_SET);
     newMsg.txSetHash() = setID;
 
@@ -237,7 +237,7 @@ Peer::sendGetQuorumSet(uint256 const& setID)
         CLOG(TRACE, "Overlay") << "Get quorum set: " << hexAbbrev(setID) << " @"
                                << mApp.getConfig().PEER_PORT;
 
-    HcNetMessage newMsg;
+    DiamNetMessage newMsg;
     newMsg.type(GET_SCP_QUORUMSET);
     newMsg.qSetHash() = setID;
 
@@ -249,7 +249,7 @@ Peer::sendGetPeers()
 {
     CLOG(TRACE, "Overlay") << "Get peers @" << mApp.getConfig().PEER_PORT;
 
-    HcNetMessage newMsg;
+    DiamNetMessage newMsg;
     newMsg.type(GET_PEERS);
 
     sendMessage(newMsg);
@@ -261,7 +261,7 @@ Peer::sendGetScpState(uint32 ledgerSeq)
     CLOG(TRACE, "Overlay") << "Get SCP State for " << ledgerSeq << " @"
                            << mApp.getConfig().PEER_PORT;
 
-    HcNetMessage newMsg;
+    DiamNetMessage newMsg;
     newMsg.type(GET_SCP_STATE);
     newMsg.getSCPLedgerSeq() = ledgerSeq;
 
@@ -271,7 +271,7 @@ Peer::sendGetScpState(uint32 ledgerSeq)
 void
 Peer::sendPeers()
 {
-    HcNetMessage newMsg;
+    DiamNetMessage newMsg;
     newMsg.type(PEERS);
     uint32 maxPeerCount = std::min<uint32>(50, newMsg.peers().max_size());
 
@@ -291,7 +291,7 @@ Peer::sendPeers()
 void
 Peer::sendError(ErrorCode error, std::string const& message)
 {
-    HcNetMessage m;
+    DiamNetMessage m;
     m.type(ERROR_MSG);
     m.error().code = error;
     m.error().msg = message;
@@ -307,7 +307,7 @@ Peer::sendErrorAndDrop(ErrorCode error, std::string const& message,
 }
 
 static std::string
-msgSummary(HcNetMessage const& msg)
+msgSummary(DiamNetMessage const& msg)
 {
     switch (msg.type())
     {
@@ -355,7 +355,7 @@ msgSummary(HcNetMessage const& msg)
 }
 
 void
-Peer::sendMessage(HcNetMessage const& msg)
+Peer::sendMessage(DiamNetMessage const& msg)
 {
     if (Logging::logTrace("Overlay"))
         CLOG(TRACE, "Overlay")
@@ -504,7 +504,7 @@ Peer::recvMessage(AuthenticatedMessage const& msg)
 }
 
 void
-Peer::recvMessage(HcNetMessage const& HcNetMsg)
+Peer::recvMessage(DiamNetMessage const& DiamNetMsg)
 {
     if (shouldAbort())
     {
@@ -513,133 +513,133 @@ Peer::recvMessage(HcNetMessage const& HcNetMsg)
 
     if (Logging::logTrace("Overlay"))
         CLOG(TRACE, "Overlay")
-            << "recv: " << msgSummary(HcNetMsg)
+            << "recv: " << msgSummary(DiamNetMsg)
             << " from:" << mApp.getConfig().toShortString(mPeerID) << " @"
             << mApp.getConfig().PEER_PORT;
 
-    if (!isAuthenticated() && (HcNetMsg.type() != HELLO) &&
-        (HcNetMsg.type() != AUTH) && (HcNetMsg.type() != ERROR_MSG))
+    if (!isAuthenticated() && (DiamNetMsg.type() != HELLO) &&
+        (DiamNetMsg.type() != AUTH) && (DiamNetMsg.type() != ERROR_MSG))
     {
         drop(fmt::format("received {} before completed handshake",
-                         HcNetMsg.type()),
+                         DiamNetMsg.type()),
              Peer::DropDirection::WE_DROPPED_REMOTE,
              Peer::DropMode::IGNORE_WRITE_QUEUE);
         return;
     }
 
-    assert(isAuthenticated() || HcNetMsg.type() == HELLO ||
-           HcNetMsg.type() == AUTH || HcNetMsg.type() == ERROR_MSG);
-    mApp.getOverlayManager().recordDuplicateMessageMetric(HcNetMsg);
+    assert(isAuthenticated() || DiamNetMsg.type() == HELLO ||
+           DiamNetMsg.type() == AUTH || DiamNetMsg.type() == ERROR_MSG);
+    mApp.getOverlayManager().recordDuplicateMessageMetric(DiamNetMsg);
 
-    switch (HcNetMsg.type())
+    switch (DiamNetMsg.type())
     {
     case ERROR_MSG:
     {
         auto t = getOverlayMetrics().mRecvErrorTimer.TimeScope();
-        recvError(HcNetMsg);
+        recvError(DiamNetMsg);
     }
     break;
 
     case HELLO:
     {
         auto t = getOverlayMetrics().mRecvHelloTimer.TimeScope();
-        this->recvHello(HcNetMsg.hello());
+        this->recvHello(DiamNetMsg.hello());
     }
     break;
 
     case AUTH:
     {
         auto t = getOverlayMetrics().mRecvAuthTimer.TimeScope();
-        this->recvAuth(HcNetMsg);
+        this->recvAuth(DiamNetMsg);
     }
     break;
 
     case DONT_HAVE:
     {
         auto t = getOverlayMetrics().mRecvDontHaveTimer.TimeScope();
-        recvDontHave(HcNetMsg);
+        recvDontHave(DiamNetMsg);
     }
     break;
 
     case GET_PEERS:
     {
         auto t = getOverlayMetrics().mRecvGetPeersTimer.TimeScope();
-        recvGetPeers(HcNetMsg);
+        recvGetPeers(DiamNetMsg);
     }
     break;
 
     case PEERS:
     {
         auto t = getOverlayMetrics().mRecvPeersTimer.TimeScope();
-        recvPeers(HcNetMsg);
+        recvPeers(DiamNetMsg);
     }
     break;
 
     case GET_TX_SET:
     {
         auto t = getOverlayMetrics().mRecvGetTxSetTimer.TimeScope();
-        recvGetTxSet(HcNetMsg);
+        recvGetTxSet(DiamNetMsg);
     }
     break;
 
     case TX_SET:
     {
         auto t = getOverlayMetrics().mRecvTxSetTimer.TimeScope();
-        recvTxSet(HcNetMsg);
+        recvTxSet(DiamNetMsg);
     }
     break;
 
     case TRANSACTION:
     {
         auto t = getOverlayMetrics().mRecvTransactionTimer.TimeScope();
-        recvTransaction(HcNetMsg);
+        recvTransaction(DiamNetMsg);
     }
     break;
 
     case GET_SCP_QUORUMSET:
     {
         auto t = getOverlayMetrics().mRecvGetSCPQuorumSetTimer.TimeScope();
-        recvGetSCPQuorumSet(HcNetMsg);
+        recvGetSCPQuorumSet(DiamNetMsg);
     }
     break;
 
     case SCP_QUORUMSET:
     {
         auto t = getOverlayMetrics().mRecvSCPQuorumSetTimer.TimeScope();
-        recvSCPQuorumSet(HcNetMsg);
+        recvSCPQuorumSet(DiamNetMsg);
     }
     break;
 
     case SCP_MESSAGE:
     {
         auto t = getOverlayMetrics().mRecvSCPMessageTimer.TimeScope();
-        recvSCPMessage(HcNetMsg);
+        recvSCPMessage(DiamNetMsg);
     }
     break;
 
     case GET_SCP_STATE:
     {
         auto t = getOverlayMetrics().mRecvGetSCPStateTimer.TimeScope();
-        recvGetSCPState(HcNetMsg);
+        recvGetSCPState(DiamNetMsg);
     }
     break;
     }
 }
 
 void
-Peer::recvDontHave(HcNetMessage const& msg)
+Peer::recvDontHave(DiamNetMessage const& msg)
 {
     mApp.getHerder().peerDoesntHave(msg.dontHave().type, msg.dontHave().reqHash,
                                     shared_from_this());
 }
 
 void
-Peer::recvGetTxSet(HcNetMessage const& msg)
+Peer::recvGetTxSet(DiamNetMessage const& msg)
 {
     auto self = shared_from_this();
     if (auto txSet = mApp.getHerder().getTxSet(msg.txSetHash()))
     {
-        HcNetMessage newMsg;
+        DiamNetMessage newMsg;
         newMsg.type(TX_SET);
         txSet->toXDR(newMsg.txSet());
 
@@ -652,14 +652,14 @@ Peer::recvGetTxSet(HcNetMessage const& msg)
 }
 
 void
-Peer::recvTxSet(HcNetMessage const& msg)
+Peer::recvTxSet(DiamNetMessage const& msg)
 {
     TxSetFrame frame(mApp.getNetworkID(), msg.txSet());
     mApp.getHerder().recvTxSet(frame.getContentsHash(), frame);
 }
 
 void
-Peer::recvTransaction(HcNetMessage const& msg)
+Peer::recvTransaction(DiamNetMessage const& msg)
 {
     TransactionFramePtr transaction = TransactionFrame::makeTransactionFromWire(
         mApp.getNetworkID(), msg.transaction());
@@ -685,7 +685,7 @@ Peer::recvTransaction(HcNetMessage const& msg)
 }
 
 void
-Peer::recvGetSCPQuorumSet(HcNetMessage const& msg)
+Peer::recvGetSCPQuorumSet(DiamNetMessage const& msg)
 {
     SCPQuorumSetPtr qset = mApp.getHerder().getQSet(msg.qSetHash());
 
@@ -703,14 +703,14 @@ Peer::recvGetSCPQuorumSet(HcNetMessage const& msg)
     }
 }
 void
-Peer::recvSCPQuorumSet(HcNetMessage const& msg)
+Peer::recvSCPQuorumSet(DiamNetMessage const& msg)
 {
     Hash hash = sha256(xdr::xdr_to_opaque(msg.qSet()));
     mApp.getHerder().recvSCPQuorumSet(hash, msg.qSet());
 }
 
 void
-Peer::recvSCPMessage(HcNetMessage const& msg)
+Peer::recvSCPMessage(DiamNetMessage const& msg)
 {
     SCPEnvelope const& envelope = msg.envelope();
     if (Logging::logTrace("Overlay"))
@@ -738,7 +738,7 @@ Peer::recvSCPMessage(HcNetMessage const& msg)
 }
 
 void
-Peer::recvGetSCPState(HcNetMessage const& msg)
+Peer::recvGetSCPState(DiamNetMessage const& msg)
 {
     uint32 seq = msg.getSCPLedgerSeq();
     CLOG(TRACE, "Overlay") << "get SCP State " << seq << " @"
@@ -747,7 +747,7 @@ Peer::recvGetSCPState(HcNetMessage const& msg)
 }
 
 void
-Peer::recvError(HcNetMessage const& msg)
+Peer::recvError(DiamNetMessage const& msg)
 {
     std::string codeStr = "UNKNOWN";
     switch (msg.error().code)
@@ -944,7 +944,7 @@ Peer::recvHello(Hello const& elo)
 }
 
 void
-Peer::recvAuth(HcNetMessage const& msg)
+Peer::recvAuth(DiamNetMessage const& msg)
 {
     if (mState != GOT_HELLO)
     {
@@ -995,13 +995,13 @@ Peer::recvAuth(HcNetMessage const& msg)
 }
 
 void
-Peer::recvGetPeers(HcNetMessage const& msg)
+Peer::recvGetPeers(DiamNetMessage const& msg)
 {
     sendPeers();
 }
 
 void
-Peer::recvPeers(HcNetMessage const& msg)
+Peer::recvPeers(DiamNetMessage const& msg)
 {
     for (auto const& peer : msg.peers())
     {

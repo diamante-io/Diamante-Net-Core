@@ -1,4 +1,4 @@
-// Copyright 2016 HcNet Development Foundation and contributors. Licensed
+// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 #include "util/XDROperators.h"
 #include "xdrpp/marshal.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 static std::chrono::milliseconds const MS_TO_WAIT_FOR_FETCH_REPLY{1500};
@@ -174,7 +174,7 @@ Tracker::listen(const SCPEnvelope& env)
 {
     mLastSeenSlotIndex = std::max(env.statement.slotIndex, mLastSeenSlotIndex);
 
-    HcNetMessage m;
+    DiamNetMessage m;
     m.type(SCP_MESSAGE);
     m.envelope() = env;
     mWaitingEnvelopes.push_back(

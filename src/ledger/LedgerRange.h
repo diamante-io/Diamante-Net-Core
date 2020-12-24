@@ -1,14 +1,14 @@
 #pragma once
 
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "util/optional.h"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-types.h"
 #include <cstdint>
 
-namespace HcNet
+namespace DiamNet
 {
 // Ledger seq num + hash pair, a lightweight substitute of ledger
 // history entry, useful for catchup and ledger verification purposes.

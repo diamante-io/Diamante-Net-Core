@@ -18,7 +18,7 @@ using namespace std;
 #define QSET_CACHE_SIZE 10000
 #define TXSET_CACHE_SIZE 10000
 
-namespace HcNet
+namespace DiamNet
 {
 
 PendingEnvelopes::PendingEnvelopes(Application& app, HerderImpl& herder)
@@ -305,7 +305,7 @@ PendingEnvelopes::envelopeReady(SCPEnvelope const& envelope)
     CLOG(TRACE, "Herder") << "Envelope ready i:" << envelope.statement.slotIndex
                           << " t:" << envelope.statement.pledges.type();
 
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(SCP_MESSAGE);
     msg.envelope() = envelope;
     mApp.getOverlayManager().broadcastMessage(msg);

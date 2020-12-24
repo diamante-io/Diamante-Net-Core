@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,14 +10,14 @@
 #include "herder/TransactionQueue.h"
 #include "lib/json/json-forwards.h"
 #include "overlay/Peer.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "scp/SCP.h"
 #include "util/Timer.h"
 #include <functional>
 #include <memory>
 #include <string>
 
-namespace HcNet
+namespace DiamNet
 {
 class Application;
 class XDROutputFileStream;
@@ -101,7 +101,7 @@ class Herder
     // We are learning about a new transaction.
     virtual TransactionQueue::AddResult
     recvTransaction(TransactionFramePtr tx) = 0;
-    virtual void peerDoesntHave(HcNet::MessageType type,
+    virtual void peerDoesntHave(DiamNet::MessageType type,
                                 uint256 const& itemID, Peer::pointer peer) = 0;
     virtual TxSetFramePtr getTxSet(Hash const& hash) = 0;
     virtual SCPQuorumSetPtr getQSet(Hash const& qSetHash) = 0;

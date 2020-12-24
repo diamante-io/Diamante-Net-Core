@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -38,7 +38,7 @@
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-namespace HcNet
+namespace DiamNet
 {
 CommandHandler::CommandHandler(Application& app) : mApp(app)
 {
@@ -137,10 +137,10 @@ CommandHandler::manualCmd(std::string const& cmd)
 void
 CommandHandler::fileNotFound(std::string const& params, std::string& retStr)
 {
-    retStr = "<b>Welcome to HcNet-core!</b><p>";
+    retStr = "<b>Welcome to DiamNet-core!</b><p>";
     retStr +=
         "Supported HTTP commands are listed in the <a href=\""
-        "https://github.com/HcNet/HcNet-core/blob/master/docs/software/"
+        "https://github.com/DiamNet/DiamNet-core/blob/master/docs/software/"
         "commands.md#http-commands"
         "\">docs</a> as well as in the man pages.</p>"
         "<p>Have fun!</p>";
@@ -156,7 +156,7 @@ CommandHandler::manualClose(std::string const& params, std::string& retStr)
     else
     {
         retStr =
-            "Set MANUAL_CLOSE=true in the HcNet-core.cfg if you want this "
+            "Set MANUAL_CLOSE=true in the DiamNet-core.cfg if you want this "
             "behavior";
     }
 }
@@ -555,7 +555,7 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
 
             if (status == TransactionQueue::AddResult::ADD_STATUS_PENDING)
             {
-                HcNetMessage msg;
+                DiamNetMessage msg;
                 msg.type(TRANSACTION);
                 msg.transaction() = envelope;
                 mApp.getOverlayManager().broadcastMessage(msg);
@@ -742,7 +742,7 @@ CommandHandler::generateLoad(std::string const& params, std::string& retStr)
     else
     {
         retStr = "Set ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING=true in "
-                 "the HcNet-core.cfg if you want this behavior";
+                 "the DiamNet-core.cfg if you want this behavior";
     }
 }
 
@@ -773,7 +773,7 @@ CommandHandler::testAcc(std::string const& params, std::string& retStr)
         }
 
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto acc = HcNet::loadAccount(ltx, key.getPublicKey());
+        auto acc = DiamNet::loadAccount(ltx, key.getPublicKey());
         if (acc)
         {
             auto const& ae = acc.current().data.account();

@@ -18,7 +18,7 @@ SCP messages that you have received but are waiting to get the info of
 before feeding into SCP
 */
 
-namespace HcNet
+namespace DiamNet
 {
 
 class HerderImpl;

@@ -1,16 +1,16 @@
 #pragma once
 
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/SecretKey.h"
 #include "herder/LedgerCloseData.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "test/TestPrinter.h"
 #include "util/optional.h"
 
-namespace HcNet
+namespace DiamNet
 {
 class AbstractLedgerTxn;
 class ConstLedgerTxnEntry;

@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -28,8 +28,8 @@
 #include "util/Logging.h"
 #include "util/Timer.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 /*
   Tests that are testing the common envelope used in transactions.
@@ -542,7 +542,7 @@ TEST_CASE("txenvelope", "[tx][envelope]")
 
                             {
                                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                                REQUIRE(!HcNet::loadAccount(ltx, b1));
+                                REQUIRE(!DiamNet::loadAccount(ltx, b1));
                             }
                         });
                     }
@@ -563,17 +563,17 @@ TEST_CASE("txenvelope", "[tx][envelope]")
                         for_versions(3, 9, *app, [&] {
                             setup();
                             applyCheck(tx, *app);
-                            REQUIRE(tx->getResultCode() == HcNet::txFAILED);
+                            REQUIRE(tx->getResultCode() == DiamNet::txFAILED);
                             REQUIRE(PaymentOpFrame::getInnerCode(getFirstResult(
-                                        *tx)) == HcNet::PAYMENT_MALFORMED);
+                                        *tx)) == DiamNet::PAYMENT_MALFORMED);
                             REQUIRE(getAccountSigners(a1, *app).size() == 1);
                         });
                         for_versions_from(10, *app, [&] {
                             setup();
                             applyCheck(tx, *app);
-                            REQUIRE(tx->getResultCode() == HcNet::txFAILED);
+                            REQUIRE(tx->getResultCode() == DiamNet::txFAILED);
                             REQUIRE(PaymentOpFrame::getInnerCode(getFirstResult(
-                                        *tx)) == HcNet::PAYMENT_MALFORMED);
+                                        *tx)) == DiamNet::PAYMENT_MALFORMED);
                             REQUIRE(getAccountSigners(a1, *app).size() ==
                                     (alternative.autoRemove ? 0 : 1));
                         });
@@ -1092,8 +1092,8 @@ TEST_CASE("txenvelope", "[tx][envelope]")
         txSet->add(txFrame);
 
         // close this ledger
-        HcNetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
-                        HcNet_VALUE_BASIC);
+        DiamNetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
+                        DiamNet_VALUE_BASIC);
         LedgerCloseData ledgerData(1, txSet, sv);
         app->getLedgerManager().closeLedger(ledgerData);
 
@@ -1372,7 +1372,7 @@ TEST_CASE("txenvelope", "[tx][envelope]")
                          setHighThreshold(2));
 
             auto tx = a.tx({setOptions(setSigner(makeSigner(b, 0))),
-                            setOptions(setHomeDomain("HcNet.org"))});
+                            setOptions(setHomeDomain("DiamNet.org"))});
             tx->addSignature(b);
 
             for_versions({1, 2, 3, 4, 5, 6, 8, 9}, *app, [&] {
@@ -1395,7 +1395,7 @@ TEST_CASE("txenvelope", "[tx][envelope]")
                 a.tx({setOptions(setSigner(makeSigner(b, 1)) |
                                  setMasterWeight(1) | setLowThreshold(2) |
                                  setMedThreshold(2) | setHighThreshold(2)),
-                      setOptions(setHomeDomain("HcNet.org"))});
+                      setOptions(setHomeDomain("DiamNet.org"))});
             tx->addSignature(b);
 
             for_all_versions_except({7}, *app, [&] {

@@ -1,12 +1,12 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "history/HistoryArchive.h"
 #include "history/InferredQuorum.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include <functional>
 #include <memory>
 
@@ -46,14 +46,14 @@
  * store is a history archive state file (class HistoryArchiveState) which
  * stores the most recent checkpoint (including version info, most recent ledger
  * number and most recent bucket hashes). As per RFC 5785, this checkpoint is
- * stored at .well-known/HcNet-history.json as a JSON file.
+ * stored at .well-known/DiamNet-history.json as a JSON file.
  *
  * Checkpoints are made every 64 ledgers, which (at 5s ledger close time) is
  * 320s or about 5m20s. There will be 11 checkpoints per hour, 270 per day, and
  * 98,550 per year. Counting checkpoints within a 32bit value gives 43,581 years
  * of service for the system.
  *
- * While the _most recent_ checkpoint is in .well-known/HcNet-history.json,
+ * While the _most recent_ checkpoint is in .well-known/DiamNet-history.json,
  * each checkpoint is also stored permanently at a path whose name includes the
  * last ledger number in the checkpoint (as a 32-bit hex string) and stored in a
  * 3-level deep directory tree of hex digit prefixes. For example, checkpoint at
@@ -171,7 +171,7 @@ namespace asio
 typedef std::error_code error_code;
 };
 
-namespace HcNet
+namespace DiamNet
 {
 class Application;
 class Bucket;

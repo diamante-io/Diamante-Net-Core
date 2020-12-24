@@ -1,12 +1,12 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "database/DatabaseTypeSpecificOperation.h"
 #include "medida/timer_context.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/NonCopyable.h"
 #include "util/Timer.h"
 #include <set>
@@ -19,7 +19,7 @@ class Meter;
 class Counter;
 }
 
-namespace HcNet
+namespace DiamNet
 {
 class Application;
 class SQLLogContext;
@@ -168,7 +168,7 @@ class Database : NonMovableOrCopyable
     bool canUsePool() const;
 
     // Drop and recreate all tables in the database target. This is called
-    // by the new-db command on HcNet-core.
+    // by the new-db command on DiamNet-core.
     void initialize();
 
     // Save `vers` as schema version.

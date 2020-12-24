@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,9 +14,9 @@
 #include "util/XDROperators.h"
 #include "xdrpp/marshal.h"
 
-namespace HcNet
+namespace DiamNet
 {
-Floodgate::FloodRecord::FloodRecord(HcNetMessage const& msg, uint32_t ledger,
+Floodgate::FloodRecord::FloodRecord(DiamNetMessage const& msg, uint32_t ledger,
                                     Peer::pointer peer)
     : mLedgerSeq(ledger), mMessage(msg)
 {
@@ -54,7 +54,7 @@ Floodgate::clearBelow(uint32_t currentLedger)
 }
 
 bool
-Floodgate::addRecord(HcNetMessage const& msg, Peer::pointer peer)
+Floodgate::addRecord(DiamNetMessage const& msg, Peer::pointer peer)
 {
     if (mShuttingDown)
     {
@@ -78,7 +78,7 @@ Floodgate::addRecord(HcNetMessage const& msg, Peer::pointer peer)
 
 // send message to anyone you haven't gotten it from
 void
-Floodgate::broadcast(HcNetMessage const& msg, bool force)
+Floodgate::broadcast(DiamNetMessage const& msg, bool force)
 {
     if (mShuttingDown)
     {

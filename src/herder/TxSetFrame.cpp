@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,7 +24,7 @@
 
 #include "xdrpp/printer.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace std;
@@ -326,7 +326,7 @@ TxSetFrame::checkOrTrim(
         {
             // make sure account can pay the fee for all these tx
             auto const& source =
-                HcNet::loadAccount(ltx, lastTx->getSourceID());
+                DiamNet::loadAccount(ltx, lastTx->getSourceID());
             if (getAvailableBalance(ltx.loadHeader(), source) < totFee)
             {
                 if (!processInsufficientBalance(item.second))
@@ -519,4 +519,4 @@ TxSetFrame::toXDR(TransactionSet& txSet)
     }
     txSet.previousLedgerHash = mPreviousLedgerHash;
 }
-} // namespace HcNet
+} // namespace DiamNet

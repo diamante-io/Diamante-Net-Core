@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -40,7 +40,7 @@
 
 using namespace std;
 
-namespace HcNet
+namespace DiamNet
 {
 
 constexpr auto const TRANSACTION_QUEUE_SIZE = 4;
@@ -130,7 +130,7 @@ HerderImpl::bootstrap()
 }
 
 void
-HerderImpl::valueExternalized(uint64 slotIndex, HcNetValue const& value)
+HerderImpl::valueExternalized(uint64 slotIndex, DiamNetValue const& value)
 {
     const int DUMP_SCP_TIMEOUT_SECONDS = 20;
 
@@ -244,7 +244,7 @@ HerderImpl::broadcast(SCPEnvelope const& e)
 {
     if (!mApp.getConfig().MANUAL_CLOSE)
     {
-        HcNetMessage m;
+        DiamNetMessage m;
         m.type(SCP_MESSAGE);
         m.envelope() = e;
 
@@ -338,12 +338,12 @@ HerderImpl::checkCloseTime(SCPEnvelope const& envelope, bool enforceRecent)
     adjustLastCloseTime(mHerderSCPDriver.trackingSCP());
     adjustLastCloseTime(mHerderSCPDriver.lastTrackingSCP());
 
-    HcNetValue sv;
+    DiamNetValue sv;
     // performs the most conservative check:
     // returns true if one of the values is valid
     auto checkCTHelper = [&](std::vector<Value> const& values) {
         return std::any_of(values.begin(), values.end(), [&](Value const& e) {
-            auto r = scpD.toHcNetValue(e, sv);
+            auto r = scpD.toDiamNetValue(e, sv);
             // sv must be after cutoff
             r = r && sv.closeTime >= ctCutoff;
             if (r)
@@ -533,7 +533,7 @@ HerderImpl::sendSCPStateToPeer(uint32 ledgerSeq, Peer::pointer peer)
 
             for (auto const& e : envelopes)
             {
-                HcNetMessage m;
+                DiamNetMessage m;
                 m.type(SCP_MESSAGE);
                 m.envelope() = e;
                 peer->sendMessage(m);
@@ -768,8 +768,8 @@ HerderImpl::triggerNextLedger(uint32_t ledgerSeqToTrigger)
         nextCloseTime = lcl.header.scpValue.closeTime + 1;
     }
 
-    HcNetValue newProposedValue(txSetHash, nextCloseTime, emptyUpgradeSteps,
-                                  HcNet_VALUE_BASIC);
+    DiamNetValue newProposedValue(txSetHash, nextCloseTime, emptyUpgradeSteps,
+                                  DiamNet_VALUE_BASIC);
 
     // see if we need to include some upgrades
     auto upgrades = mUpgrades.createUpgradesFor(lcl.header);
@@ -803,7 +803,7 @@ HerderImpl::triggerNextLedger(uint32_t ledgerSeqToTrigger)
     if (lcl.header.ledgerVersion >= 11)
     {
         // version 11 and above require values to be signed during nomination
-        signHcNetValue(mApp.getConfig().NODE_SEED, newProposedValue);
+        signDiamNetValue(mApp.getConfig().NODE_SEED, newProposedValue);
     }
     mHerderSCPDriver.nominate(slotIndex, newProposedValue, proposedSet,
                               lcl.header.scpValue);
@@ -1344,7 +1344,7 @@ HerderImpl::updateTransactionQueue(
         auto toBroadcast = mTransactionQueue.toTxSet({});
         for (auto tx : toBroadcast->sortForApply())
         {
-            auto msg = tx->toHcNetMessage();
+            auto msg = tx->toDiamNetMessage();
             mApp.getOverlayManager().broadcastMessage(msg);
         }
     }
@@ -1413,7 +1413,7 @@ HerderImpl::signEnvelope(SecretKey const& s, SCPEnvelope& envelope)
         mApp.getNetworkID(), ENVELOPE_TYPE_SCP, envelope.statement));
 }
 bool
-HerderImpl::verifyHcNetValueSignature(HcNetValue const& sv)
+HerderImpl::verifyDiamNetValueSignature(DiamNetValue const& sv)
 {
     auto b = PubKeyUtils::verifySig(
         sv.ext.lcValueSignature().nodeID, sv.ext.lcValueSignature().signature,
@@ -1423,9 +1423,9 @@ HerderImpl::verifyHcNetValueSignature(HcNetValue const& sv)
 }
 
 void
-HerderImpl::signHcNetValue(SecretKey const& s, HcNetValue& sv)
+HerderImpl::signDiamNetValue(SecretKey const& s, DiamNetValue& sv)
 {
-    sv.ext.v(HcNet_VALUE_SIGNED);
+    sv.ext.v(DiamNet_VALUE_SIGNED);
     sv.ext.lcValueSignature().nodeID = s.getPublicKey();
     sv.ext.lcValueSignature().signature =
         s.sign(xdr::xdr_to_opaque(mApp.getNetworkID(), ENVELOPE_TYPE_SCPVALUE,

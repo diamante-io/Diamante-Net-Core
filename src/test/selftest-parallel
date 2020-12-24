@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2018 HcNet Development Foundation and contributors. Licensed
+# Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 # under the Apache License, Version 2.0. See the COPYING file at the root
 # of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -35,7 +35,7 @@ perl -e '
          my $num_partitions = $ARGV[0];
          my $test_spec = $ARGV[1];
          my $test_partitions_dir = $ARGV[2];
-         my @all_tests = shuffle `./HcNet-core test --ll FATAL --list-test-names-only $test_spec`;
+         my @all_tests = shuffle `./DiamNet-core test --ll FATAL --list-test-names-only $test_spec`;
          for (my $p = 0; $p < $num_partitions; $p++) {
              die "Invalid test name \"$p\"" if $p =~ /[^A-Za-z0-9 _()]/;
              open(my $out, ">", "$test_partitions_dir/test-partition-$p.txt");

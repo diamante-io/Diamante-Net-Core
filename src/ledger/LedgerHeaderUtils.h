@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "database/Database.h"
-#include "xdr/HcNet-ledger.h"
+#include "xdr/DiamNet-ledger.h"
 
-namespace HcNet
+namespace DiamNet
 {
 class XDROutputFileStream;
 

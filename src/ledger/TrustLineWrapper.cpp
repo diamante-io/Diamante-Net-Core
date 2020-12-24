@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 #include "util/XDROperators.h"
 #include "util/types.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 // Declarations of TrustLineWrapper implementations ---------------------------
@@ -235,55 +235,55 @@ bool
 TrustLineWrapper::NonIssuerImpl::addBalance(LedgerTxnHeader const& header,
                                             int64_t delta)
 {
-    return HcNet::addBalance(header, mEntry, delta);
+    return DiamNet::addBalance(header, mEntry, delta);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getBuyingLiabilities(
     LedgerTxnHeader const& header)
 {
-    return HcNet::getBuyingLiabilities(header, mEntry);
+    return DiamNet::getBuyingLiabilities(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getSellingLiabilities(
     LedgerTxnHeader const& header)
 {
-    return HcNet::getSellingLiabilities(header, mEntry);
+    return DiamNet::getSellingLiabilities(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::addBuyingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return HcNet::addBuyingLiabilities(header, mEntry, delta);
+    return DiamNet::addBuyingLiabilities(header, mEntry, delta);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::addSellingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return HcNet::addSellingLiabilities(header, mEntry, delta);
+    return DiamNet::addSellingLiabilities(header, mEntry, delta);
 }
 
 bool
 TrustLineWrapper::NonIssuerImpl::isAuthorized() const
 {
-    return HcNet::isAuthorized(mEntry);
+    return DiamNet::isAuthorized(mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
 {
-    return HcNet::getAvailableBalance(header, mEntry);
+    return DiamNet::getAvailableBalance(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getMaxAmountReceive(
     LedgerTxnHeader const& header) const
 {
-    return HcNet::getMaxAmountReceive(header, mEntry);
+    return DiamNet::getMaxAmountReceive(header, mEntry);
 }
 
 // Implementation of TrustLineWrapper::IssuerImpl -----------------------------
@@ -499,21 +499,21 @@ ConstTrustLineWrapper::NonIssuerImpl::getBalance() const
 bool
 ConstTrustLineWrapper::NonIssuerImpl::isAuthorized() const
 {
-    return HcNet::isAuthorized(mEntry);
+    return DiamNet::isAuthorized(mEntry);
 }
 
 int64_t
 ConstTrustLineWrapper::NonIssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
 {
-    return HcNet::getAvailableBalance(header, mEntry);
+    return DiamNet::getAvailableBalance(header, mEntry);
 }
 
 int64_t
 ConstTrustLineWrapper::NonIssuerImpl::getMaxAmountReceive(
     LedgerTxnHeader const& header) const
 {
-    return HcNet::getMaxAmountReceive(header, mEntry);
+    return DiamNet::getMaxAmountReceive(header, mEntry);
 }
 
 // Implementation of ConstTrustLineWrapper::IssuerImpl ------------------------

@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 #include "main/ApplicationUtils.h"
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "main/dumpxdr.h"
 #include "scp/QuorumSetUtils.h"
 #include "util/Logging.h"
@@ -29,7 +29,7 @@
 #include <lib/clara.hpp>
 #include <lib/util/format.h>
 
-namespace HcNet
+namespace DiamNet
 {
 
 void
@@ -219,7 +219,7 @@ configurationParser(CommandLine::ConfigOption& configOption)
            metricsParser(configOption.mMetrics) |
            clara::Opt{configOption.mConfigFile, "FILE-NAME"}["--conf"](
                "specify a config file ('-' for STDIN, "
-               "default 'HcNet-core.cfg')");
+               "default 'DiamNet-core.cfg')");
 }
 
 int
@@ -322,7 +322,7 @@ CommandLine::ConfigOption::getConfig(bool logToFile) const
 {
     Config config;
     auto configFile =
-        mConfigFile.empty() ? std::string{"HcNet-core.cfg"} : mConfigFile;
+        mConfigFile.empty() ? std::string{"DiamNet-core.cfg"} : mConfigFile;
 
     LOG(INFO) << "Config from " << configFile;
 
@@ -566,7 +566,7 @@ runForceSCP(CommandLineArgs const& args)
     auto reset = false;
 
     auto resetOption = clara::Opt{reset}["--reset"](
-        "reset force SCP flag, so next time HcNet-core "
+        "reset force SCP flag, so next time DiamNet-core "
         "is run it will wait to hear from the network "
         "rather than starting with the local ledger");
 
@@ -759,7 +759,7 @@ runSignTransaction(CommandLineArgs const& args)
 int
 runVersion(CommandLineArgs const&)
 {
-    std::cout << HcNet_CORE_VERSION << std::endl;
+    std::cout << DiamNet_CORE_VERSION << std::endl;
     return 0;
 }
 
@@ -945,12 +945,12 @@ handleCommandLine(int argc, char* const* argv)
          {"convert-id", "displays ID in all known forms", runConvertId},
          {"dump-xdr", "dump an XDR file, for debugging", runDumpXDR},
          {"force-scp",
-          "next time HcNet-core is run, SCP will start with "
+          "next time DiamNet-core is run, SCP will start with "
           "the local ledger rather than waiting to hear from the "
           "network",
           runForceSCP},
          {"gen-seed", "generate and print a random node seed", runGenSeed},
-         {"http-command", "send a command to local HcNet-core",
+         {"http-command", "send a command to local DiamNet-core",
           runHttpCommand},
          {"infer-quorum", "print a quorum set inferred from history",
           runInferQuorum},
@@ -969,7 +969,7 @@ handleCommandLine(int argc, char* const* argv)
           "report information about last checkpoint available in "
           "history archives",
           runReportLastHistoryCheckpoint},
-         {"run", "run HcNet-core node", run},
+         {"run", "run DiamNet-core node", run},
          {"sec-to-pub", "print the public key corresponding to a secret key",
           runSecToPub},
          {"sign-transaction",
@@ -995,7 +995,7 @@ handleCommandLine(int argc, char* const* argv)
     auto command = commandLine.selectCommand(adjustedCommandLine.first);
     bool didDefaultToHelp = command->name() != adjustedCommandLine.first;
 
-    auto exeName = "HcNet-core";
+    auto exeName = "DiamNet-core";
     auto commandName = fmt::format("{0} {1}", exeName, command->name());
     auto args = CommandLineArgs{exeName, commandName, command->description(),
                                 adjustedCommandLine.second};

@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "util/asio.h"
 #include "database/Database.h"
 #include "overlay/PeerBareAddress.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/NonCopyable.h"
 #include "util/Timer.h"
 #include "xdrpp/message.h"
@@ -18,7 +18,7 @@ class Timer;
 class Meter;
 }
 
-namespace HcNet
+namespace DiamNet
 {
 
 typedef std::shared_ptr<SCPQuorumSet> SCPQuorumSetPtr;
@@ -93,26 +93,26 @@ class Peer : public std::enable_shared_from_this<Peer>,
     OverlayMetrics& getOverlayMetrics();
 
     bool shouldAbort() const;
-    void recvMessage(HcNetMessage const& msg);
+    void recvMessage(DiamNetMessage const& msg);
     void recvMessage(AuthenticatedMessage const& msg);
     void recvMessage(xdr::msg_ptr const& xdrBytes);
 
-    virtual void recvError(HcNetMessage const& msg);
+    virtual void recvError(DiamNetMessage const& msg);
     void updatePeerRecordAfterEcho();
     void updatePeerRecordAfterAuthentication();
-    void recvAuth(HcNetMessage const& msg);
-    void recvDontHave(HcNetMessage const& msg);
-    void recvGetPeers(HcNetMessage const& msg);
+    void recvAuth(DiamNetMessage const& msg);
+    void recvDontHave(DiamNetMessage const& msg);
+    void recvGetPeers(DiamNetMessage const& msg);
     void recvHello(Hello const& elo);
-    void recvPeers(HcNetMessage const& msg);
+    void recvPeers(DiamNetMessage const& msg);
 
-    void recvGetTxSet(HcNetMessage const& msg);
-    void recvTxSet(HcNetMessage const& msg);
-    void recvTransaction(HcNetMessage const& msg);
-    void recvGetSCPQuorumSet(HcNetMessage const& msg);
-    void recvSCPQuorumSet(HcNetMessage const& msg);
-    void recvSCPMessage(HcNetMessage const& msg);
-    void recvGetSCPState(HcNetMessage const& msg);
+    void recvGetTxSet(DiamNetMessage const& msg);
+    void recvTxSet(DiamNetMessage const& msg);
+    void recvTransaction(DiamNetMessage const& msg);
+    void recvGetSCPQuorumSet(DiamNetMessage const& msg);
+    void recvSCPQuorumSet(DiamNetMessage const& msg);
+    void recvSCPMessage(DiamNetMessage const& msg);
+    void recvGetSCPState(DiamNetMessage const& msg);
 
     void sendHello();
     void sendAuth();
@@ -159,7 +159,7 @@ class Peer : public std::enable_shared_from_this<Peer>,
     void sendErrorAndDrop(ErrorCode error, std::string const& message,
                           DropMode dropMode);
 
-    void sendMessage(HcNetMessage const& msg);
+    void sendMessage(DiamNetMessage const& msg);
 
     PeerRole
     getRole() const

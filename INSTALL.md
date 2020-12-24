@@ -1,15 +1,15 @@
 Installation Instructions
 ==================
-These are instructions for building HcNet-core from source.
+These are instructions for building DiamNet-core from source.
 
 For a potentially quicker set up, the following projects could be good alternatives:
 
-* HcNet-core in a [docker container](https://github.com/HcNet/docker-HcNet-core-horizon)
-* pre-compiled [packages](https://github.com/HcNet/packages)
+* DiamNet-core in a [docker container](https://github.com/DiamNet/docker-DiamNet-core-horizon)
+* pre-compiled [packages](https://github.com/DiamNet/packages)
 
 ## Picking a version to run
 
-Best is to use the latest *stable* release that can be downloaded from https://github.com/HcNet/HcNet-core/releases
+Best is to use the latest *stable* release that can be downloaded from https://github.com/DiamNet/DiamNet-core/releases
 
 
 Alternatively, branches are organized in the following way:
@@ -41,10 +41,10 @@ For convenience, we also keep a record in the form of release tags of the
 ### Ubuntu
 
 #### Ubuntu 14.04
-You will have to install the [test toolchain](#adding-the-test-toolchain) in order to both build and run HcNet-core.
+You will have to install the [test toolchain](#adding-the-test-toolchain) in order to both build and run DiamNet-core.
 
 #### Ubuntu 16.04
-Just like 14.04, you can install the test toolchain to build and run HcNet-core.
+Just like 14.04, you can install the test toolchain to build and run DiamNet-core.
 
 Alternatively, if you want to just depend on stock 16.04, you will have to build with clang *and* have use `libc++` instead of `libstdc++` when compiling.
 
@@ -96,8 +96,8 @@ See [INSTALL-Windows.md](INSTALL-Windows.md)
 
 ## Basic Installation
 
-- `git clone https://github.com/HcNet/HcNet-core.git`
-- `cd HcNet-core`
+- `git clone https://github.com/DiamNet/DiamNet-core.git`
+- `cd DiamNet-core`
 - `git submodule init`
 - `git submodule update`
 - Type `./autogen.sh`.
@@ -123,6 +123,6 @@ Here are sample steps to achieve this:
     export CXX=clang++-5.0
     export CFLAGS="-O3 -g1 -fno-omit-frame-pointer"
     export CXXFLAGS="$CFLAGS -stdlib=libc++ -isystem /usr/include/libcxxabi"
-    git clone https://github.com/HcNet/HcNet-core.git
-    cd HcNet-core/
+    git clone https://github.com/DiamNet/DiamNet-core.git
+    cd DiamNet-core/
     ./autogen.sh && ./configure && make -j6

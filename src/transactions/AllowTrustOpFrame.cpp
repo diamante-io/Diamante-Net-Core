@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 #include "main/Application.h"
 #include "transactions/TransactionUtils.h"
 
-namespace HcNet
+namespace DiamNet
 {
 AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op, OperationResult& res,
                                      TransactionFrame& parentTx)
@@ -115,7 +115,7 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             }
 
             releaseLiabilities(ltx, header, offer);
-            auto trustAcc = HcNet::loadAccount(ltx, mAllowTrust.trustor);
+            auto trustAcc = DiamNet::loadAccount(ltx, mAllowTrust.trustor);
             addNumEntries(header, trustAcc, -1);
             offer.erase();
         }

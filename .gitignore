@@ -37,7 +37,7 @@ compile_commands.json
 
 /INSTALL
 
-/src/main/HcNetCoreVersion.cpp
+/src/main/DiamNetCoreVersion.cpp
 
 /src/xdr/*.h
 /Makefile
@@ -45,7 +45,7 @@ compile_commands.json
 /aclocal.m4
 /autom4te.cache
 /build
-/src/HcNet-core
+/src/DiamNet-core
 /buckets
 /compile
 /config.h
@@ -76,7 +76,7 @@ compile_commands.json
 /lib/lib.mk
 
 # test output
-/HcNet-core-test-*
+/DiamNet-core-test-*
 /fuzz-findings/
 /my-history/
 

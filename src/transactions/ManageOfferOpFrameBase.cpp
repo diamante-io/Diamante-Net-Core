@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "transactions/OfferExchange.h"
 #include "transactions/TransactionUtils.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 ManageOfferOpFrameBase::ManageOfferOpFrameBase(
@@ -40,7 +40,7 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
     if (mSheep.type() != ASSET_TYPE_NATIVE)
     {
         auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
-        auto issuer = HcNet::loadAccount(ltx, getIssuer(mSheep));
+        auto issuer = DiamNet::loadAccount(ltx, getIssuer(mSheep));
         if (!issuer)
         {
             setResultSellNoIssuer();
@@ -67,7 +67,7 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
     if (mWheat.type() != ASSET_TYPE_NATIVE)
     {
         auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
-        auto issuer = HcNet::loadAccount(ltx, getIssuer(mWheat));
+        auto issuer = DiamNet::loadAccount(ltx, getIssuer(mWheat));
         if (!issuer)
         {
             setResultBuyNoIssuer();
@@ -206,7 +206,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
 
     if (mOfferID)
     { // modifying an old offer
-        auto sellSheepOffer = HcNet::loadOffer(ltx, getSourceID(), mOfferID);
+        auto sellSheepOffer = DiamNet::loadOffer(ltx, getSourceID(), mOfferID);
         if (!sellSheepOffer)
         {
             setResultNotFound();
@@ -368,7 +368,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
             if (sheepStays)
             {
                 auto sourceAccount =
-                    HcNet::loadAccountWithoutRecord(ltx, getSourceID());
+                    DiamNet::loadAccountWithoutRecord(ltx, getSourceID());
                 auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
                     ltx, getSourceID(), mSheep);
                 auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(

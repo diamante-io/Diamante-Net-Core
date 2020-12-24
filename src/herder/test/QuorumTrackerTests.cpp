@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,7 +11,7 @@
 #include "test/TestUtils.h"
 #include "test/test.h"
 
-using namespace HcNet;
+using namespace DiamNet;
 
 TEST_CASE("quorum tracker", "[quorum][herder][acceptance]")
 {
@@ -110,11 +110,11 @@ TEST_CASE("quorum tracker", "[quorum][herder][acceptance]")
     auto makeValue = [&](int i) {
         auto const& lcl = app->getLedgerManager().getLastClosedLedgerHeader();
         auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
-        auto sv = HcNetValue{txSet->getContentsHash(),
+        auto sv = DiamNetValue{txSet->getContentsHash(),
                                lcl.header.scpValue.closeTime + i,
-                               emptyUpgradeSteps, HcNet_VALUE_BASIC};
+                               emptyUpgradeSteps, DiamNet_VALUE_BASIC};
         auto v = xdr::xdr_to_opaque(sv);
-        herder->signHcNetValue(valSigner, sv);
+        herder->signDiamNetValue(valSigner, sv);
         auto vSigned = xdr::xdr_to_opaque(sv);
 
         return ValuesTxSet{v, vSigned, txSet};

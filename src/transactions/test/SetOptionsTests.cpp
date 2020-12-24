@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -20,8 +20,8 @@
 #include "util/Timer.h"
 #include "util/XDROperators.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 // Try setting each option to make sure it works
 // try setting all at once
@@ -143,14 +143,14 @@ TEST_CASE("set options", "[tx][setoptions]")
         {
             auto countSubEntriesAndSigners = [&](uint32_t expected) {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto a1Account = HcNet::loadAccount(ltx, a1);
+                auto a1Account = DiamNet::loadAccount(ltx, a1);
                 auto const& ae = a1Account.current().data.account();
                 REQUIRE(ae.numSubEntries == expected);
                 REQUIRE(ae.signers.size() == expected);
             };
             auto checkFirstSigner = [&](Signer const& sk) {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto a1Account = HcNet::loadAccount(ltx, a1);
+                auto a1Account = DiamNet::loadAccount(ltx, a1);
                 auto const& ae = a1Account.current().data.account();
                 REQUIRE(ae.signers.size() >= 1);
                 REQUIRE(ae.signers[0].key == sk.key);

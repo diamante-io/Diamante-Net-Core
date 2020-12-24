@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "herder/Herder.h"
 #include "herder/TxSetFrame.h"
 #include "scp/SCPDriver.h"
-#include "xdr/HcNet-ledger.h"
+#include "xdr/DiamNet-ledger.h"
 
 namespace medida
 {
@@ -17,7 +17,7 @@ class Timer;
 class Histogram;
 }
 
-namespace HcNet
+namespace DiamNet
 {
 class Application;
 class HerderImpl;
@@ -26,7 +26,7 @@ class PendingEnvelopes;
 class SCP;
 class Upgrades;
 class VirtualTimer;
-struct HcNetValue;
+struct DiamNetValue;
 struct SCPEnvelope;
 
 class HerderSCPDriver : public SCPDriver
@@ -35,8 +35,8 @@ class HerderSCPDriver : public SCPDriver
     struct ConsensusData
     {
         uint64_t mConsensusIndex;
-        HcNetValue mConsensusValue;
-        ConsensusData(uint64_t index, HcNetValue const& b)
+        DiamNetValue mConsensusValue;
+        ConsensusData(uint64_t index, DiamNetValue const& b)
             : mConsensusIndex(index), mConsensusValue(b)
         {
         }
@@ -63,7 +63,7 @@ class HerderSCPDriver : public SCPDriver
         return mLastTrackingSCP.get();
     }
 
-    void restoreSCPState(uint64_t index, HcNetValue const& value);
+    void restoreSCPState(uint64_t index, DiamNetValue const& value);
 
     // the ledger index that was last externalized
     uint32
@@ -115,8 +115,8 @@ class HerderSCPDriver : public SCPDriver
 
     // Submit a value to consider for slotIndex
     // previousValue is the value from slotIndex-1
-    void nominate(uint64_t slotIndex, HcNetValue const& value,
-                  TxSetFramePtr proposedSet, HcNetValue const& previousValue);
+    void nominate(uint64_t slotIndex, DiamNetValue const& value,
+                  TxSetFramePtr proposedSet, DiamNetValue const& previousValue);
 
     SCPQuorumSetPtr getQSet(Hash const& qSetHash) override;
 
@@ -135,13 +135,13 @@ class HerderSCPDriver : public SCPDriver
 
     optional<VirtualClock::time_point> getPrepareStart(uint64_t slotIndex);
 
-    // converts a Value into a HcNetValue
+    // converts a Value into a DiamNetValue
     // returns false on error
-    bool toHcNetValue(Value const& v, HcNetValue& sv);
+    bool toDiamNetValue(Value const& v, DiamNetValue& sv);
 
     // validate close time as much as possible
     bool checkCloseTime(uint64_t slotIndex, uint64_t lastCloseTime,
-                        HcNetValue const& b) const;
+                        DiamNetValue const& b) const;
 
   private:
     Application& mApp;
@@ -213,7 +213,7 @@ class HerderSCPDriver : public SCPDriver
     void stateChanged();
 
     SCPDriver::ValidationLevel validateValueHelper(uint64_t slotIndex,
-                                                   HcNetValue const& sv,
+                                                   DiamNetValue const& sv,
                                                    bool nomination) const;
 
     // returns true if the local instance is in a state compatible with

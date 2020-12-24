@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,7 +23,7 @@ class Counter;
 class Timer;
 }
 
-namespace HcNet
+namespace DiamNet
 {
 class Application;
 class LedgerManager;
@@ -55,7 +55,7 @@ class HerderImpl : public Herder
         return mHerderSCPDriver;
     }
 
-    void valueExternalized(uint64 slotIndex, HcNetValue const& value);
+    void valueExternalized(uint64 slotIndex, DiamNetValue const& value);
     void emitEnvelope(SCPEnvelope const& envelope);
 
     TransactionQueue::AddResult
@@ -108,9 +108,9 @@ class HerderImpl : public Herder
     void signEnvelope(SecretKey const& s, SCPEnvelope& envelope);
 
     // helper function to verify SCPValues are signed
-    bool verifyHcNetValueSignature(HcNetValue const& sv);
+    bool verifyDiamNetValueSignature(DiamNetValue const& sv);
     // helper function to sign SCPValues
-    void signHcNetValue(SecretKey const& s, HcNetValue& sv);
+    void signDiamNetValue(SecretKey const& s, DiamNetValue& sv);
 
   private:
     // return true if values referenced by envelope have a valid close time:

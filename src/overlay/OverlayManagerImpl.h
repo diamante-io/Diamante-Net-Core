@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 #include "overlay/ItemFetcher.h"
 #include "overlay/OverlayManager.h"
 #include "overlay/OverlayMetrics.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
 
@@ -33,7 +33,7 @@ class Counter;
 /*
 Maintain the set of peers we are connected to
 */
-namespace HcNet
+namespace DiamNet
 {
 
 class OverlayManagerImpl : public OverlayManager
@@ -100,8 +100,8 @@ class OverlayManagerImpl : public OverlayManager
     ~OverlayManagerImpl();
 
     void ledgerClosed(uint32_t lastClosedledgerSeq) override;
-    void recvFloodedMsg(HcNetMessage const& msg, Peer::pointer peer) override;
-    void broadcastMessage(HcNetMessage const& msg,
+    void recvFloodedMsg(DiamNetMessage const& msg, Peer::pointer peer) override;
+    void broadcastMessage(DiamNetMessage const& msg,
                           bool force = false) override;
     void connectTo(PeerBareAddress const& address) override;
 
@@ -143,7 +143,7 @@ class OverlayManagerImpl : public OverlayManager
     bool isShuttingDown() const override;
 
     void
-    recordDuplicateMessageMetric(HcNetMessage const& HcNetMsg) override;
+    recordDuplicateMessageMetric(DiamNetMessage const& DiamNetMsg) override;
 
   private:
     struct ResolvedPeers

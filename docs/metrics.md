@@ -1,8 +1,8 @@
 ---
-title: List of metrics exposed by HcNet-core
+title: List of metrics exposed by DiamNet-core
 ---
 
-HcNet-core uses libmedida for computing metrics, a detailed description can
+DiamNet-core uses libmedida for computing metrics, a detailed description can
 be found at http://dln.github.io/medida/
 
 ### Counters (`NewCounter`)

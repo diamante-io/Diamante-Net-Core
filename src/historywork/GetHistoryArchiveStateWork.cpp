@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,7 +13,7 @@
 #include <medida/meter.h>
 #include <medida/metrics_registry.h>
 
-namespace HcNet
+namespace DiamNet
 {
 GetHistoryArchiveStateWork::GetHistoryArchiveStateWork(
     Application& app, uint32_t seq, std::shared_ptr<HistoryArchive> archive,
@@ -51,7 +51,7 @@ GetHistoryArchiveStateWork::doWork()
                 CLOG(ERROR, "History") << "OR";
                 CLOG(ERROR, "History") << POSSIBLY_CORRUPTED_HISTORY;
                 CLOG(ERROR, "History") << "OR";
-                CLOG(ERROR, "History") << UPGRADE_HcNet_CORE;
+                CLOG(ERROR, "History") << UPGRADE_DiamNet_CORE;
                 return State::WORK_FAILURE;
             }
         }

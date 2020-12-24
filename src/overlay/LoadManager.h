@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "overlay/Peer.h"
 #include "util/HashOfHash.h"
 #include "util/lrucache.hpp"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-types.h"
 
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
@@ -16,7 +16,7 @@
 
 #include "util/Timer.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 class Application;

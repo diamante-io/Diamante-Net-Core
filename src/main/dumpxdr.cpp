@@ -30,7 +30,7 @@ extern "C" {
 
 using namespace std::placeholders;
 
-namespace HcNet
+namespace DiamNet
 {
 
 std::string
@@ -279,10 +279,10 @@ signtxn(std::string const& filename, std::string netId, bool base64)
     try
     {
         if (netId.empty())
-            netId = getenv("HcNet_NETWORK_ID");
+            netId = getenv("DiamNet_NETWORK_ID");
         if (netId.empty())
             throw std::runtime_error("missing --netid argument or "
-                                     "HcNet_NETWORK_ID environment variable");
+                                     "DiamNet_NETWORK_ID environment variable");
 
         const bool txn_stdin = filename == "-" || filename.empty();
 

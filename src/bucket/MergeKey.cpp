@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,7 +6,7 @@
 #include "crypto/Hex.h"
 #include <sstream>
 
-namespace HcNet
+namespace DiamNet
 {
 
 MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
@@ -69,15 +69,15 @@ operator<<(std::ostream& out, MergeKey const& b)
 namespace std
 {
 size_t
-hash<HcNet::MergeKey>::operator()(HcNet::MergeKey const& key) const noexcept
+hash<DiamNet::MergeKey>::operator()(DiamNet::MergeKey const& key) const noexcept
 {
     std::ostringstream oss;
     oss << key.mMaxProtocolVersion << ',' << key.mKeepDeadEntries << ','
-        << HcNet::binToHex(key.mInputCurrBucket) << ','
-        << HcNet::binToHex(key.mInputSnapBucket);
+        << DiamNet::binToHex(key.mInputCurrBucket) << ','
+        << DiamNet::binToHex(key.mInputSnapBucket);
     for (auto const& e : key.mInputShadowBuckets)
     {
-        oss << HcNet::binToHex(e) << ',';
+        oss << DiamNet::binToHex(e) << ',';
     }
     std::hash<std::string> h;
     return h(oss.str());

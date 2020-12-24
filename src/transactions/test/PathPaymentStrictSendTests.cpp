@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,8 +13,8 @@
 #include "transactions/TransactionUtils.h"
 #include "util/Timer.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 namespace
 {
@@ -52,13 +52,13 @@ assetToString(const Asset& asset)
     auto r = std::string{};
     switch (asset.type())
     {
-    case HcNet::ASSET_TYPE_NATIVE:
+    case DiamNet::ASSET_TYPE_NATIVE:
         r = std::string{"XLM"};
         break;
-    case HcNet::ASSET_TYPE_CREDIT_ALPHANUM4:
+    case DiamNet::ASSET_TYPE_CREDIT_ALPHANUM4:
         assetCodeToStr(asset.alphaNum4().assetCode, r);
         break;
-    case HcNet::ASSET_TYPE_CREDIT_ALPHANUM12:
+    case DiamNet::ASSET_TYPE_CREDIT_ALPHANUM12:
         assetCodeToStr(asset.alphaNum12().assetCode, r);
         break;
     }
@@ -2130,7 +2130,7 @@ TEST_CASE("pathpayment strict send", "[tx][pathpayment]")
                                      int64_t offerId, int64_t difference) {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto offer =
-                    HcNet::loadOffer(ltx, account.getPublicKey(), offerId);
+                    DiamNet::loadOffer(ltx, account.getPublicKey(), offerId);
                 auto const& oe = offer.current().data.offer();
                 REQUIRE(oe.amount == offerAmount + difference);
             };

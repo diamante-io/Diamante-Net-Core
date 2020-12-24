@@ -1,4 +1,4 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,7 +13,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/Timer.h"
 
-using namespace HcNet;
+using namespace DiamNet;
 
 TEST_CASE("liabilities", "[ledger][liabilities]")
 {
@@ -46,7 +46,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                HcNet::addSellingLiabilities(header, acc, deltaLiabilities);
+                DiamNet::addSellingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getBuyingLiabilities(header, acc) == initBuyingLiabilities);
             if (res)
@@ -77,7 +77,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
                 auto acc = ltx.create(le);
-                bool res = HcNet::addSellingLiabilities(header, acc,
+                bool res = DiamNet::addSellingLiabilities(header, acc,
                                                           deltaLiabilities);
                 REQUIRE(acc.current().data.account().balance == initBalance);
                 REQUIRE(getBuyingLiabilities(header, acc) == 0);
@@ -240,7 +240,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                HcNet::addBuyingLiabilities(header, acc, deltaLiabilities);
+                DiamNet::addBuyingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, acc) ==
                     initSellingLiabilities);
@@ -273,7 +273,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                HcNet::addBuyingLiabilities(header, acc, deltaLiabilities);
+                DiamNet::addBuyingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, acc) == 0);
             if (res)
@@ -459,7 +459,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                HcNet::addSellingLiabilities(header, trust, deltaLiabilities);
+                DiamNet::addSellingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getBuyingLiabilities(header, trust) ==
                     initBuyingLiabilities);
@@ -493,7 +493,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
                 auto trust = ltx.create(le);
-                bool res = HcNet::addSellingLiabilities(header, trust,
+                bool res = DiamNet::addSellingLiabilities(header, trust,
                                                           deltaLiabilities);
                 REQUIRE(trust.current().data.trustLine().balance ==
                         initBalance);
@@ -601,7 +601,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                HcNet::addBuyingLiabilities(header, trust, deltaLiabilities);
+                DiamNet::addBuyingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, trust) ==
                     initSellingLiabilities);
@@ -635,7 +635,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                HcNet::addBuyingLiabilities(header, trust, deltaLiabilities);
+                DiamNet::addBuyingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, trust) == 0);
             if (res)
@@ -744,7 +744,7 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             LedgerTxn ltx(app->getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
-            bool res = HcNet::addBalance(header, acc, deltaBalance);
+            bool res = DiamNet::addBalance(header, acc, deltaBalance);
             REQUIRE(getSellingLiabilities(header, acc) ==
                     initLiabilities.selling);
             REQUIRE(getBuyingLiabilities(header, acc) ==
@@ -851,7 +851,7 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                HcNet::addNumEntries(header, acc, deltaNumSubEntries) ==
+                DiamNet::addNumEntries(header, acc, deltaNumSubEntries) ==
                 AddSubentryResult::SUCCESS;
             REQUIRE(getSellingLiabilities(header, acc) ==
                     initSellingLiabilities);
@@ -939,7 +939,7 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             LedgerTxn ltx(app->getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
-            bool res = HcNet::addBalance(header, trust, deltaBalance);
+            bool res = DiamNet::addBalance(header, trust, deltaBalance);
             REQUIRE(getSellingLiabilities(header, trust) ==
                     initLiabilities.selling);
             REQUIRE(getBuyingLiabilities(header, trust) ==
@@ -1021,8 +1021,8 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             auto acc = ltx.create(le);
             auto availableBalance =
                 std::max({int64_t(0), getAvailableBalance(header, acc)});
-            REQUIRE(!HcNet::addBalance(header, acc, -availableBalance - 1));
-            REQUIRE(HcNet::addBalance(header, acc, -availableBalance));
+            REQUIRE(!DiamNet::addBalance(header, acc, -availableBalance - 1));
+            REQUIRE(DiamNet::addBalance(header, acc, -availableBalance));
         };
 
         for_versions_from(10, *app, [&] {
@@ -1074,9 +1074,9 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
                 std::max({int64_t(0), getMaxAmountReceive(header, acc)});
             if (availableLimit < INT64_MAX)
             {
-                REQUIRE(!HcNet::addBalance(header, acc, availableLimit + 1));
+                REQUIRE(!DiamNet::addBalance(header, acc, availableLimit + 1));
             }
-            REQUIRE(HcNet::addBalance(header, acc, availableLimit));
+            REQUIRE(DiamNet::addBalance(header, acc, availableLimit));
         };
 
         for_versions_from(10, *app, [&] {
@@ -1144,8 +1144,8 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             auto trust = ltx.create(le);
             auto availableBalance =
                 std::max({int64_t(0), getAvailableBalance(header, trust)});
-            REQUIRE(!HcNet::addBalance(header, trust, -availableBalance - 1));
-            REQUIRE(HcNet::addBalance(header, trust, -availableBalance));
+            REQUIRE(!DiamNet::addBalance(header, trust, -availableBalance - 1));
+            REQUIRE(DiamNet::addBalance(header, trust, -availableBalance));
         };
 
         for_versions_from(10, *app, [&] {
@@ -1192,9 +1192,9 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             if (availableLimit < INT64_MAX)
             {
                 REQUIRE(
-                    !HcNet::addBalance(header, trust, availableLimit + 1));
+                    !DiamNet::addBalance(header, trust, availableLimit + 1));
             }
-            REQUIRE(HcNet::addBalance(header, trust, availableLimit));
+            REQUIRE(DiamNet::addBalance(header, trust, availableLimit));
         };
 
         for_versions_from(10, *app, [&] {

@@ -1,5 +1,5 @@
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "history/HistoryArchive.h"
 #include "ledger/LedgerManager.h"
 #include "main/ExternalQueue.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "scp/LocalNode.h"
 #include "scp/QuorumSetUtils.h"
 #include "util/Fs.h"
@@ -23,7 +23,7 @@
 #include <sstream>
 #include <unordered_set>
 
-namespace HcNet
+namespace DiamNet
 {
 const uint32 Config::CURRENT_LEDGER_PROTOCOL_VERSION = 12;
 
@@ -85,7 +85,7 @@ Config::Config() : NODE_SEED(SecretKey::random())
     OVERLAY_PROTOCOL_MIN_VERSION = 8;
     OVERLAY_PROTOCOL_VERSION = 10;
 
-    VERSION_STR = HcNet_CORE_VERSION;
+    VERSION_STR = DiamNet_CORE_VERSION;
 
     // configurable
     RUN_STANDALONE = false;
@@ -107,7 +107,7 @@ Config::Config() : NODE_SEED(SecretKey::random())
     DISABLE_BUCKET_GC = false;
     DISABLE_XDR_FSYNC = false;
 
-    LOG_FILE_PATH = "HcNet-core.%datetime{%Y.%M.%d-%H:%m:%s}.log";
+    LOG_FILE_PATH = "DiamNet-core.%datetime{%Y.%M.%d-%H:%m:%s}.log";
     BUCKET_DIR_PATH = "buckets";
 
     TESTING_UPGRADE_DESIRED_FEE = LedgerManager::GENESIS_LEDGER_BASE_FEE;

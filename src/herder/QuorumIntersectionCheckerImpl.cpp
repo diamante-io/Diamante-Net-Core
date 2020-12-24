@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,7 +15,7 @@ namespace
 // Implementation of QBitSet
 ////////////////////////////////////////////////////////////////////////////////
 
-using namespace HcNet;
+using namespace DiamNet;
 struct QBitSet;
 using QGraph = std::vector<QBitSet>;
 
@@ -835,7 +835,7 @@ groupString(Config const& cfg, std::set<PublicKey> const& group)
 }
 }
 
-namespace HcNet
+namespace DiamNet
 {
 std::shared_ptr<QuorumIntersectionChecker>
 QuorumIntersectionChecker::create(QuorumTracker::QuorumMap const& qmap,
@@ -846,7 +846,7 @@ QuorumIntersectionChecker::create(QuorumTracker::QuorumMap const& qmap,
 
 std::set<std::set<PublicKey>>
 QuorumIntersectionChecker::getIntersectionCriticalGroups(
-    HcNet::QuorumTracker::QuorumMap const& qmap, HcNet::Config const& cfg)
+    DiamNet::QuorumTracker::QuorumMap const& qmap, DiamNet::Config const& cfg)
 {
     // We're going to search for "intersection-critical" groups, by considering
     // each SCPQuorumSet S that (a) has no innerSets of its own and (b) occurs

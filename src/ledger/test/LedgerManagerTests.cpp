@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,9 +8,9 @@
 
 #include <lib/catch.hpp>
 
-using namespace HcNet;
+using namespace DiamNet;
 
-namespace HcNet
+namespace DiamNet
 {
 
 class LedgerManagerForTests : public LedgerManagerImpl
@@ -76,8 +76,8 @@ TEST_CASE("new ledger comes from network after last applyBufferedLedgers is "
 
     auto ledgerCloseData = [](uint32_t ledger) {
         auto txSet = std::make_shared<TxSetFrame>(Hash{});
-        HcNetValue sv{txSet->getContentsHash(), 2, emptyUpgradeSteps,
-                        HcNet_VALUE_BASIC};
+        DiamNetValue sv{txSet->getContentsHash(), 2, emptyUpgradeSteps,
+                        DiamNet_VALUE_BASIC};
         return LedgerCloseData{ledger, txSet, sv};
     };
 

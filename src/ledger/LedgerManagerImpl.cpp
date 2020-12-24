@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -62,7 +62,7 @@ catching up to network:
 */
 using namespace std;
 
-namespace HcNet
+namespace DiamNet
 {
 
 const uint32_t LedgerManager::GENESIS_LEDGER_SEQ = 1;
@@ -410,7 +410,7 @@ LedgerManagerImpl::valueExternalized(LedgerCloseData const& ledgerData)
         << ", prev=" << hexAbbrev(ledgerData.getTxSet()->previousLedgerHash())
         << ", txs=" << ledgerData.getTxSet()->sizeTx()
         << ", ops=" << ledgerData.getTxSet()->sizeOp() << ", sv: "
-        << HcNetValueToString(mApp.getConfig(), ledgerData.getValue()) << "]";
+        << DiamNetValueToString(mApp.getConfig(), ledgerData.getValue()) << "]";
 
     auto st = getState();
     switch (st)
@@ -747,7 +747,7 @@ LedgerManagerImpl::applyBufferedLedgers()
                 << ", prev=" << hexAbbrev(lcd.getTxSet()->previousLedgerHash())
                 << ", txs=" << lcd.getTxSet()->sizeTx()
                 << ", ops=" << lcd.getTxSet()->sizeOp() << ", sv: "
-                << HcNetValueToString(mApp.getConfig(), lcd.getValue())
+                << DiamNetValueToString(mApp.getConfig(), lcd.getValue())
                 << "]";
             closeLedger(lcd);
 
@@ -804,7 +804,7 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     {
         CLOG(ERROR, "Ledger")
             << "Unknown ledger version: " << header.current().ledgerVersion;
-        CLOG(ERROR, "Ledger") << UPGRADE_HcNet_CORE;
+        CLOG(ERROR, "Ledger") << UPGRADE_DiamNet_CORE;
         throw std::runtime_error(
             fmt::format("cannot apply ledger with not supported version: {}",
                         header.current().ledgerVersion));

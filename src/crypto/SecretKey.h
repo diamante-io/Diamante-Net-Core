@@ -1,18 +1,18 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/KeyUtils.h"
 #include "util/XDROperators.h"
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-types.h"
 
 #include <array>
 #include <functional>
 #include <ostream>
 
-namespace HcNet
+namespace DiamNet
 {
 
 class ByteSlice;
@@ -135,8 +135,8 @@ Hash random();
 
 namespace std
 {
-template <> struct hash<HcNet::PublicKey>
+template <> struct hash<DiamNet::PublicKey>
 {
-    size_t operator()(HcNet::PublicKey const& x) const noexcept;
+    size_t operator()(DiamNet::PublicKey const& x) const noexcept;
 };
 }

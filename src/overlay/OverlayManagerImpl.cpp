@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -51,7 +51,7 @@ If any verify step fails, the peer disconnects immediately.
 
 */
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace soci;
@@ -849,14 +849,14 @@ OverlayManagerImpl::getRandomAuthenticatedPeers()
 }
 
 void
-OverlayManagerImpl::recvFloodedMsg(HcNetMessage const& msg,
+OverlayManagerImpl::recvFloodedMsg(DiamNetMessage const& msg,
                                    Peer::pointer peer)
 {
     mFloodGate.addRecord(msg, peer);
 }
 
 void
-OverlayManagerImpl::broadcastMessage(HcNetMessage const& msg, bool force)
+OverlayManagerImpl::broadcastMessage(DiamNetMessage const& msg, bool force)
 {
     mOverlayMetrics.mMessagesBroadcast.Mark();
     mFloodGate.broadcast(msg, force);
@@ -935,14 +935,14 @@ logDuplicateMessage(el::Level level, size_t size, std::string const& dupOrUniq,
 
 void
 OverlayManagerImpl::recordDuplicateMessageMetric(
-    HcNetMessage const& HcNetMsg)
+    DiamNetMessage const& DiamNetMsg)
 {
     bool flood = false;
-    if (HcNetMsg.type() == TRANSACTION || HcNetMsg.type() == SCP_MESSAGE)
+    if (DiamNetMsg.type() == TRANSACTION || DiamNetMsg.type() == SCP_MESSAGE)
     {
         flood = true;
     }
-    else if (HcNetMsg.type() != TX_SET && HcNetMsg.type() != SCP_QUORUMSET)
+    else if (DiamNetMsg.type() != TX_SET && DiamNetMsg.type() != SCP_QUORUMSET)
     {
         return;
     }
@@ -953,8 +953,8 @@ OverlayManagerImpl::recordDuplicateMessageMetric(
         mPerfLogLevel = Logging::getLogLevel("Perf");
     }
 
-    size_t size = xdr::xdr_argpack_size(HcNetMsg);
-    auto opaque = xdr::xdr_to_opaque(HcNetMsg);
+    size_t size = xdr::xdr_argpack_size(DiamNetMsg);
+    auto opaque = xdr::xdr_to_opaque(DiamNetMsg);
     auto hash = shortHash::computeHash(ByteSlice(opaque));
     if (mMessageCache.exists(hash))
     {

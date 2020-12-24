@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -21,8 +21,8 @@
 #include "util/Logging.h"
 #include "util/Timer.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 // Merging when you are holding credit
 // Merging when others are holding your credit
@@ -450,7 +450,7 @@ TEST_CASE("merge", "[tx][merge]")
 
                 {
                     LedgerTxn ltx(app->getLedgerTxnRoot());
-                    REQUIRE(!HcNet::loadAccount(ltx, a1.getPublicKey()));
+                    REQUIRE(!DiamNet::loadAccount(ltx, a1.getPublicKey()));
                 }
             });
         }
@@ -467,7 +467,7 @@ TEST_CASE("merge", "[tx][merge]")
 
                 {
                     LedgerTxn ltx(app->getLedgerTxnRoot());
-                    REQUIRE(!HcNet::loadAccount(ltx, a1.getPublicKey()));
+                    REQUIRE(!DiamNet::loadAccount(ltx, a1.getPublicKey()));
                 }
 
                 int64 expectedB1Balance =
@@ -622,7 +622,7 @@ TEST_CASE("merge", "[tx][merge]")
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
-                auto account = HcNet::loadAccount(ltx, acc1.getPublicKey());
+                auto account = DiamNet::loadAccount(ltx, acc1.getPublicKey());
                 auto const& ae = account.current().data.account();
                 REQUIRE(ae.balance == 2 * minBal);
                 REQUIRE(ae.balance + getBuyingLiabilities(header, account) ==

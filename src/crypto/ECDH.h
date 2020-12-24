@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "xdr/HcNet-types.h"
+#include "xdr/DiamNet-types.h"
 #include <functional>
 
-namespace HcNet
+namespace DiamNet
 {
 
 // This module contains functions for doing ECDH on Curve25519. Despite the
@@ -43,8 +43,8 @@ HmacSha256Key EcdhDeriveSharedKey(Curve25519Secret const& localSecret,
 
 namespace std
 {
-template <> struct hash<HcNet::Curve25519Public>
+template <> struct hash<DiamNet::Curve25519Public>
 {
-    size_t operator()(HcNet::Curve25519Public const& x) const noexcept;
+    size_t operator()(DiamNet::Curve25519Public const& x) const noexcept;
 };
 }

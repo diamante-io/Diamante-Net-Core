@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,7 +13,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 
-namespace HcNet
+namespace DiamNet
 {
 // returns the amount of wheat that would be traded
 // while buying as much sheep as possible
@@ -977,7 +977,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
 
     int64_t newAmount = offer.amount;
     {
-        auto accountB = HcNet::loadAccountWithoutRecord(ltx, accountBID);
+        auto accountB = DiamNet::loadAccountWithoutRecord(ltx, accountBID);
         if (!accountB)
         {
             throw std::runtime_error(
@@ -1003,7 +1003,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     if (newAmount == 0)
     { // entire offer is taken
         sellingWheatOffer.erase();
-        auto accountB = HcNet::loadAccount(ltx, accountBID);
+        auto accountB = DiamNet::loadAccount(ltx, accountBID);
         addNumEntries(ltx.loadHeader(), accountB, -1);
     }
     else
@@ -1022,7 +1022,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         auto header = ltxInner.loadHeader();
         if (sheep.type() == ASSET_TYPE_NATIVE)
         {
-            auto accountB = HcNet::loadAccount(ltxInner, accountBID);
+            auto accountB = DiamNet::loadAccount(ltxInner, accountBID);
             if (!addBalance(header, accountB, numSheepSend))
             {
                 return CrossOfferResult::eOfferCantConvert;
@@ -1031,7 +1031,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         else
         {
             auto sheepLineAccountB =
-                HcNet::loadTrustLine(ltxInner, accountBID, sheep);
+                DiamNet::loadTrustLine(ltxInner, accountBID, sheep);
             if (!sheepLineAccountB.addBalance(header, numSheepSend))
             {
                 return CrossOfferResult::eOfferCantConvert;
@@ -1050,7 +1050,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         auto header = ltxInner.loadHeader();
         if (wheat.type() == ASSET_TYPE_NATIVE)
         {
-            auto accountB = HcNet::loadAccount(ltxInner, accountBID);
+            auto accountB = DiamNet::loadAccount(ltxInner, accountBID);
             if (!addBalance(header, accountB, -numWheatReceived))
             {
                 return CrossOfferResult::eOfferCantConvert;
@@ -1059,7 +1059,7 @@ crossOffer(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         else
         {
             auto wheatLineAccountB =
-                HcNet::loadTrustLine(ltxInner, accountBID, wheat);
+                DiamNet::loadTrustLine(ltxInner, accountBID, wheat);
             if (!wheatLineAccountB.addBalance(header, -numWheatReceived))
             {
                 return CrossOfferResult::eOfferCantConvert;
@@ -1090,7 +1090,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     AccountID accountBID = offer.sellerID;
     int64_t offerID = offer.offerID;
 
-    if (!HcNet::loadAccountWithoutRecord(ltx, accountBID))
+    if (!DiamNet::loadAccountWithoutRecord(ltx, accountBID))
     {
         throw std::runtime_error(
             "invalid database state: offer must have matching account");
@@ -1104,7 +1104,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     LedgerTxnEntry accountB;
     if (wheat.type() == ASSET_TYPE_NATIVE || sheep.type() == ASSET_TYPE_NATIVE)
     {
-        accountB = HcNet::loadAccount(ltx, accountBID);
+        accountB = DiamNet::loadAccount(ltx, accountBID);
     }
     auto sheepLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, sheep);
     auto wheatLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, wheat);
@@ -1184,7 +1184,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         if (res == CrossOfferResult::eOfferTaken)
         {
             sellingWheatOffer.erase();
-            accountB = HcNet::loadAccount(ltxInner, accountBID);
+            accountB = DiamNet::loadAccount(ltxInner, accountBID);
             addNumEntries(header, accountB, -1);
         }
         else

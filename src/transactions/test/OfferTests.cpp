@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,8 +24,8 @@
 #include "util/Timer.h"
 #include "util/format.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 // Offer that takes multiple other offers and remains
 // Offer selling XLM
@@ -420,7 +420,7 @@ TEST_CASE("create offer", "[tx][offers]")
                 int64_t usdBuyingLiabilities = 0;
                 {
                     LedgerTxn ltx(app->getLedgerTxnRoot());
-                    auto trustLine = HcNet::loadTrustLine(ltx, a1, usd);
+                    auto trustLine = DiamNet::loadTrustLine(ltx, a1, usd);
                     usdBuyingLiabilities =
                         trustLine.getBuyingLiabilities(ltx.loadHeader());
                 }
@@ -2244,7 +2244,7 @@ TEST_CASE("create offer", "[tx][offers]")
     {
         auto getLiabilities = [&](TestAccount& acc) {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto account = HcNet::loadAccount(ltx, acc.getPublicKey());
+            auto account = DiamNet::loadAccount(ltx, acc.getPublicKey());
             Liabilities res;
             if (account)
             {
@@ -2255,7 +2255,7 @@ TEST_CASE("create offer", "[tx][offers]")
         };
         auto getAssetLiabilities = [&](TestAccount& acc, Asset const& asset) {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto trust = HcNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
+            auto trust = DiamNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
             Liabilities res;
             if (trust)
             {
@@ -2896,7 +2896,7 @@ TEST_CASE("liabilities match created offer", "[tx][offers]")
             LedgerTxn ltx(app->getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto entry =
-                HcNet::loadOffer(ltx, a1.getPublicKey(), offer.key.offerID);
+                DiamNet::loadOffer(ltx, a1.getPublicKey(), offer.key.offerID);
             liabilities =
                 Liabilities{getOfferBuyingLiabilities(header, entry),
                             getOfferSellingLiabilities(header, entry)};

@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "transactions/TransactionUtils.h"
 #include "transactions/simulation/SimulationMergeOpFrame.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 TransactionFramePtr
@@ -91,7 +91,7 @@ SimulationTransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx,
         // Note: TransactionUtil addBalance checks that reserve plus liabilities
         // are respected. In this case, we allow it to fall below that since it
         // will be caught later in commonValid.
-        HcNet::addBalance(acc.balance, -fee);
+        DiamNet::addBalance(acc.balance, -fee);
         header.current().feePool += fee;
     }
     // in v10 we update sequence numbers during apply

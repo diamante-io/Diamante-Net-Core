@@ -1,4 +1,4 @@
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,7 +24,7 @@
 #include "util/optional.h"
 #include <xdrpp/marshal.h>
 
-using namespace HcNet;
+using namespace DiamNet;
 
 struct LedgerUpgradeableData
 {
@@ -223,7 +223,7 @@ executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades)
     auto const& lcl = lm.getLastClosedLedgerHeader();
     auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
 
-    HcNetValue sv{txSet->getContentsHash(), 2, upgrades, HcNet_VALUE_BASIC};
+    DiamNetValue sv{txSet->getContentsHash(), 2, upgrades, DiamNet_VALUE_BASIC};
     LedgerCloseData ledgerData(lcl.header.ledgerSeq + 1, txSet, sv);
 
     app.getLedgerManager().closeLedger(ledgerData);
@@ -604,7 +604,7 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
     auto getLiabilities = [&](TestAccount& acc) {
         Liabilities res;
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto account = HcNet::loadAccount(ltx, acc.getPublicKey());
+        auto account = DiamNet::loadAccount(ltx, acc.getPublicKey());
         res.selling = getSellingLiabilities(ltx.loadHeader(), account);
         res.buying = getBuyingLiabilities(ltx.loadHeader(), account);
         return res;
@@ -614,7 +614,7 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
         if (acc.hasTrustLine(asset))
         {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto trust = HcNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
+            auto trust = DiamNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
             res.selling = trust.getSellingLiabilities(ltx.loadHeader());
             res.buying = trust.getBuyingLiabilities(ltx.loadHeader());
         }
@@ -1453,8 +1453,8 @@ TEST_CASE("upgrade to version 11", "[upgrades]")
             CLOG(INFO, "Ledger")
                 << "Ledger " << ledgerSeq << " upgrading to v" << newProto;
         }
-        HcNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                        HcNet_VALUE_BASIC);
+        DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                        DiamNet_VALUE_BASIC);
         lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         auto& bm = app->getBucketManager();
         auto mc = bm.readMergeCounters();
@@ -1566,8 +1566,8 @@ TEST_CASE("upgrade to version 12", "[upgrades]")
             CLOG(INFO, "Ledger")
                 << "Ledger " << ledgerSeq << " upgrading to v" << newProto;
         }
-        HcNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                        HcNet_VALUE_BASIC);
+        DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                        DiamNet_VALUE_BASIC);
         lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         auto& bm = app->getBucketManager();
         auto mc = bm.readMergeCounters();
@@ -1662,7 +1662,7 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
     auto getLiabilities = [&](TestAccount& acc) {
         Liabilities res;
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto account = HcNet::loadAccount(ltx, acc.getPublicKey());
+        auto account = DiamNet::loadAccount(ltx, acc.getPublicKey());
         res.selling = getSellingLiabilities(ltx.loadHeader(), account);
         res.buying = getBuyingLiabilities(ltx.loadHeader(), account);
         return res;
@@ -1672,7 +1672,7 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
         if (acc.hasTrustLine(asset))
         {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto trust = HcNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
+            auto trust = DiamNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
             res.selling = trust.getSellingLiabilities(ltx.loadHeader());
             res.buying = trust.getBuyingLiabilities(ltx.loadHeader());
         }

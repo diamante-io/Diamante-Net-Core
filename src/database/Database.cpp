@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "database/DatabaseTypeSpecificOperation.h"
 #include "main/Application.h"
 #include "main/Config.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/GlobalChecks.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
@@ -47,7 +47,7 @@ sqlite3_carray_init(sqlite_api::sqlite3* db, char** pzErrMsg,
 // NOTE: soci will just crash and not throw
 //  if you misname a column in a query. yay!
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace soci;
@@ -255,7 +255,7 @@ Database::getDBSchemaVersion()
     if (vers == 0)
     {
         throw std::runtime_error(
-            "No DB schema version found, try HcNet-core new-db");
+            "No DB schema version found, try DiamNet-core new-db");
     }
     return vers;
 }

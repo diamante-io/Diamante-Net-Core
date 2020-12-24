@@ -1,8 +1,8 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#define HcNet_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
+#define DiamNet_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
 #include "ApplicationImpl.h"
 
 // ASIO is somewhat particular about when it gets included -- it wants to be the
@@ -29,7 +29,7 @@
 #include "main/CommandHandler.h"
 #include "main/ExternalQueue.h"
 #include "main/Maintainer.h"
-#include "main/HcNetCoreVersion.h"
+#include "main/DiamNetCoreVersion.h"
 #include "medida/counter.h"
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
@@ -58,7 +58,7 @@
 
 static const int SHUTDOWN_DELAY_SECONDS = 1;
 
-namespace HcNet
+namespace DiamNet
 {
 
 ApplicationImpl::ApplicationImpl(VirtualClock& clock, Config const& cfg)
@@ -245,7 +245,7 @@ ApplicationImpl::getJsonInfo()
 
     auto& info = root["info"];
 
-    info["build"] = HcNet_CORE_VERSION;
+    info["build"] = DiamNet_CORE_VERSION;
     info["protocol_version"] = getConfig().LEDGER_PROTOCOL_VERSION;
     info["state"] = getStateHuman();
     info["startedOn"] = VirtualClock::pointToISOString(mStartedOn);
@@ -359,7 +359,7 @@ ApplicationImpl::start()
     {
         if (!mConfig.NODE_IS_VALIDATOR)
         {
-            LOG(ERROR) << "Starting HcNet-core in FORCE_SCP mode requires "
+            LOG(ERROR) << "Starting DiamNet-core in FORCE_SCP mode requires "
                           "NODE_IS_VALIDATOR to be set";
             throw std::invalid_argument("NODE_IS_VALIDATOR not set");
         }

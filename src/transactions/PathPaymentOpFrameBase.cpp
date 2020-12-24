@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 PathPaymentOpFrameBase::PathPaymentOpFrameBase(Operation const& op,
@@ -53,7 +53,7 @@ PathPaymentOpFrameBase::checkIssuer(AbstractLedgerTxn& ltx, Asset const& asset)
 {
     if (asset.type() != ASSET_TYPE_NATIVE)
     {
-        if (!HcNet::loadAccountWithoutRecord(ltx, getIssuer(asset)))
+        if (!DiamNet::loadAccountWithoutRecord(ltx, getIssuer(asset)))
         {
             setResultNoIssuer(asset);
             return false;
@@ -143,7 +143,7 @@ PathPaymentOpFrameBase::updateSourceBalance(AbstractLedgerTxn& ltx,
         LedgerTxnEntry sourceAccount;
         if (header.current().ledgerVersion > 7)
         {
-            sourceAccount = HcNet::loadAccount(ltx, getSourceID());
+            sourceAccount = DiamNet::loadAccount(ltx, getSourceID());
             if (!sourceAccount)
             {
                 setResultMalformed();
@@ -208,7 +208,7 @@ PathPaymentOpFrameBase::updateDestBalance(AbstractLedgerTxn& ltx,
 
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
-        auto destination = HcNet::loadAccount(ltx, getDestID());
+        auto destination = DiamNet::loadAccount(ltx, getDestID());
         if (!addBalance(ltx.loadHeader(), destination, amount))
         {
             if (ltx.loadHeader().current().ledgerVersion >= 11)
@@ -229,7 +229,7 @@ PathPaymentOpFrameBase::updateDestBalance(AbstractLedgerTxn& ltx,
             return false;
         }
 
-        auto destLine = HcNet::loadTrustLine(ltx, getDestID(), asset);
+        auto destLine = DiamNet::loadTrustLine(ltx, getDestID(), asset);
         if (!destLine)
         {
             setResultDestNoTrust();

@@ -1,4 +1,4 @@
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,13 +15,13 @@
 #include "scp/SCP.h"
 #include "scp/Slot.h"
 #include "util/Logging.h"
-#include "xdr/HcNet-SCP.h"
-#include "xdr/HcNet-ledger-entries.h"
+#include "xdr/DiamNet-SCP.h"
+#include "xdr/DiamNet-ledger-entries.h"
 #include <medida/metrics_registry.h>
 #include <util/format.h>
 #include <xdrpp/marshal.h>
 
-namespace HcNet
+namespace DiamNet
 {
 
 HerderSCPDriver::SCPMetrics::SCPMetrics(Application& app)
@@ -94,7 +94,7 @@ HerderSCPDriver::getState() const
 }
 
 void
-HerderSCPDriver::restoreSCPState(uint64_t index, HcNetValue const& value)
+HerderSCPDriver::restoreSCPState(uint64_t index, DiamNetValue const& value)
 {
     mTrackingSCP = std::make_unique<ConsensusData>(index, value);
 }
@@ -131,7 +131,7 @@ HerderSCPDriver::isSlotCompatibleWithCurrentState(uint64_t slotIndex) const
 
 bool
 HerderSCPDriver::checkCloseTime(uint64_t slotIndex, uint64_t lastCloseTime,
-                                HcNetValue const& b) const
+                                DiamNetValue const& b) const
 {
     // Check closeTime (not too old)
     if (b.closeTime <= lastCloseTime)
@@ -155,16 +155,16 @@ HerderSCPDriver::checkCloseTime(uint64_t slotIndex, uint64_t lastCloseTime,
 }
 
 SCPDriver::ValidationLevel
-HerderSCPDriver::validateValueHelper(uint64_t slotIndex, HcNetValue const& b,
+HerderSCPDriver::validateValueHelper(uint64_t slotIndex, DiamNetValue const& b,
                                      bool nomination) const
 {
     uint64_t lastCloseTime;
 
-    if (b.ext.v() == HcNet_VALUE_SIGNED)
+    if (b.ext.v() == DiamNet_VALUE_SIGNED)
     {
         if (nomination)
         {
-            if (!mHerder.verifyHcNetValueSignature(b))
+            if (!mHerder.verifyDiamNetValueSignature(b))
             {
                 return SCPDriver::kInvalidValue;
             }
@@ -281,7 +281,7 @@ HerderSCPDriver::validateValueHelper(uint64_t slotIndex, HcNetValue const& b,
     // we are fully synced up
 
     if ((!nomination || lcl.ledgerVersion < 11) &&
-        b.ext.v() != HcNet_VALUE_BASIC)
+        b.ext.v() != DiamNet_VALUE_BASIC)
     {
         // ballot protocol or
         // pre version 11 only supports BASIC
@@ -291,7 +291,7 @@ HerderSCPDriver::validateValueHelper(uint64_t slotIndex, HcNetValue const& b,
         return SCPDriver::kInvalidValue;
     }
     if (nomination &&
-        (lcl.ledgerVersion >= 11 && b.ext.v() != HcNet_VALUE_SIGNED))
+        (lcl.ledgerVersion >= 11 && b.ext.v() != DiamNet_VALUE_SIGNED))
     {
         // v11 and above use SIGNED for nomination
         CLOG(TRACE, "Herder")
@@ -335,7 +335,7 @@ SCPDriver::ValidationLevel
 HerderSCPDriver::validateValue(uint64_t slotIndex, Value const& value,
                                bool nomination)
 {
-    HcNetValue b;
+    DiamNetValue b;
     try
     {
         xdr::xdr_from_opaque(value, b);
@@ -393,7 +393,7 @@ HerderSCPDriver::validateValue(uint64_t slotIndex, Value const& value,
 Value
 HerderSCPDriver::extractValidValue(uint64_t slotIndex, Value const& value)
 {
-    HcNetValue b;
+    DiamNetValue b;
     try
     {
         xdr::xdr_from_opaque(value, b);
@@ -440,7 +440,7 @@ HerderSCPDriver::toShortString(PublicKey const& pk) const
 std::string
 HerderSCPDriver::getValueString(Value const& v) const
 {
-    HcNetValue b;
+    DiamNetValue b;
     if (v.empty())
     {
         return "[:empty:]";
@@ -450,7 +450,7 @@ HerderSCPDriver::getValueString(Value const& v) const
     {
         xdr::xdr_from_opaque(v, b);
 
-        return HcNetValueToString(mApp.getConfig(), b);
+        return DiamNetValueToString(mApp.getConfig(), b);
     }
     catch (...)
     {
@@ -578,7 +578,7 @@ HerderSCPDriver::combineCandidates(uint64_t slotIndex,
 
     Hash h;
 
-    HcNetValue comp(h, 0, emptyUpgradeSteps, HcNet_VALUE_BASIC);
+    DiamNetValue comp(h, 0, emptyUpgradeSteps, DiamNet_VALUE_BASIC);
 
     std::map<LedgerUpgradeType, LedgerUpgrade> upgrades;
 
@@ -588,12 +588,12 @@ HerderSCPDriver::combineCandidates(uint64_t slotIndex,
 
     Hash candidatesHash;
 
-    std::vector<HcNetValue> candidateValues;
+    std::vector<DiamNetValue> candidateValues;
 
     for (auto const& c : candidates)
     {
         candidateValues.emplace_back();
-        HcNetValue& sv = candidateValues.back();
+        DiamNetValue& sv = candidateValues.back();
 
         xdr::xdr_from_opaque(c, sv);
         candidatesHash ^= sha256(c);
@@ -696,12 +696,12 @@ HerderSCPDriver::combineCandidates(uint64_t slotIndex,
     }
 
     // Ballot Protocol uses BASIC values
-    comp.ext.v(HcNet_VALUE_BASIC);
+    comp.ext.v(DiamNet_VALUE_BASIC);
     return xdr::xdr_to_opaque(comp);
 }
 
 bool
-HerderSCPDriver::toHcNetValue(Value const& v, HcNetValue& sv)
+HerderSCPDriver::toDiamNetValue(Value const& v, DiamNetValue& sv)
 {
     try
     {
@@ -735,7 +735,7 @@ HerderSCPDriver::valueExternalized(uint64_t slotIndex, Value const& value)
         return;
     }
 
-    HcNetValue b;
+    DiamNetValue b;
     try
     {
         xdr::xdr_from_opaque(value, b);
@@ -743,9 +743,9 @@ HerderSCPDriver::valueExternalized(uint64_t slotIndex, Value const& value)
     catch (...)
     {
         // This may not be possible as all messages are validated and should
-        // therefore contain a valid HcNetValue.
+        // therefore contain a valid DiamNetValue.
         CLOG(ERROR, "Herder") << "HerderSCPDriver::valueExternalized"
-                              << " Externalized HcNetValue malformed";
+                              << " Externalized DiamNetValue malformed";
         CLOG(ERROR, "Herder") << REPORT_INTERNAL_BUG;
         // no point in continuing as 'b' contains garbage at this point
         abort();
@@ -801,9 +801,9 @@ HerderSCPDriver::logQuorumInformation(uint64_t index)
 }
 
 void
-HerderSCPDriver::nominate(uint64_t slotIndex, HcNetValue const& value,
+HerderSCPDriver::nominate(uint64_t slotIndex, DiamNetValue const& value,
                           TxSetFramePtr proposedSet,
-                          HcNetValue const& previousValue)
+                          DiamNetValue const& previousValue)
 {
     mCurrentValue = xdr::xdr_to_opaque(value);
     mLedgerSeqNominating = static_cast<uint32_t>(slotIndex);

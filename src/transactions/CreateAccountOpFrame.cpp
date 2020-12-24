@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,7 +16,7 @@
 
 #include "main/Application.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace std;
@@ -32,7 +32,7 @@ CreateAccountOpFrame::CreateAccountOpFrame(Operation const& op,
 bool
 CreateAccountOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
-    if (!HcNet::loadAccount(ltx, mCreateAccount.destination))
+    if (!DiamNet::loadAccount(ltx, mCreateAccount.destination))
     {
         auto header = ltx.loadHeader();
         if (mCreateAccount.startingBalance < getMinBalance(header, 0))

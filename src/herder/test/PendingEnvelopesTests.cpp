@@ -1,4 +1,4 @@
-// Copyright 2016 HcNet Development Foundation and contributors. Licensed
+// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,8 +13,8 @@
 #include "test/test.h"
 #include "xdrpp/marshal.h"
 
-using namespace HcNet;
-using namespace HcNet::txtest;
+using namespace DiamNet;
+using namespace DiamNet::txtest;
 
 TEST_CASE("PendingEnvelopes recvSCPEnvelope", "[herder]")
 {
@@ -34,8 +34,8 @@ TEST_CASE("PendingEnvelopes recvSCPEnvelope", "[herder]")
     using TxPair = std::pair<Value, TxSetFramePtr>;
     auto makeTxPair = [](TxSetFramePtr txSet, uint64_t closeTime) {
         txSet->sortForHash();
-        auto sv = HcNetValue{txSet->getContentsHash(), closeTime,
-                               emptyUpgradeSteps, HcNet_VALUE_BASIC};
+        auto sv = DiamNetValue{txSet->getContentsHash(), closeTime,
+                               emptyUpgradeSteps, DiamNet_VALUE_BASIC};
         auto v = xdr::xdr_to_opaque(sv);
 
         return TxPair{v, txSet};

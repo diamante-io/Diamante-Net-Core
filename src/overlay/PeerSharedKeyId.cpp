@@ -1,10 +1,10 @@
-// Copyright 2018 HcNet Development Foundation and contributors. Licensed
+// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/PeerSharedKeyId.h"
 
-namespace HcNet
+namespace DiamNet
 {
 
 bool
@@ -24,10 +24,10 @@ namespace std
 {
 
 size_t
-hash<HcNet::PeerSharedKeyId>::
-operator()(HcNet::PeerSharedKeyId const& x) const noexcept
+hash<DiamNet::PeerSharedKeyId>::
+operator()(DiamNet::PeerSharedKeyId const& x) const noexcept
 {
-    return std::hash<HcNet::Curve25519Public>{}(x.mECDHPublicKey) ^
+    return std::hash<DiamNet::Curve25519Public>{}(x.mECDHPublicKey) ^
            std::hash<int>{}(static_cast<int>(x.mRole));
 }
 }

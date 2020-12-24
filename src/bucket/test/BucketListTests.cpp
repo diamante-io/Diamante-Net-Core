@@ -1,4 +1,4 @@
-// Copyright 2019 HcNet Development Foundation and contributors. Licensed
+// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -28,7 +28,7 @@
 #include <deque>
 #include <sstream>
 
-using namespace HcNet;
+using namespace DiamNet;
 using namespace BucketTests;
 
 namespace BucketListTests
@@ -413,8 +413,8 @@ TEST_CASE("single entry bubbling up", "[bucket][bucketlist][bucketbubble]")
         for_versions_with_differing_bucket_logic(cfg, [&](Config const& cfg) {
             Application::pointer app = createTestApplication(clock, cfg);
             BucketList bl;
-            std::vector<HcNet::LedgerKey> emptySet;
-            std::vector<HcNet::LedgerEntry> emptySetEntry;
+            std::vector<DiamNet::LedgerKey> emptySet;
+            std::vector<DiamNet::LedgerEntry> emptySetEntry;
 
             CLOG(DEBUG, "Bucket") << "Adding single entry in lowest level";
             bl.addBatch(*app, 1, getAppLedgerVersion(app), {},

@@ -1,4 +1,4 @@
-// Copyright 2015 HcNet Development Foundation and contributors. Licensed
+// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 #include <sanitizer/msan_interface.h>
 #endif
 
-namespace HcNet
+namespace DiamNet
 {
 
 Curve25519Secret
@@ -67,9 +67,9 @@ EcdhDeriveSharedKey(Curve25519Secret const& localSecret,
 namespace std
 {
 size_t
-hash<HcNet::Curve25519Public>::
-operator()(HcNet::Curve25519Public const& k) const noexcept
+hash<DiamNet::Curve25519Public>::
+operator()(DiamNet::Curve25519Public const& k) const noexcept
 {
-    return std::hash<HcNet::uint256>()(k.key);
+    return std::hash<DiamNet::uint256>()(k.key);
 }
 }

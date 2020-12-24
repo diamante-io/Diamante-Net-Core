@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2017 HcNet Development Foundation and contributors. Licensed
+// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "xdrpp/printer.h"
 #include "xdrpp/types.h"
 
-namespace HcNet
+namespace DiamNet
 {
 struct OfferState;
 }
@@ -27,19 +27,19 @@ struct StringMaker<T, typename std::enable_if<xdr::xdr_traits<T>::valid>::type>
     }
 };
 
-template <> struct StringMaker<HcNet::OfferState>
+template <> struct StringMaker<DiamNet::OfferState>
 {
-    static std::string convert(HcNet::OfferState const& os);
+    static std::string convert(DiamNet::OfferState const& os);
 };
 
-template <> struct StringMaker<HcNet::CatchupRange>
+template <> struct StringMaker<DiamNet::CatchupRange>
 {
-    static std::string convert(HcNet::CatchupRange const& cr);
+    static std::string convert(DiamNet::CatchupRange const& cr);
 };
 
-template <> struct StringMaker<HcNet::historytestutils::CatchupPerformedWork>
+template <> struct StringMaker<DiamNet::historytestutils::CatchupPerformedWork>
 {
     static std::string
-    convert(HcNet::historytestutils::CatchupPerformedWork const& cr);
+    convert(DiamNet::historytestutils::CatchupPerformedWork const& cr);
 };
 }

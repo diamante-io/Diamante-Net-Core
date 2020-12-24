@@ -1,10 +1,10 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include "util/types.h"
 
 #include <memory>
@@ -19,7 +19,7 @@ class session;
 A transaction in its exploded form.
 We can get it in from the DB or from the wire
 */
-namespace HcNet
+namespace DiamNet
 {
 class AbstractLedgerTxn;
 class Application;
@@ -188,7 +188,7 @@ class TransactionFrame
     // version without meta
     bool apply(Application& app, AbstractLedgerTxn& ltx);
 
-    HcNetMessage toHcNetMessage() const;
+    DiamNetMessage toDiamNetMessage() const;
 
     LedgerTxnEntry loadAccount(AbstractLedgerTxn& ltx,
                                LedgerTxnHeader const& header,

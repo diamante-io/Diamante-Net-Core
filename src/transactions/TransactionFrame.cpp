@@ -1,4 +1,4 @@
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -34,7 +34,7 @@
 #include <algorithm>
 #include <numeric>
 
-namespace HcNet
+namespace DiamNet
 {
 
 using namespace std;
@@ -203,7 +203,7 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
         mCachedAccount->data.account().accountID == accountID)
     {
         // this is buggy caching that existed in old versions of the protocol
-        auto res = HcNet::loadAccount(ltx, accountID);
+        auto res = DiamNet::loadAccount(ltx, accountID);
         if (res)
         {
             res.current() = *mCachedAccount;
@@ -219,7 +219,7 @@ TransactionFrame::loadAccount(AbstractLedgerTxn& ltx,
     }
     else
     {
-        return HcNet::loadAccount(ltx, accountID);
+        return DiamNet::loadAccount(ltx, accountID);
     }
 }
 
@@ -455,7 +455,7 @@ TransactionFrame::processFeeSeqNum(AbstractLedgerTxn& ltx, int64_t baseFee)
         // Note: TransactionUtil addBalance checks that reserve plus liabilities
         // are respected. In this case, we allow it to fall below that since it
         // will be caught later in commonValid.
-        HcNet::addBalance(acc.balance, -fee);
+        DiamNet::addBalance(acc.balance, -fee);
         header.current().feePool += fee;
     }
     // in v10 we update sequence numbers during apply
@@ -486,7 +486,7 @@ TransactionFrame::removeUsedOneTimeSignerKeys(
     AbstractLedgerTxn& ltx, AccountID const& accountID,
     std::set<SignerKey> const& keys) const
 {
-    auto account = HcNet::loadAccount(ltx, accountID);
+    auto account = DiamNet::loadAccount(ltx, accountID);
     if (!account)
     {
         return; // probably account was removed due to merge operation
@@ -516,7 +516,7 @@ TransactionFrame::removeAccountSigner(LedgerTxnHeader const& header,
         [&signerKey](Signer const& signer) { return signer.key == signerKey; });
     if (it != std::end(acc.signers))
     {
-        auto removed = HcNet::addNumEntries(header, account, -1);
+        auto removed = DiamNet::addNumEntries(header, account, -1);
         assert(removed == AddSubentryResult::SUCCESS);
         acc.signers.erase(it);
         return true;
@@ -676,10 +676,10 @@ TransactionFrame::apply(Application& app, AbstractLedgerTxn& ltx,
     return valid && applyOperations(signatureChecker, app, ltx, meta);
 }
 
-HcNetMessage
-TransactionFrame::toHcNetMessage() const
+DiamNetMessage
+TransactionFrame::toDiamNetMessage() const
 {
-    HcNetMessage msg;
+    DiamNetMessage msg;
     msg.type(TRANSACTION);
     msg.transaction() = mEnvelope;
     return msg;

@@ -1,15 +1,15 @@
 #pragma once
 
-// Copyright 2014 HcNet Development Foundation and contributors. Licensed
+// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "TxSetFrame.h"
 #include "main/Config.h"
-#include "overlay/HcNetXDR.h"
+#include "overlay/DiamNetXDR.h"
 #include <string>
 
-namespace HcNet
+namespace DiamNet
 {
 
 /**
@@ -24,7 +24,7 @@ class LedgerCloseData
   public:
     LedgerCloseData(uint32_t ledgerSeq,
                     std::shared_ptr<AbstractTxSetFrameForApply> txSet,
-                    HcNetValue const& v);
+                    DiamNetValue const& v);
 
     uint32_t
     getLedgerSeq() const
@@ -36,7 +36,7 @@ class LedgerCloseData
     {
         return mTxSet;
     }
-    HcNetValue const&
+    DiamNetValue const&
     getValue() const
     {
         return mValue;
@@ -45,10 +45,10 @@ class LedgerCloseData
   private:
     uint32_t mLedgerSeq;
     std::shared_ptr<AbstractTxSetFrameForApply> mTxSet;
-    HcNetValue mValue;
+    DiamNetValue mValue;
 };
 
-std::string HcNetValueToString(Config const& c, HcNetValue const& sv);
+std::string DiamNetValueToString(Config const& c, DiamNetValue const& sv);
 
 #define emptyUpgradeSteps (xdr::xvector<UpgradeType, 6>(0))
 }

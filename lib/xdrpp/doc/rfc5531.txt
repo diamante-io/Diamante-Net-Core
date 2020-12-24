@@ -1878,7 +1878,7 @@ RFC 5531        Remote Procedure Call Protocol Version 2        May 2009
                                       200000    pyramid_nfs
                                       200001    pyramid_reserved
                                       200002    cadds_image
-                                      200003    HcNet_name_prog
+                                      200003    DiamNet_name_prog
                                       200004    [unknown]
                                       200005    [unknown]
                                       200006    pacl

@@ -1,4 +1,4 @@
-# SCP (HcNet Consensus Protocol)
+# SCP (DiamNet Consensus Protocol)
 
 The SCP subsystem is an abstract implementation of SCP, a protocol for federated
 byzantine agreement, intended to drive a distributed system built around the
@@ -16,12 +16,12 @@ implement consensus using the SCP protocol, implementing the necessary abstract
 methods for handling SCP-generated events, and calling methods from the central
 [SCP base-class](SCP.h) methods to receive incoming messages.
 The messages making up the protocol are defined in XDR,
-in the file [HcNet-SCP.x](../xdr/HcNet-SCP.x)
+in the file [DiamNet-SCP.x](../xdr/DiamNet-SCP.x)
 
-The `HcNet-core` program has a single subclass of SCPDriver called
+The `DiamNet-core` program has a single subclass of SCPDriver called
 [Herder](../herder), which gives a specific interpretation to "slot" and
 "value", and connects SCP up with a specific broadcast communication medium
 ([Overlay](../overlay)) and specific replicated state machine
 ([LedgerManager](../ledger)).
 
-For details of the protocol itself, see the [paper on SCP](https://www.HcNet.org/papers/HcNet-consensus-protocol.pdf).
+For details of the protocol itself, see the [paper on SCP](https://www.DiamNet.org/papers/DiamNet-consensus-protocol.pdf).

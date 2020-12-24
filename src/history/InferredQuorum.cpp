@@ -5,7 +5,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace HcNet
+namespace DiamNet
 {
 
 InferredQuorum::InferredQuorum()
