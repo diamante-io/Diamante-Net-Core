@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,12 +10,16 @@
 #include "util/Fs.h"
 #include "util/Logging.h"
 #include "xdrpp/marshal.h"
+#include <Tracy.hpp>
 
 #include <fstream>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#include <io.h>
+#endif
 
-namespace DiamNet
+namespace diamnet
 {
 
 /**
@@ -38,12 +42,14 @@ class XDRInputFileStream
     void
     close()
     {
+        ZoneScoped;
         mIn.close();
     }
 
     void
     open(std::string const& filename)
     {
+        ZoneScoped;
         mIn.open(filename, std::ifstream::binary);
         if (!mIn)
         {
@@ -54,7 +60,7 @@ class XDRInputFileStream
             CLOG(ERROR, "Fs") << msg;
             throw FileSystemException(msg);
         }
-
+        mIn.exceptions(std::ios::badbit);
         mSize = fs::size(mIn);
     }
 
@@ -81,6 +87,7 @@ class XDRInputFileStream
     bool
     readOne(T& out)
     {
+        ZoneScoped;
         char szBuf[4];
         if (!mIn.read(szBuf, 4))
         {
@@ -116,83 +123,170 @@ class XDRInputFileStream
     }
 };
 
-// XDROutputStream needs access to a file descriptor to do
-// fsync, so we use cstdio here rather than fstreams.
+// XDROutputFileStream needs access to a file descriptor to do fsync, so we use
+// asio's synchronous stream types here rather than fstreams.
 class XDROutputFileStream
 {
-    FILE* mOut{nullptr};
     std::vector<char> mBuf;
     const bool mFsyncOnClose;
 
+    bool mUsingRandomAccessHandle{false};
+    asio::buffered_write_stream<diamnet::fs::stream_t> mBufferedWriteStream;
+    diamnet::fs::random_access_t mRandomAccessHandle;
+    size_t mRandomAccessNextWriteOffset{0};
+
   public:
-    XDROutputFileStream(bool fsyncOnClose) : mFsyncOnClose(fsyncOnClose)
+    XDROutputFileStream(asio::io_context& ctx, bool fsyncOnClose)
+        : mFsyncOnClose(fsyncOnClose)
+        , mBufferedWriteStream(ctx, diamnet::fs::bufsz())
+        , mRandomAccessHandle(ctx)
     {
     }
 
     ~XDROutputFileStream()
     {
-        if (mOut)
+        if (isOpen())
         {
             close();
+        }
+    }
+
+    bool
+    isOpen()
+    {
+        if (mUsingRandomAccessHandle)
+        {
+            return mRandomAccessHandle.is_open();
+        }
+        else
+        {
+            return mBufferedWriteStream.next_layer().is_open();
+        }
+    }
+
+    fs::native_handle_t
+    getHandle()
+    {
+        if (mUsingRandomAccessHandle)
+        {
+            return mRandomAccessHandle.native_handle();
+        }
+        else
+        {
+            return mBufferedWriteStream.next_layer().native_handle();
         }
     }
 
     void
     close()
     {
-        if (!mOut)
+        ZoneScoped;
+        if (!isOpen())
         {
             FileSystemException::failWith(
                 "XDROutputFileStream::close() on non-open FILE*");
         }
-        if (fflush(mOut) != 0)
-        {
-            FileSystemException::failWithErrno(
-                "XDROutputFileStream::close() failed on fflush(): ");
-        }
+        flush();
         if (mFsyncOnClose)
         {
-            fs::flushFileChanges(mOut);
+            fs::flushFileChanges(getHandle());
         }
-        if (fclose(mOut) != 0)
+        if (mUsingRandomAccessHandle)
         {
-            FileSystemException::failWithErrno(
-                "XDROutputFileStream::close() failed on fclose(): ");
+            mRandomAccessHandle.close();
         }
-        mOut = nullptr;
+        else
+        {
+            mBufferedWriteStream.close();
+        }
+    }
+
+    void
+    fdopen(int fd)
+    {
+#ifdef _WIN32
+        FileSystemException::failWith(
+            "XDROutputFileStream::fdopen() not supported on windows");
+#else
+        if (isOpen())
+        {
+            FileSystemException::failWith(
+                "XDROutputFileStream::fdopen() on already-open stream");
+        }
+        mBufferedWriteStream.next_layer().assign(fd);
+        if (!isOpen())
+        {
+            FileSystemException::failWith(
+                "XDROutputFileStream::fdopen() failed");
+        }
+#endif
+    }
+
+    void
+    flush()
+    {
+        ZoneScoped;
+        if (!isOpen())
+        {
+            FileSystemException::failWith(
+                "XDROutputFileStream::flush() on non-open stream");
+        }
+        if (mUsingRandomAccessHandle)
+        {
+            // There is no flush on random access handles.
+        }
+        else
+        {
+            asio::error_code ec;
+            do
+            {
+                mBufferedWriteStream.flush(ec);
+                if (ec && ec != asio::error::interrupted)
+                {
+                    FileSystemException::failWith(
+                        std::string("XDROutputFileStream::flush() failed: ") +
+                        ec.message());
+                }
+            } while (ec);
+        }
     }
 
     void
     open(std::string const& filename)
     {
-        if (mOut)
+        ZoneScoped;
+        mUsingRandomAccessHandle = fs::shouldUseRandomAccessHandle(filename);
+        if (isOpen())
         {
             FileSystemException::failWith(
                 "XDROutputFileStream::open() on already-open stream");
         }
-        mOut = fopen(filename.c_str(), "wb");
-        if (!mOut)
+        fs::native_handle_t handle = fs::openFileToWrite(filename);
+        if (mUsingRandomAccessHandle)
         {
-            FileSystemException::failWithErrno(
-                std::string("XDROutputFileStream::open(\"") + filename +
-                "\") failed: ");
+            mRandomAccessHandle.assign(handle);
+            mRandomAccessNextWriteOffset = 0;
+        }
+        else
+        {
+            mBufferedWriteStream.next_layer().assign(handle);
         }
     }
 
-    operator bool() const
+    operator bool()
     {
-        return (mOut && !static_cast<bool>(ferror(mOut)) &&
-                !static_cast<bool>(feof(mOut)));
+        return isOpen();
     }
 
     template <typename T>
     void
     writeOne(T const& t, SHA256* hasher = nullptr, size_t* bytesPut = nullptr)
     {
-        if (!mOut)
+        ZoneScoped;
+        if (!isOpen())
         {
             FileSystemException::failWith(
-                "XDROutputFileStream::writeOne() on non-open FILE*");
+                "XDROutputFileStream::writeOne() on non-open stream");
         }
 
         uint32_t sz = (uint32_t)xdr::xdr_size(t);
@@ -209,16 +303,46 @@ class XDROutputFileStream
         mBuf[1] = static_cast<char>((sz >> 16) & 0xFF);
         mBuf[2] = static_cast<char>((sz >> 8) & 0xFF);
         mBuf[3] = static_cast<char>(sz & 0xFF);
-
         xdr::xdr_put p(mBuf.data() + 4, mBuf.data() + 4 + sz);
         xdr_argpack_archive(p, t);
 
-        if (fwrite(mBuf.data(), 1, sz + 4, mOut) != sz + 4)
+        size_t const to_write = sz + 4;
+        size_t written = 0;
+        while (written < to_write)
         {
-            FileSystemException::failWithErrno(
-                "XDROutputFileStream::writeOne() failed:");
+            asio::error_code ec;
+            auto buf = asio::buffer(mBuf.data() + written, to_write - written);
+#ifdef _WIN32
+            // Calling asio::write_at on the asio::posix::stream_descriptor
+            // will not even compile; so this one bit has to also be platform
+            // guarded.
+            if (mUsingRandomAccessHandle)
+            {
+                size_t n = asio::write_at(
+                    mRandomAccessHandle, mRandomAccessNextWriteOffset, buf, ec);
+                written += n;
+                mRandomAccessNextWriteOffset += n;
+            }
+            else
+#endif
+            {
+                written += asio::write(mBufferedWriteStream, buf, ec);
+            }
+            if (ec)
+            {
+                if (ec == asio::error::interrupted)
+                {
+                    continue;
+                }
+                else
+                {
+                    FileSystemException::failWith(
+                        std::string(
+                            "XDROutputFileStream::writeOne() failed: ") +
+                        ec.message());
+                }
+            }
         }
-
         if (hasher)
         {
             hasher->add(ByteSlice(mBuf.data(), sz + 4));

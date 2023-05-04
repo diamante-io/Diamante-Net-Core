@@ -1,17 +1,19 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/BucketMergeMap.h"
 #include "crypto/Hex.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 
 namespace
 {
-std::unordered_set<DiamNet::Hash>
-getMergeKeyHashes(DiamNet::MergeKey const& key)
+std::unordered_set<diamnet::Hash>
+getMergeKeyHashes(diamnet::MergeKey const& key)
 {
-    std::unordered_set<DiamNet::Hash> hashes;
+    ZoneScoped;
+    std::unordered_set<diamnet::Hash> hashes;
     hashes.emplace(key.mInputCurrBucket);
     hashes.emplace(key.mInputSnapBucket);
     for (auto const& in : key.mInputShadowBuckets)
@@ -22,12 +24,13 @@ getMergeKeyHashes(DiamNet::MergeKey const& key)
 }
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 void
 BucketMergeMap::recordMerge(MergeKey const& input, Hash const& output)
 {
+    ZoneScoped;
     mMergeKeyToOutput.emplace(input, output);
     mOutputToMergeKey.emplace(output, input);
     for (auto const& in : getMergeKeyHashes(input))
@@ -41,6 +44,7 @@ BucketMergeMap::recordMerge(MergeKey const& input, Hash const& output)
 std::unordered_set<MergeKey>
 BucketMergeMap::forgetAllMergesProducing(Hash const& outputBeingDropped)
 {
+    ZoneScoped;
     std::unordered_set<MergeKey> ret;
     auto mergesProducingOutput =
         mOutputToMergeKey.equal_range(outputBeingDropped);
@@ -102,6 +106,7 @@ BucketMergeMap::forgetAllMergesProducing(Hash const& outputBeingDropped)
 bool
 BucketMergeMap::findMergeFor(MergeKey const& input, Hash& output)
 {
+    ZoneScoped;
     auto i = mMergeKeyToOutput.find(input);
     if (i != mMergeKeyToOutput.end())
     {
@@ -115,6 +120,7 @@ void
 BucketMergeMap::getOutputsUsingInput(Hash const& input,
                                      std::set<Hash>& outputs) const
 {
+    ZoneScoped;
     auto pair = mInputToOutput.equal_range(input);
     for (auto i = pair.first; i != pair.second; ++i)
     {

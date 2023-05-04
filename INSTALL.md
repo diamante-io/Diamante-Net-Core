@@ -1,15 +1,16 @@
 Installation Instructions
 ==================
-These are instructions for building DiamNet-core from source.
+These are instructions for building diamnet-core from source.
 
 For a potentially quicker set up, the following projects could be good alternatives:
 
-* DiamNet-core in a [docker container](https://github.com/DiamNet/docker-DiamNet-core-horizon)
-* pre-compiled [packages](https://github.com/DiamNet/packages)
+* diamnet-core in a [docker container](https://github.com/diamnet/docker-diamnet-core)
+* diamnet-core and [horizon](https://github.com/diamnet/go/tree/master/services/horizon) in a [docker container](https://github.com/diamnet/docker-diamnet-core-horizon)
+* pre-compiled [packages](https://github.com/diamnet/packages)
 
 ## Picking a version to run
 
-Best is to use the latest *stable* release that can be downloaded from https://github.com/DiamNet/DiamNet-core/releases
+Best is to use the latest *stable* release that can be downloaded from https://github.com/diamnet/diamnet-core/releases
 
 
 Alternatively, branches are organized in the following way:
@@ -25,6 +26,12 @@ For convenience, we also keep a record in the form of release tags of the
  * pre-releases are versions that get deployed to testnet
  * releases are versions that made it all the way in prod
 
+## Containerized dev environment
+
+We maintain a pre-configured Docker configuration ready for development with VSCode.
+
+See the [dev container's README](.devcontainer/README.md) for more detail.
+
 ## Build Dependencies
 
 - c++ toolchain and headers that supports c++14
@@ -35,18 +42,22 @@ For convenience, we also keep a record in the form of release tags of the
 - `libpq-dev` unless you `./configure --disable-postgres` in the build step below.
 - 64-bit system
 - `clang-format-5.0` (for `make format` to work)
-- `pandoc`
 - `perl`
 
 ### Ubuntu
 
 #### Ubuntu 14.04
-You will have to install the [test toolchain](#adding-the-test-toolchain) in order to both build and run DiamNet-core.
+You will have to install the [test toolchain](#adding-the-test-toolchain) in order to both build and run diamnet-core.
 
 #### Ubuntu 16.04
-Just like 14.04, you can install the test toolchain to build and run DiamNet-core.
+Just like 14.04, you can install the test toolchain to build and run diamnet-core.
 
 Alternatively, if you want to just depend on stock 16.04, you will have to build with clang *and* have use `libc++` instead of `libstdc++` when compiling.
+
+Ubuntu 16.04 has clang-8 available, that you can install with
+
+    # install clang-8 toolchain
+    sudo apt-get install clang-8
 
 After installing packages, head to [building with clang and libc++](#building-with-clang-and-libc).
 
@@ -69,9 +80,6 @@ After installing packages, head to [building with clang and libc++](#building-wi
     # if using g++ or building with libstdc++
     # sudo apt-get install gcc-6 g++-6 cpp-6
 
-    # optional: pandoc (to compile man pages)
-    sudo apt-get install pandoc
-
 In order to make changes, you'll need to install the proper version of clang-format.
 
 In order to install the llvm (clang) toolchain, you may have to follow instructions on https://apt.llvm.org/
@@ -88,7 +96,6 @@ When building on OSX, here's some dependencies you'll need:
 - brew install automake
 - brew install pkg-config
 - brew install libpqxx *(If ./configure later complains about libpq missing, try PKG_CONFIG_PATH='/usr/local/lib/pkgconfig')*
-- brew install pandoc
 - brew install parallel (required for running tests)
 
 ### Windows
@@ -96,8 +103,8 @@ See [INSTALL-Windows.md](INSTALL-Windows.md)
 
 ## Basic Installation
 
-- `git clone https://github.com/DiamNet/DiamNet-core.git`
-- `cd DiamNet-core`
+- `git clone https://github.com/diamnet/diamnet-core.git`
+- `cd diamnet-core`
 - `git submodule init`
 - `git submodule update`
 - Type `./autogen.sh`.
@@ -112,17 +119,34 @@ On some systems, building with `libc++`, [LLVM's version of the standard library
 
 NB: there are newer versions available of both clang and libc++, you will have to use the versions suited for your system.
 
-You may need to install additional packages for this, for example, on Linux Ubuntu:
+You may need to install additional packages for this, for example, on Linux Ubuntu 16.04 LTS with clang-8:
 
     # install libc++ headers
-    sudo apt-get install libc++-dev libc++abi-dev
+    sudo apt-get install libc++-8-dev libc++abi-8-dev
 
 Here are sample steps to achieve this:
 
-    export CC=clang-5.0
-    export CXX=clang++-5.0
+    export CC=clang-8
+    export CXX=clang++-8
     export CFLAGS="-O3 -g1 -fno-omit-frame-pointer"
-    export CXXFLAGS="$CFLAGS -stdlib=libc++ -isystem /usr/include/libcxxabi"
-    git clone https://github.com/DiamNet/DiamNet-core.git
-    cd DiamNet-core/
+    export CXXFLAGS="$CFLAGS -stdlib=libc++"
+    git clone https://github.com/diamnet/diamnet-core.git
+    cd diamnet-core/
     ./autogen.sh && ./configure && make -j6
+
+## Building with Tracing
+
+Configuring with `--enable-tracy` will build and embed the client component of the [Tracy](https://github.com/wolfpld/tracy) high-resolution tracing system in the `diamnet-core` binary.
+
+The tracing client will activate automatically when diamnet-core is running, and will listen for connections from Tracy servers (a command-line capture utility, or a cross-platform GUI).
+
+The Tracy server components can also be compiled by configuring with `--enable-tracy-gui` or `--enable-tracy-capture`.
+
+The GUI depends on the `capstone`, `freetype` and `glfw` libraries and their headers, and on linux or BSD the `GTK-2.0` libraries and headers. On Windows and MacOS, native toolkits are used instead.
+
+
+    # On Ubuntu
+    $ sudo apt-get install libcapstone-dev libfreetype6-dev libglfw3-dev libgtk2.0-dev
+
+    # On MacOS
+    $ brew install capstone freetype2 glfw

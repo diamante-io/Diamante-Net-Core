@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,8 +8,9 @@
 #include "historywork/MakeRemoteDirWork.h"
 #include "historywork/PutRemoteFileWork.h"
 #include "work/WorkSequence.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 PutFilesWork::PutFilesWork(Application& app,
@@ -28,6 +29,7 @@ PutFilesWork::PutFilesWork(Application& app,
 BasicWork::State
 PutFilesWork::doWork()
 {
+    ZoneScoped;
     if (!mChildrenSpawned)
     {
         for (auto const& f : mSnapshot->differingHASFiles(mRemoteState))

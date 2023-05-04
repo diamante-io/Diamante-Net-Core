@@ -3,7 +3,7 @@
 #include "bucket/BucketList.h"
 #include "bucket/BucketManager.h"
 #include "bucket/BucketMergeMap.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 
 #include <map>
 #include <memory>
@@ -11,7 +11,7 @@
 #include <set>
 #include <string>
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -22,7 +22,7 @@ class Meter;
 class Counter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class TmpDir;
@@ -36,7 +36,7 @@ class BucketManagerImpl : public BucketManager
     static std::string const kLockFilename;
 
     Application& mApp;
-    BucketList mBucketList;
+    std::unique_ptr<BucketList> mBucketList;
     std::unique_ptr<TmpDirManager> mTmpDirManager;
     std::unique_ptr<TmpDir> mWorkDir;
     std::map<Hash, std::shared_ptr<Bucket>> mSharedBuckets;
@@ -47,6 +47,8 @@ class BucketManagerImpl : public BucketManager
     medida::Timer& mBucketSnapMerge;
     medida::Counter& mSharedBucketsSize;
     MergeCounters mMergeCounters;
+
+    bool const mDeleteEntireBucketDirInDtor;
 
     // Records bucket-merges that are currently _live_ in some FutureBucket, in
     // the sense of either running, or finished (with or without the
@@ -63,9 +65,11 @@ class BucketManagerImpl : public BucketManager
     // alive. Needs to be queried and updated on mSharedBuckets GC events.
     BucketMergeMap mFinishedMerges;
 
-    std::set<Hash> getReferencedBuckets() const;
+    std::atomic<bool> mIsShutdown{false};
+
     void cleanupStaleFiles();
-    void cleanDir();
+    void deleteTmpDirAndUnlockBucketDir();
+    void deleteEntireBucketDir();
     bool renameBucket(std::string const& src, std::string const& dst);
 
 #ifdef BUILD_TESTS
@@ -85,7 +89,7 @@ class BucketManagerImpl : public BucketManager
     void initialize() override;
     void dropAll() override;
     std::string const& getTmpDir() override;
-    std::string const& getBucketDir() override;
+    std::string const& getBucketDir() const override;
     BucketList& getBucketList() override;
     medida::Timer& getMergeTimer() override;
     MergeCounters readMergeCounters() override;
@@ -95,6 +99,7 @@ class BucketManagerImpl : public BucketManager
     adoptFileAsBucket(std::string const& filename, uint256 const& hash,
                       size_t nObjects, size_t nBytes,
                       MergeKey* mergeKey = nullptr) override;
+    void noteEmptyMergeOutput(MergeKey const& mergeKey) override;
     std::shared_ptr<Bucket> getBucketByHash(uint256 const& hash) override;
 
     std::shared_future<std::shared_ptr<Bucket>>
@@ -119,13 +124,18 @@ class BucketManagerImpl : public BucketManager
     // testing in a specific type of history replay.
     void setNextCloseVersionAndHashForTesting(uint32_t protocolVers,
                                               uint256 const& hash) override;
+
+    std::set<Hash> getBucketHashesInBucketDirForTesting() const override;
 #endif
 
+    std::set<Hash> getReferencedBuckets() const override;
     std::vector<std::string>
     checkForMissingBucketsFiles(HistoryArchiveState const& has) override;
     void assumeState(HistoryArchiveState const& has,
                      uint32_t maxProtocolVersion) override;
     void shutdown() override;
+
+    bool isShutdown() const override;
 };
 
 #define SKIP_1 50

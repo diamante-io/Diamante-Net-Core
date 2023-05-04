@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,6 +9,7 @@
 // else.
 #include "util/asio.h"
 #include "util/NonCopyable.h"
+#include "util/Scheduler.h"
 
 #include <chrono>
 #include <ctime>
@@ -18,11 +19,11 @@
 #include <mutex>
 #include <queue>
 
-namespace DiamNet
+namespace diamnet
 {
 
 /**
- * The purpose of this module is to provide "timing service" to DiamNet-core;
+ * The purpose of this module is to provide "timing service" to diamnet-core;
  *but in
  * such a way that strongly favours the use of virtual time over real
  * time. Ideally there will only ever be one use of the "real" wall clock in the
@@ -67,11 +68,19 @@ class VirtualClock
     // These model most of the std::chrono clock concept, with the exception of
     // now()
     // which is non-static.
-    typedef std::chrono::system_clock::duration duration;
+    typedef std::chrono::steady_clock::duration duration;
     typedef duration::rep rep;
     typedef duration::period period;
-    typedef std::chrono::system_clock::time_point time_point;
-    static const bool is_steady = false;
+    typedef std::chrono::steady_clock::time_point time_point;
+    static const bool is_steady = true;
+
+    // We also provide a "system clock" interface. This is _not_ related to the
+    // steady_clock / time_point time -- system_time_points are wall/calendar
+    // time which may move forwards or backwards as NTP adjusts it. It should be
+    // used only for things like nomination of a ledger close time (in consensus
+    // with other peers), or interfacing to other programs' notions of absolute
+    // time. Not calculating durations / timers / local-event deadlines.
+    typedef std::chrono::system_clock::time_point system_time_point;
 
     /**
      * NB: Please please please use these helpers for date-time conversions
@@ -87,21 +96,29 @@ class VirtualClock
      */
 
     // These two are named to mimic the std::chrono::system_clock methods
-    static std::time_t to_time_t(time_point);
-    static time_point from_time_t(std::time_t);
+    static std::time_t to_time_t(system_time_point);
+    static system_time_point from_time_t(std::time_t);
 
-    static std::tm pointToTm(time_point);
-    static VirtualClock::time_point tmToPoint(tm t);
-
+    // These are for conversion of system time to external contexts that
+    // believe in a concept of absolute time.
+    static std::tm systemPointToTm(system_time_point);
+    static VirtualClock::system_time_point tmToSystemPoint(tm t);
     static std::tm isoStringToTm(std::string const& iso);
     static std::string tmToISOString(std::tm const& tm);
-    static std::string pointToISOString(time_point point);
+    static std::string systemPointToISOString(system_time_point point);
 
     enum Mode
     {
         REAL_TIME,
         VIRTUAL_TIME
     };
+
+    // Call this in any loop that should continue for up-to a single
+    // real-time-quantum of scheduling. NB: In VIRTUAL_TIME mode this will
+    // always return true, to improve test determinism. This means you should
+    // _not_ use this in a while-loop header if you need to enter the loop to
+    // make progress. Use a do-while loop or break mid-loop or something.
+    bool shouldYield() const;
 
   private:
     asio::io_context mIOContext;
@@ -113,10 +130,10 @@ class VirtualClock
     size_t nRealTimerCancelEvents{0};
     time_point mVirtualNow;
 
-    bool mDelayExecution{true};
-    std::recursive_mutex mDelayExecutionMutex;
-    std::vector<std::function<void()>> mDelayedExecutionQueue;
-
+    std::recursive_mutex mDispatchingMutex;
+    bool mDispatching{true};
+    std::chrono::steady_clock::time_point mLastDispatchStart;
+    std::unique_ptr<Scheduler> mActionScheduler;
     using PrQueue =
         std::priority_queue<std::shared_ptr<VirtualClockEvent>,
                             std::vector<std::shared_ptr<VirtualClockEvent>>,
@@ -131,7 +148,7 @@ class VirtualClock
     size_t advanceToNow();
 
     // timer should be last to ensure it gets destroyed first
-    asio::basic_waitable_timer<std::chrono::system_clock> mRealTimer;
+    asio::basic_waitable_timer<std::chrono::steady_clock> mRealTimer;
 
   public:
     // A VirtualClock is instantiated in either real or virtual mode. In real
@@ -150,21 +167,36 @@ class VirtualClock
     // Note: this is not a static method, which means that VirtualClock is
     // not an implementation of the C++ `Clock` concept; there is no global
     // virtual time. Each virtual clock has its own time.
-    time_point now() noexcept;
+    time_point now() const noexcept;
+
+    // This returns a system_time_point which comes from the system clock in
+    // REAL_TIME mode. In VIRTUAL_TIME mode this returns the system-time epoch
+    // plus the steady time offset, i.e. "some time early in 1970" (unless
+    // someone has set the time forward using setCurrentVirtualTime below).
+    system_time_point system_now() const noexcept;
 
     void enqueue(std::shared_ptr<VirtualClockEvent> ve);
     void flushCancelledEvents();
     bool cancelAllEvents();
 
-    // only valid with VIRTUAL_TIME: sets the current value
-    // of the clock
+    // Only valid with VIRTUAL_TIME: sets the current value of the
+    // clock. Asserts that t is >= current virtual time.
     void setCurrentVirtualTime(time_point t);
+    // Setting virtual time using a system time works too, though
+    // it still has to be a forward adjustment.
+    void setCurrentVirtualTime(system_time_point t);
+    // Calls "sleep_for" if REAL_TIME, otherwise, just adds time to the virtual
+    // clock.
+    void sleep_for(std::chrono::microseconds us);
 
-    // returns the time of the next scheduled event
-    time_point next();
+    // Returns the time of the next scheduled event.
+    time_point next() const;
 
-    void postToCurrentCrank(std::function<void()>&& f);
-    void postToNextCrank(std::function<void()>&& f);
+    void postAction(std::function<void()>&& f, std::string&& name,
+                    Scheduler::ActionType type);
+
+    size_t getActionQueueSize() const;
+    bool actionQueueIsOverloaded() const;
 };
 
 class VirtualClockEvent : public NonMovableOrCopyable
@@ -222,7 +254,7 @@ class VirtualTimer : private NonMovableOrCopyable
 // This is almost certainly not the type you want to use. So much so
 // that we will not even show it to you unless you define an unwieldy
 // symbol:
-#ifdef DiamNet_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
+#ifdef DIAMNET_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
 class RealTimer : public asio::basic_waitable_timer<std::chrono::system_clock>
 {
   public:

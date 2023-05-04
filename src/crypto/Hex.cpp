@@ -1,11 +1,11 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/Hex.h"
 #include <sodium.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 std::string
@@ -21,7 +21,7 @@ binToHex(ByteSlice const& bin)
         hex.data())
     {
         throw std::runtime_error(
-            "error in DiamNet::binToHex(std::vector<uint8_t>)");
+            "error in diamnet::binToHex(std::vector<uint8_t>)");
     }
     return std::string(hex.begin(), hex.end() - 1);
 }
@@ -41,10 +41,13 @@ std::vector<uint8_t>
 hexToBin(std::string const& hex)
 {
     std::vector<uint8_t> bin(hex.size() / 2, 0);
-    if (sodium_hex2bin(bin.data(), bin.size(), hex.data(), hex.size(), NULL,
-                       NULL, NULL) != 0)
+    if (!hex.empty())
     {
-        throw std::runtime_error("error in DiamNet::hexToBin(std::string)");
+        if (sodium_hex2bin(bin.data(), bin.size(), hex.data(), hex.size(), NULL,
+                           NULL, NULL) != 0)
+        {
+            throw std::runtime_error("error in diamnet::hexToBin(std::string)");
+        }
     }
     return bin;
 }

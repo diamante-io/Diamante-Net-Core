@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -18,7 +18,7 @@ class Maintainer
   public:
     explicit Maintainer(Application& app);
 
-    // start automatic mainanining according to app.getConfig()
+    // start automatic maintenance according to app.getConfig()
     void start();
 
     // removes maximum count entries from tables like txhistory or scphistory

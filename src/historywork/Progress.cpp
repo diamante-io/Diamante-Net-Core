@@ -1,20 +1,29 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "historywork/Progress.h"
 #include "history/HistoryManager.h"
-#include "lib/util/format.h"
+#include "ledger/LedgerRange.h"
 #include "main/Application.h"
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 std::string
-fmtProgress(Application& app, std::string const& task, uint32_t first,
-            uint32_t last, uint32_t curr)
+fmtProgress(Application& app, std::string const& task, LedgerRange const& range,
+            uint32_t curr)
 {
     auto step = app.getHistoryManager().getCheckpointFrequency();
+    // Step is only ever 8 or 64.
+    assert(step != 0);
+    if (range.mCount == 0)
+    {
+        return fmt::format("{:s} 0/0 (100%)", task);
+    }
+    auto first = range.mFirst;
+    auto last = range.last();
     if (curr > last)
     {
         curr = last;
@@ -22,10 +31,6 @@ fmtProgress(Application& app, std::string const& task, uint32_t first,
     if (curr < first)
     {
         curr = first;
-    }
-    if (step == 0)
-    {
-        step = 1;
     }
     if (last < first)
     {

@@ -1,26 +1,27 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "catchup/ApplyCheckpointWork.h"
+#include "bucket/BucketList.h"
 #include "bucket/BucketManager.h"
-#include "herder/LedgerCloseData.h"
+#include "catchup/ApplyLedgerWork.h"
 #include "history/FileTransferInfo.h"
 #include "history/HistoryManager.h"
 #include "historywork/Progress.h"
 #include "invariant/InvariantDoesNotHold.h"
 #include "ledger/CheckpointRange.h"
 #include "ledger/LedgerManager.h"
-#include "lib/xdrpp/xdrpp/printer.h"
 #include "main/Application.h"
 #include "main/ErrorMessages.h"
 #include "util/FileSystemException.h"
-
-#include <lib/util/format.h>
+#include "util/XDRCereal.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 #include <medida/meter.h>
 #include <medida/metrics_registry.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ApplyCheckpointWork::ApplyCheckpointWork(Application& app,
@@ -28,10 +29,10 @@ ApplyCheckpointWork::ApplyCheckpointWork(Application& app,
                                          LedgerRange const& range)
     : BasicWork(app,
                 "apply-ledgers-" +
-                    fmt::format("{}-{}", range.mFirst, range.mLast),
+                    fmt::format("{}-{}", range.mFirst, range.limit()),
                 BasicWork::RETRY_NEVER)
     , mDownloadDir(downloadDir)
-    , mCheckpointRange(range)
+    , mLedgerRange(range)
     , mCheckpoint(
           app.getHistoryManager().checkpointContainingLedger(range.mFirst))
     , mApplyLedgerSuccess(app.getMetrics().NewMeter(
@@ -41,14 +42,13 @@ ApplyCheckpointWork::ApplyCheckpointWork(Application& app,
 {
     // Ledger range check to enforce application of a single checkpoint
     auto const& hm = mApp.getHistoryManager();
-    auto low = std::max(LedgerManager::GENESIS_LEDGER_SEQ,
-                        hm.prevCheckpointLedger(mCheckpoint));
-    if (mCheckpointRange.mFirst != low)
+    auto low = hm.firstLedgerInCheckpointContaining(mCheckpoint);
+    if (mLedgerRange.mFirst != low)
     {
         throw std::runtime_error(
             "Ledger range start must be aligned with checkpoint start");
     }
-    if (mCheckpointRange.mLast > mCheckpoint)
+    if (mLedgerRange.mCount > 0 && mLedgerRange.last() > mCheckpoint)
     {
         throw std::runtime_error(
             "Ledger range must span at most 1 checkpoint worth of ledgers");
@@ -71,12 +71,14 @@ ApplyCheckpointWork::onReset()
 {
     mHdrIn.close();
     mTxIn.close();
+    mConditionalWork.reset();
     mFilesOpen = false;
 }
 
 void
 ApplyCheckpointWork::openInputFiles()
 {
+    ZoneScoped;
     mHdrIn.close();
     mTxIn.close();
     FileTransferInfo hi(mDownloadDir, HISTORY_FILE_TYPE_LEDGER, mCheckpoint);
@@ -89,12 +91,14 @@ ApplyCheckpointWork::openInputFiles()
     mHdrIn.open(hi.localPath_nogz());
     mTxIn.open(ti.localPath_nogz());
     mTxHistoryEntry = TransactionHistoryEntry();
+    mHeaderHistoryEntry = LedgerHeaderHistoryEntry();
     mFilesOpen = true;
 }
 
 TxSetFramePtr
 ApplyCheckpointWork::getCurrentTxSet()
 {
+    ZoneScoped;
     auto& lm = mApp.getLedgerManager();
     auto seq = lm.getLastClosedLedgerNum() + 1;
 
@@ -126,16 +130,16 @@ ApplyCheckpointWork::getCurrentTxSet()
     return std::make_shared<TxSetFrame>(lm.getLastClosedLedgerHeader().hash);
 }
 
-bool
-ApplyCheckpointWork::applyHistoryOfSingleLedger()
+std::shared_ptr<LedgerCloseData>
+ApplyCheckpointWork::getNextLedgerCloseData()
 {
-    LedgerHeaderHistoryEntry hHeader;
-    LedgerHeader& header = hHeader.header;
-
-    if (!mHdrIn || !mHdrIn.readOne(hHeader))
+    ZoneScoped;
+    if (!mHdrIn || !mHdrIn.readOne(mHeaderHistoryEntry))
     {
-        return false;
+        throw std::runtime_error("No more ledgers to replay!");
     }
+
+    LedgerHeader& header = mHeaderHistoryEntry.header;
 
     auto& lm = mApp.getLedgerManager();
 
@@ -146,41 +150,41 @@ ApplyCheckpointWork::applyHistoryOfSingleLedger()
     {
         CLOG(DEBUG, "History")
             << "Catchup skipping old ledger " << header.ledgerSeq;
-        return true;
+        return nullptr;
     }
 
     // If we are one before LCL, check that we knit up with it
     if (header.ledgerSeq + 1 == lclHeader.header.ledgerSeq)
     {
-        if (hHeader.hash != lclHeader.header.previousLedgerHash)
+        if (mHeaderHistoryEntry.hash != lclHeader.header.previousLedgerHash)
         {
             throw std::runtime_error(
                 fmt::format("replay of {:s} failed to connect on hash of LCL "
                             "predecessor {:s}",
-                            LedgerManager::ledgerAbbrev(hHeader),
+                            LedgerManager::ledgerAbbrev(mHeaderHistoryEntry),
                             LedgerManager::ledgerAbbrev(
                                 lclHeader.header.ledgerSeq - 1,
                                 lclHeader.header.previousLedgerHash)));
         }
         CLOG(DEBUG, "History") << "Catchup at 1-before LCL ("
                                << header.ledgerSeq << "), hash correct";
-        return true;
+        return nullptr;
     }
 
     // If we are at LCL, check that we knit up with it
     if (header.ledgerSeq == lclHeader.header.ledgerSeq)
     {
-        if (hHeader.hash != lm.getLastClosedLedgerHeader().hash)
+        if (mHeaderHistoryEntry.hash != lm.getLastClosedLedgerHeader().hash)
         {
             mApplyLedgerFailure.Mark();
             throw std::runtime_error(
                 fmt::format("replay of {:s} at LCL {:s} disagreed on hash",
-                            LedgerManager::ledgerAbbrev(hHeader),
+                            LedgerManager::ledgerAbbrev(mHeaderHistoryEntry),
                             LedgerManager::ledgerAbbrev(lclHeader)));
         }
         CLOG(DEBUG, "History")
             << "Catchup at LCL=" << header.ledgerSeq << ", hash correct";
-        return true;
+        return nullptr;
     }
 
     // If we are past current, we can't catch up: fail.
@@ -235,46 +239,86 @@ ApplyCheckpointWork::applyHistoryOfSingleLedger()
     }
 #endif
 
-    LedgerCloseData closeData(header.ledgerSeq, txset, header.scpValue);
-    lm.closeLedger(closeData);
-
-    CLOG(DEBUG, "History") << "LedgerManager LCL:\n"
-                           << xdr::xdr_to_string(
-                                  lm.getLastClosedLedgerHeader());
-    CLOG(DEBUG, "History") << "Replay header:\n" << xdr::xdr_to_string(hHeader);
-    if (lm.getLastClosedLedgerHeader().hash != hHeader.hash)
-    {
-        mApplyLedgerFailure.Mark();
-        throw std::runtime_error(fmt::format(
-            "replay of {:s} produced mismatched ledger hash {:s}",
-            LedgerManager::ledgerAbbrev(hHeader),
-            LedgerManager::ledgerAbbrev(lm.getLastClosedLedgerHeader())));
-    }
-
-    mApplyLedgerSuccess.Mark();
-    return true;
+    return std::make_shared<LedgerCloseData>(header.ledgerSeq, txset,
+                                             header.scpValue);
 }
 
 BasicWork::State
 ApplyCheckpointWork::onRun()
 {
+    ZoneScoped;
     try
     {
-        if (!mFilesOpen)
+        if (mConditionalWork)
         {
-            openInputFiles();
+            mConditionalWork->crankWork();
+
+            if (mConditionalWork->getState() == State::WORK_SUCCESS)
+            {
+                auto& lm = mApp.getLedgerManager();
+
+                CLOG(DEBUG, "History")
+                    << "LedgerManager LCL:\n"
+                    << xdr_to_string(lm.getLastClosedLedgerHeader());
+
+                CLOG(DEBUG, "History") << "Replay header:\n"
+                                       << xdr_to_string(mHeaderHistoryEntry);
+                if (lm.getLastClosedLedgerHeader().hash !=
+                    mHeaderHistoryEntry.hash)
+                {
+                    mApplyLedgerFailure.Mark();
+                    throw std::runtime_error(fmt::format(
+                        "replay of {:s} produced mismatched ledger hash {:s}",
+                        LedgerManager::ledgerAbbrev(mHeaderHistoryEntry),
+                        LedgerManager::ledgerAbbrev(
+                            lm.getLastClosedLedgerHeader())));
+                }
+
+                mApplyLedgerSuccess.Mark();
+            }
+            else
+            {
+                return mConditionalWork->getState();
+            }
         }
 
-        auto result = applyHistoryOfSingleLedger();
         auto const& lm = mApp.getLedgerManager();
-        auto done = lm.getLastClosedLedgerNum() == mCheckpointRange.mLast;
+        auto done = (mLedgerRange.mCount == 0 ||
+                     lm.getLastClosedLedgerNum() == mLedgerRange.last());
 
         if (done)
         {
             return State::WORK_SUCCESS;
         }
 
-        return result ? State::WORK_RUNNING : State::WORK_FAILURE;
+        if (!mFilesOpen)
+        {
+            openInputFiles();
+        }
+
+        auto lcd = getNextLedgerCloseData();
+        if (!lcd)
+        {
+            return State::WORK_RUNNING;
+        }
+
+        auto applyLedger = std::make_shared<ApplyLedgerWork>(mApp, *lcd);
+
+        auto predicate = [&]() {
+            auto& bl = mApp.getBucketManager().getBucketList();
+            bl.resolveAnyReadyFutures();
+            return bl.futuresAllResolved(
+                bl.getMaxMergeLevel(lm.getLastClosedLedgerNum() + 1));
+        };
+
+        mConditionalWork = std::make_shared<ConditionalWork>(
+            mApp,
+            fmt::format("apply-ledger-conditional ledger({})",
+                        lcd->getLedgerSeq()),
+            predicate, applyLedger, std::chrono::milliseconds(500));
+
+        mConditionalWork->startWork(wakeSelfUpCallback());
+        return State::WORK_RUNNING;
     }
     catch (InvariantDoesNotHold&)
     {
@@ -292,5 +336,28 @@ ApplyCheckpointWork::onRun()
         CLOG(ERROR, "History") << "Replay failed: " << e.what();
         return State::WORK_FAILURE;
     }
+}
+
+void
+ApplyCheckpointWork::shutdown()
+{
+    ZoneScoped;
+    if (mConditionalWork)
+    {
+        mConditionalWork->shutdown();
+    }
+    BasicWork::shutdown();
+}
+
+bool
+ApplyCheckpointWork::onAbort()
+{
+    ZoneScoped;
+    if (mConditionalWork && !mConditionalWork->isDone())
+    {
+        mConditionalWork->crankWork();
+        return false;
+    }
+    return true;
 }
 }

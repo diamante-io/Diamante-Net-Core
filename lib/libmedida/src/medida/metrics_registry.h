@@ -17,6 +17,7 @@
 #include "medida/metric_name.h"
 #include "medida/metric_processor.h"
 #include "medida/timer.h"
+#include "medida/buckets.h"
 
 namespace medida {
 
@@ -32,6 +33,12 @@ class MetricsRegistry {
   Timer& NewTimer(const MetricName &name,
       std::chrono::nanoseconds duration_unit = std::chrono::milliseconds(1),
       std::chrono::nanoseconds rate_unit = std::chrono::seconds(1));
+  Buckets& NewBuckets(
+      const MetricName& name,
+      std::set<double> boundaries,
+      std::chrono::nanoseconds duration_unit = std::chrono::milliseconds(1),
+      std::chrono::nanoseconds rate_unit = std::chrono::seconds(1));
+
   std::map<MetricName, std::shared_ptr<MetricInterface>> GetAllMetrics() const;
  private:
   class Impl;

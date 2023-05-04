@@ -1,12 +1,12 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/LedgerHashUtils.h"
 #include "ledger/LedgerManager.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/types.h"
 #include <memory>
 
@@ -15,7 +15,7 @@ namespace medida
 class MetricsRegistry;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 class AbstractLedgerTxn;
 class LedgerManager;
@@ -51,10 +51,14 @@ class OperationFrame
     LedgerTxnEntry loadSourceAccount(AbstractLedgerTxn& ltx,
                                      LedgerTxnHeader const& header);
 
+    // given an operation, gives a default value representing "success" for the
+    // result
+    void resetResultSuccess();
+
   public:
     static std::shared_ptr<OperationFrame>
     makeHelper(Operation const& op, OperationResult& res,
-               TransactionFrame& parentTx);
+               TransactionFrame& parentTx, uint32_t index);
 
     OperationFrame(Operation const& op, OperationResult& res,
                    TransactionFrame& parentTx);
@@ -64,7 +68,7 @@ class OperationFrame
     bool checkSignature(SignatureChecker& signatureChecker,
                         AbstractLedgerTxn& ltx, bool forApply);
 
-    AccountID const& getSourceID() const;
+    AccountID getSourceID() const;
 
     OperationResult&
     getResult() const

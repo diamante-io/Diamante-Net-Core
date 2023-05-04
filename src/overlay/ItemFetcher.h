@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,9 +16,10 @@
 namespace medida
 {
 class Counter;
+class Timer;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Tracker;
@@ -51,25 +52,25 @@ class ItemFetcher : private NonMovableOrCopyable
      * Fetch data identified by @p hash and needed by @p envelope. Multiple
      * envelopes may require one set of data.
      */
-    void fetch(Hash itemHash, const SCPEnvelope& envelope);
+    void fetch(Hash const& itemHash, SCPEnvelope const& envelope);
 
     /**
      * Stops fetching data identified by @p hash for @p envelope. If other
      * envelopes requires this data, it is still being fetched, but
      * @p envelope will not be notified about it.
      */
-    void stopFetch(Hash itemHash, const SCPEnvelope& envelope);
+    void stopFetch(Hash const& itemHash, SCPEnvelope const& envelope);
 
     /**
      * Return biggest slot index seen for given hash. If 0, then given hash
      * is not being fetched.
      */
-    uint64 getLastSeenSlotIndex(Hash itemHash) const;
+    uint64 getLastSeenSlotIndex(Hash const& itemHash) const;
 
     /**
      * Return envelopes that require data identified by @p hash.
      */
-    std::vector<SCPEnvelope> fetchingFor(Hash itemHash) const;
+    std::vector<SCPEnvelope> fetchingFor(Hash const& itemHash) const;
 
     /**
      * Called periodically to remove old envelopes from list (with ledger id
@@ -89,7 +90,11 @@ class ItemFetcher : private NonMovableOrCopyable
      * added before with @see fetch and the same @p itemHash will be resent
      * to Herder, matching @see Tracker will be cleaned up.
      */
-    void recv(Hash itemHash);
+    void recv(Hash itemHash, medida::Timer& timer);
+
+#ifdef BUILD_TESTS
+    std::shared_ptr<Tracker> getTracker(Hash const& h);
+#endif
 
   protected:
     void stopFetchingBelowInternal(uint64 slotIndex);

@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,11 +10,11 @@
 #include "ledger/LedgerRange.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
-#include "xdrpp/printer.h"
+#include "util/XDRCereal.h"
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 static std::string
@@ -25,7 +25,7 @@ checkAgainstDatabase(AbstractLedgerTxn& ltx, LedgerEntry const& entry)
     {
         std::string s{
             "Inconsistent state between objects (not found in database): "};
-        s += xdr::xdr_to_string(entry, "live");
+        s += xdr_to_string(entry, "live");
         return s;
     }
 
@@ -36,8 +36,8 @@ checkAgainstDatabase(AbstractLedgerTxn& ltx, LedgerEntry const& entry)
     else
     {
         std::string s{"Inconsistent state between objects: "};
-        s += xdr::xdr_to_string(fromDb.current(), "db");
-        s += xdr::xdr_to_string(entry, "live");
+        s += xdr_to_string(fromDb.current(), "db");
+        s += xdr_to_string(entry, "live");
         return s;
     }
 }
@@ -52,7 +52,7 @@ checkAgainstDatabase(AbstractLedgerTxn& ltx, LedgerKey const& key)
     }
 
     std::string s = "Entry with type DEADENTRY found in database ";
-    s += xdr::xdr_to_string(fromDb.current(), "db");
+    s += xdr_to_string(fromDb.current(), "db");
     return s;
 }
 
@@ -80,7 +80,8 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
     std::shared_ptr<Bucket const> bucket, uint32_t oldestLedger,
     uint32_t newestLedger)
 {
-    uint64_t nAccounts = 0, nTrustLines = 0, nOffers = 0, nData = 0;
+    uint64_t nAccounts = 0, nTrustLines = 0, nOffers = 0, nData = 0,
+             nClaimableBalance = 0;
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
 
@@ -92,8 +93,8 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
             if (hasPreviousEntry && !BucketEntryIdCmp{}(previousEntry, e))
             {
                 std::string s = "Bucket has out of order entries: ";
-                s += xdr::xdr_to_string(previousEntry, "previous");
-                s += xdr::xdr_to_string(e, "current");
+                s += xdr_to_string(previousEntry, "previous");
+                s += xdr_to_string(e, "current");
                 return s;
             }
             previousEntry = e;
@@ -107,7 +108,7 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
                                          " bound for this bucket ({} < {}): ",
                                          e.liveEntry().lastModifiedLedgerSeq,
                                          oldestLedger);
-                    s += xdr::xdr_to_string(e.liveEntry(), "live");
+                    s += xdr_to_string(e.liveEntry(), "live");
                     return s;
                 }
                 if (e.liveEntry().lastModifiedLedgerSeq > newestLedger)
@@ -116,7 +117,7 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
                                          " bound for this bucket ({} > {}): ",
                                          e.liveEntry().lastModifiedLedgerSeq,
                                          newestLedger);
-                    s += xdr::xdr_to_string(e.liveEntry(), "live");
+                    s += xdr_to_string(e.liveEntry(), "live");
                     return s;
                 }
 
@@ -133,6 +134,9 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
                     break;
                 case DATA:
                     ++nData;
+                    break;
+                case CLAIMABLE_BALANCE:
+                    ++nClaimableBalance;
                     break;
                 default:
                     abort();
@@ -154,7 +158,7 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
         }
     }
 
-    LedgerRange range{oldestLedger, newestLedger};
+    auto range = LedgerRange::inclusive(oldestLedger, newestLedger);
     std::string countFormat = "Incorrect {} count: Bucket = {} Database = {}";
     auto& ltxRoot = mApp.getLedgerTxnRoot();
     uint64_t nAccountsInDb = ltxRoot.countObjects(ACCOUNT, range);
@@ -177,6 +181,13 @@ BucketListIsConsistentWithDatabase::checkOnBucketApply(
     if (nDataInDb != nData)
     {
         return fmt::format(countFormat, "Data", nData, nDataInDb);
+    }
+    uint64_t nClaimableBalanceInDb =
+        ltxRoot.countObjects(CLAIMABLE_BALANCE, range);
+    if (nClaimableBalanceInDb != nClaimableBalance)
+    {
+        return fmt::format(countFormat, "ClaimableBalance", nClaimableBalance,
+                           nClaimableBalanceInDb);
     }
 
     return {};

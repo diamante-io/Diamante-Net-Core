@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "history/HistoryManager.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 
-namespace DiamNet
+namespace diamnet
 {
 namespace LedgerTestUtils
 {
@@ -26,6 +26,7 @@ void makeValid(AccountEntry& a);
 void makeValid(TrustLineEntry& tl);
 void makeValid(OfferEntry& o);
 void makeValid(DataEntry& d);
+void makeValid(ClaimableBalanceEntry& c);
 void makeValid(LedgerHeaderHistoryEntry& lh,
                LedgerHeaderHistoryEntry firstLedger,
                HistoryManager::LedgerVerificationStatus state);
@@ -45,8 +46,12 @@ std::vector<OfferEntry> generateValidOfferEntries(size_t n);
 DataEntry generateValidDataEntry(size_t b = 3);
 std::vector<DataEntry> generateValidDataEntries(size_t n);
 
+ClaimableBalanceEntry generateValidClaimableBalanceEntry(size_t b = 3);
+std::vector<ClaimableBalanceEntry>
+generateValidClaimableBalanceEntries(size_t n);
+
 std::vector<LedgerHeaderHistoryEntry> generateLedgerHeadersForCheckpoint(
-    LedgerHeaderHistoryEntry firstLedger, uint32_t freq,
+    LedgerHeaderHistoryEntry firstLedger, uint32_t size,
     HistoryManager::LedgerVerificationStatus state =
         HistoryManager::VERIFY_STATUS_OK);
 }

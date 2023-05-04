@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,17 +7,18 @@
 #include "database/Database.h"
 #include "herder/Herder.h"
 #include "ledger/LedgerManager.h"
+#include "util/GlobalChecks.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
 
 std::string PersistentState::mapping[kLastEntry] = {
-    "lastclosedledger", "historyarchivestate", "forcescponnextlaunch",
-    "lastscpdata",      "databaseschema",      "networkpassphrase",
-    "ledgerupgrades"};
+    "lastclosedledger", "historyarchivestate", "lastscpdata",
+    "databaseschema",   "networkpassphrase",   "ledgerupgrades"};
 
 std::string PersistentState::kSQLCreateStatement =
     "CREATE TABLE IF NOT EXISTS storestate ("
@@ -56,6 +57,7 @@ PersistentState::getStoreStateName(PersistentState::Entry n, uint32 subscript)
 std::string
 PersistentState::getState(PersistentState::Entry entry)
 {
+    ZoneScoped;
     return getFromDb(getStoreStateName(entry));
 }
 
@@ -63,15 +65,17 @@ void
 PersistentState::setState(PersistentState::Entry entry,
                           std::string const& value)
 {
+    ZoneScoped;
     updateDb(getStoreStateName(entry), value);
 }
 
 std::vector<std::string>
 PersistentState::getSCPStateAllSlots()
 {
+    ZoneScoped;
     // Collect all slots persisted
     std::vector<std::string> states;
-    for (uint32 i = 0; i <= Herder::MAX_SLOTS_TO_REMEMBER; i++)
+    for (uint32 i = 0; i <= mApp.getConfig().MAX_SLOTS_TO_REMEMBER; i++)
     {
         auto val = getFromDb(getStoreStateName(kLastSCPData, i));
         if (!val.empty())
@@ -86,14 +90,16 @@ PersistentState::getSCPStateAllSlots()
 void
 PersistentState::setSCPStateForSlot(uint64 slot, std::string const& value)
 {
-    auto slotIdx =
-        static_cast<uint32>(slot % (Herder::MAX_SLOTS_TO_REMEMBER + 1));
+    ZoneScoped;
+    auto slotIdx = static_cast<uint32>(
+        slot % (mApp.getConfig().MAX_SLOTS_TO_REMEMBER + 1));
     updateDb(getStoreStateName(kLastSCPData, slotIdx), value);
 }
 
 void
 PersistentState::updateDb(std::string const& entry, std::string const& value)
 {
+    ZoneScoped;
     auto prep = mApp.getDatabase().getPreparedStatement(
         "UPDATE storestate SET state = :v WHERE statename = :n;");
 
@@ -126,6 +132,7 @@ PersistentState::updateDb(std::string const& entry, std::string const& value)
 std::string
 PersistentState::getFromDb(std::string const& entry)
 {
+    ZoneScoped;
     std::string res;
 
     auto& db = mApp.getDatabase();

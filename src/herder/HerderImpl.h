@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,7 +23,7 @@ class Counter;
 class Timer;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 class LedgerManager;
@@ -45,6 +45,7 @@ class HerderImpl : public Herder
 
     // Bootstraps the HerderImpl if we're creating a new Network
     void bootstrap() override;
+    void shutdown() override;
 
     void restoreState() override;
 
@@ -55,11 +56,12 @@ class HerderImpl : public Herder
         return mHerderSCPDriver;
     }
 
-    void valueExternalized(uint64 slotIndex, DiamNetValue const& value);
+    void processExternalized(uint64 slotIndex, DiamnetValue const& value);
+    void valueExternalized(uint64 slotIndex, DiamnetValue const& value);
     void emitEnvelope(SCPEnvelope const& envelope);
 
     TransactionQueue::AddResult
-    recvTransaction(TransactionFramePtr tx) override;
+    recvTransaction(TransactionFrameBasePtr tx) override;
 
     EnvelopeStatus recvSCPEnvelope(SCPEnvelope const& envelope) override;
     EnvelopeStatus recvSCPEnvelope(SCPEnvelope const& envelope,
@@ -78,13 +80,19 @@ class HerderImpl : public Herder
     void processSCPQueue();
 
     uint32_t getCurrentLedgerSeq() const override;
+    uint32 getMinLedgerSeqToAskPeers() const override;
 
     SequenceNumber getMaxSeqInPendingTxs(AccountID const&) override;
 
-    void triggerNextLedger(uint32_t ledgerSeqToTrigger) override;
+    void triggerNextLedger(uint32_t ledgerSeqToTrigger,
+                           bool checkTrackingSCP) override;
+
+    void setInSyncAndTriggerNextLedger() override;
 
     void setUpgrades(Upgrades::UpgradeParameters const& upgrades) override;
     std::string getUpgradesJson() override;
+
+    void forceSCPStateIntoSyncWithLastClosedLedger() override;
 
     bool resolveNodeID(std::string const& s, PublicKey& retKey) override;
 
@@ -100,6 +108,8 @@ class HerderImpl : public Herder
 #ifdef BUILD_TESTS
     // used for testing
     PendingEnvelopes& getPendingEnvelopes();
+
+    TransactionQueue& getTransactionQueue();
 #endif
 
     // helper function to verify envelopes are signed
@@ -108,9 +118,9 @@ class HerderImpl : public Herder
     void signEnvelope(SecretKey const& s, SCPEnvelope& envelope);
 
     // helper function to verify SCPValues are signed
-    bool verifyDiamNetValueSignature(DiamNetValue const& sv);
+    bool verifyDiamnetValueSignature(DiamnetValue const& sv);
     // helper function to sign SCPValues
-    void signDiamNetValue(SecretKey const& s, DiamNetValue& sv);
+    void signDiamnetValue(SecretKey const& s, DiamnetValue& sv);
 
   private:
     // return true if values referenced by envelope have a valid close time:
@@ -118,10 +128,18 @@ class HerderImpl : public Herder
     // * it's recent enough (if `enforceRecent` is set)
     bool checkCloseTime(SCPEnvelope const& envelope, bool enforceRecent);
 
-    void ledgerClosed();
+    // Given a candidate close time, determine an offset needed to make it
+    // valid (at current system time). Returns 0 if ct is already valid
+    std::chrono::milliseconds
+    ctValidityOffset(uint64_t ct, std::chrono::milliseconds maxCtOffset =
+                                      std::chrono::milliseconds::zero());
 
-    void startRebroadcastTimer();
-    void rebroadcast();
+    void ledgerClosed(bool synchronous);
+
+    void maybeTriggerNextLedger(bool synchronous);
+
+    void startOutOfSyncTimer();
+    void outOfSyncRecovery();
     void broadcast(SCPEnvelope const& e);
 
     void processSCPQueueUpToIndex(uint64 slotIndex);
@@ -129,7 +147,7 @@ class HerderImpl : public Herder
     TransactionQueue mTransactionQueue;
 
     void
-    updateTransactionQueue(std::vector<TransactionFramePtr> const& applied);
+    updateTransactionQueue(std::vector<TransactionFrameBasePtr> const& applied);
 
     PendingEnvelopes mPendingEnvelopes;
     Upgrades mUpgrades;
@@ -166,7 +184,7 @@ class HerderImpl : public Herder
 
     VirtualTimer mTriggerTimer;
 
-    VirtualTimer mRebroadcastTimer;
+    VirtualTimer mOutOfSyncTimer;
 
     Application& mApp;
     LedgerManager& mLedgerManager;
@@ -201,7 +219,9 @@ class HerderImpl : public Herder
         uint32_t mLastGoodLedger{0};
         size_t mNumNodes{0};
         Hash mLastCheckQuorumMapHash{};
+        Hash mCheckingQuorumMapHash{};
         bool mRecalculating{false};
+        std::atomic<bool> mInterruptFlag{false};
         std::pair<std::vector<PublicKey>, std::vector<PublicKey>>
             mPotentialSplit{};
         std::set<std::set<PublicKey>> mIntersectionCriticalNodes{};
@@ -219,5 +239,7 @@ class HerderImpl : public Herder
         }
     };
     QuorumMapIntersectionState mLastQuorumMapIntersectionState;
+
+    uint32_t getMinLedgerSeqToRemember() const;
 };
 }

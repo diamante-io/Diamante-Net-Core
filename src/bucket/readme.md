@@ -21,7 +21,7 @@ Buckets in the previous level, and Buckets store entries based on their age:
 more-recently-modified entries reside in smaller, lower-level buckets.
 
 The cumulative hash of the bucket levels creates a single "BucketList hash",
-which is stored in the [ledger header](../xdr/DiamNet-ledger.x) in order to
+which is stored in the [ledger header](../xdr/Diamnet-ledger.x) in order to
 unambiguously denote the set of entries that exist at each ledger-close.
 
 The individual buckets that compose each level are checkpointed to history

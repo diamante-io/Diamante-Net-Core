@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,14 +10,15 @@
 #include "main/ErrorMessages.h"
 #include "util/Fs.h"
 #include "util/Logging.h"
-#include "util/format.h"
+#include <fmt/format.h>
 
+#include <Tracy.hpp>
 #include <medida/meter.h>
 #include <medida/metrics_registry.h>
 
 #include <fstream>
 
-namespace DiamNet
+namespace diamnet
 {
 
 VerifyBucketWork::VerifyBucketWork(
@@ -37,6 +38,7 @@ VerifyBucketWork::VerifyBucketWork(
 BasicWork::State
 VerifyBucketWork::onRun()
 {
+    ZoneScoped;
     if (mDone)
     {
         if (mEc)
@@ -57,6 +59,7 @@ VerifyBucketWork::onRun()
 void
 VerifyBucketWork::adoptBucket()
 {
+    ZoneScoped;
     assert(mDone);
     assert(!mEc);
 
@@ -76,22 +79,30 @@ VerifyBucketWork::spawnVerifier()
         std::static_pointer_cast<VerifyBucketWork>(shared_from_this()));
     app.postOnBackgroundThread(
         [&app, filename, weak, hash]() {
-            auto hasher = SHA256::create();
+            SHA256 hasher;
             asio::error_code ec;
+            try
             {
+                ZoneNamedN(verifyZone, "bucket verify", true);
                 CLOG(INFO, "History")
                     << fmt::format("Verifying bucket {}", binToHex(hash));
 
                 // ensure that the stream gets its own scope to avoid race with
                 // main thread
                 std::ifstream in(filename, std::ifstream::binary);
+                if (!in)
+                {
+                    throw std::runtime_error(
+                        fmt::format("Error opening file {}", filename));
+                }
+                in.exceptions(std::ios::badbit);
                 char buf[4096];
                 while (in)
                 {
                     in.read(buf, sizeof(buf));
-                    hasher->add(ByteSlice(buf, in.gcount()));
+                    hasher.add(ByteSlice(buf, in.gcount()));
                 }
-                uint256 vHash = hasher->finish();
+                uint256 vHash = hasher.finish();
                 if (vHash == hash)
                 {
                     CLOG(DEBUG, "History")
@@ -109,6 +120,12 @@ VerifyBucketWork::spawnVerifier()
                     CLOG(WARNING, "History") << POSSIBLY_CORRUPTED_HISTORY;
                     ec = std::make_error_code(std::errc::io_error);
                 }
+            }
+            catch (std::exception const& e)
+            {
+                CLOG(WARNING, "History")
+                    << "Failed verification : " << e.what();
+                ec = std::make_error_code(std::errc::io_error);
             }
 
             // Not ideal, but needed to prevent race conditions with

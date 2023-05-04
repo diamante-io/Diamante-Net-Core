@@ -1,22 +1,30 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "main/CommandLine.h"
+#include "bucket/BucketManager.h"
 #include "catchup/CatchupConfiguration.h"
+#include "herder/Herder.h"
+#include "history/HistoryArchiveManager.h"
 #include "history/InferredQuorumUtils.h"
+#include "ledger/LedgerManager.h"
 #include "main/Application.h"
 #include "main/ApplicationUtils.h"
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
-#include "main/DiamNetCoreVersion.h"
+#include "main/DiamnetCoreVersion.h"
 #include "main/dumpxdr.h"
+#include "overlay/OverlayManager.h"
 #include "scp/QuorumSetUtils.h"
 #include "util/Logging.h"
 #include "util/optional.h"
+#include "util/types.h"
 
-#include "catchup/simulation/ApplyTransactionsWork.h"
 #include "historywork/BatchDownloadWork.h"
+#include "historywork/WriteVerifiedCheckpointHashesWork.h"
+#include "src/catchup/simulation/TxSimApplyTransactionsWork.h"
+#include "src/transactions/simulation/TxSimScaleBucketlistWork.h"
 #include "work/WorkScheduler.h"
 
 #ifdef BUILD_TESTS
@@ -25,11 +33,11 @@
 #include "test/test.h"
 #endif
 
+#include <fmt/format.h>
 #include <iostream>
 #include <lib/clara.hpp>
-#include <lib/util/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 void
@@ -193,6 +201,12 @@ metricsParser(std::vector<std::string>& value)
 }
 
 clara::Opt
+compactParser(bool& compact)
+{
+    return clara::Opt{compact}["--compact"]("no indent");
+}
+
+clara::Opt
 base64Parser(bool& base64)
 {
     return clara::Opt{base64}["--base64"]("use base64");
@@ -206,10 +220,32 @@ disableBucketGCParser(bool& disableBucketGC)
 }
 
 clara::Opt
+waitForConsensusParser(bool& waitForConsensus)
+{
+    return clara::Opt{waitForConsensus}["--wait-for-consensus"](
+        "wait to hear from the network before voting, for validating nodes "
+        "only");
+}
+
+clara::Opt
+historyArchiveParser(std::string& archive)
+{
+    return clara::Opt(archive, "ARCHIVE-NAME")["--archive"](
+        "Archive name to be used for catchup. Use 'any' to select randomly");
+}
+
+clara::Opt
 historyLedgerNumber(uint32_t& ledgerNum)
 {
     return clara::Opt{ledgerNum, "HISTORY-LEDGER"}["--history-ledger"](
         "specify a ledger number to examine in history");
+}
+
+clara::Opt
+historyHashParser(std::string& hash)
+{
+    return clara::Opt(hash, "HISTORY_HASH")["--history-hash"](
+        "specify a hash to trust for the provided ledger");
 }
 
 clara::Parser
@@ -218,9 +254,101 @@ configurationParser(CommandLine::ConfigOption& configOption)
     return logLevelParser(configOption.mLogLevel) |
            metricsParser(configOption.mMetrics) |
            clara::Opt{configOption.mConfigFile, "FILE-NAME"}["--conf"](
-               "specify a config file ('-' for STDIN, "
-               "default 'DiamNet-core.cfg')");
+               fmt::format("specify a config file ('{0}' for STDIN, default "
+                           "'diamnet-core.cfg')",
+                           Config::STDIN_SPECIAL_NAME));
 }
+
+clara::Opt
+metadataOutputStreamParser(std::string& stream)
+{
+    return clara::Opt(stream, "STREAM")["--metadata-output-stream"](
+        "Filename or file-descriptor number 'fd:N' to stream metadata to");
+}
+
+void
+maybeSetMetadataOutputStream(Config& cfg, std::string const& stream)
+{
+    if (!stream.empty())
+    {
+        if (!cfg.METADATA_OUTPUT_STREAM.empty())
+        {
+            throw std::runtime_error(
+                "Command-line --metadata-output-stream conflicts with "
+                "config-file provided METADATA_OUTPUT_STREAM");
+        }
+        cfg.METADATA_OUTPUT_STREAM = stream;
+    }
+}
+
+optional<CatchupConfiguration>
+maybeEnableInMemoryLedgerMode(Config& config, bool inMemory,
+                              uint32_t startAtLedger,
+                              std::string const& startAtHash)
+{
+    if (!inMemory)
+    {
+        if (startAtLedger != 0)
+        {
+            throw std::runtime_error("--start-at-ledger requires --in-memory");
+        }
+        if (!startAtHash.empty())
+        {
+            throw std::runtime_error("--start-at-hash requires --in-memory");
+        }
+        return nullptr;
+    }
+
+    // Adjust configs for in-memory-replay mode
+    config.DATABASE = SecretValue{"sqlite3://:memory:"};
+    config.MODE_STORES_HISTORY = false;
+    config.MODE_USES_IN_MEMORY_LEDGER = true;
+    config.MODE_ENABLES_BUCKETLIST = true;
+    // And don't bother fsyncing buckets without a DB,
+    // they're temporary anyways.
+    config.DISABLE_XDR_FSYNC = true;
+
+    if (startAtLedger != 0 && startAtHash.empty())
+    {
+        throw std::runtime_error("--start-at-ledger requires --start-at-hash");
+    }
+    else if (startAtLedger == 0 && !startAtHash.empty())
+    {
+        throw std::runtime_error("--start-at-hash requires --start-at-ledger");
+    }
+    else if (startAtLedger != 0 && !startAtHash.empty())
+    {
+        config.MODE_AUTO_STARTS_OVERLAY = false;
+        LedgerNumHashPair pair;
+        pair.first = startAtLedger;
+        pair.second = make_optional<Hash>(hexToBin256(startAtHash));
+        uint32_t count = 0;
+        auto mode = CatchupConfiguration::Mode::OFFLINE_COMPLETE;
+        return make_optional<CatchupConfiguration>(pair, count, mode);
+    }
+    return nullptr;
+}
+
+clara::Opt
+inMemoryParser(bool& inMemory)
+{
+    return clara::Opt{inMemory}["--in-memory"](
+        "store working ledger in memory rather than database");
+};
+
+clara::Opt
+startAtLedgerParser(uint32_t& startAtLedger)
+{
+    return clara::Opt{startAtLedger, "LEDGER"}["--start-at-ledger"](
+        "start in-memory run with replay from historical ledger number");
+};
+
+clara::Opt
+startAtHashParser(std::string& startAtHash)
+{
+    return clara::Opt{startAtHash, "HASH"}["--start-at-hash"](
+        "start in-memory run with replay from historical ledger hash");
+};
 
 int
 runWithHelp(CommandLineArgs const& args,
@@ -267,7 +395,7 @@ runWithHelp(CommandLineArgs const& args,
 }
 
 CatchupConfiguration
-parseCatchup(std::string const& catchup)
+parseCatchup(std::string const& catchup, bool extraValidation)
 {
     auto static errorMessage =
         "catchup value should be passed as <DESTINATION-LEDGER/LEDGER-COUNT>, "
@@ -282,9 +410,11 @@ parseCatchup(std::string const& catchup)
 
     try
     {
+        auto mode = extraValidation
+                        ? CatchupConfiguration::Mode::OFFLINE_COMPLETE
+                        : CatchupConfiguration::Mode::OFFLINE_BASIC;
         return {parseLedger(catchup.substr(0, separatorIndex)),
-                parseLedgerCount(catchup.substr(separatorIndex + 1)),
-                CatchupConfiguration::Mode::OFFLINE};
+                parseLedgerCount(catchup.substr(separatorIndex + 1)), mode};
     }
     catch (std::exception&)
     {
@@ -322,7 +452,7 @@ CommandLine::ConfigOption::getConfig(bool logToFile) const
 {
     Config config;
     auto configFile =
-        mConfigFile.empty() ? std::string{"DiamNet-core.cfg"} : mConfigFile;
+        mConfigFile.empty() ? std::string{"diamnet-core.cfg"} : mConfigFile;
 
     LOG(INFO) << "Config from " << configFile;
 
@@ -459,11 +589,19 @@ runCatchup(CommandLineArgs const& args)
     CommandLine::ConfigOption configOption;
     std::string catchupString;
     std::string outputFile;
+    std::string archive;
+    std::string trustedCheckpointHashesFile;
+    bool completeValidation = false;
+    bool replayInMemory = false;
+    bool inMemory = false;
+    uint32_t startAtLedger = 0;
+    std::string startAtHash;
+    std::string stream;
 
     auto validateCatchupString = [&] {
         try
         {
-            parseCatchup(catchupString);
+            parseCatchup(catchupString, completeValidation);
             return std::string{};
         }
         catch (std::runtime_error& e)
@@ -471,18 +609,59 @@ runCatchup(CommandLineArgs const& args)
             return std::string{e.what()};
         }
     };
+
+    auto validateCatchupArchive = [&] {
+        if (iequals(archive, "any") || archive.empty())
+        {
+            return std::string{};
+        }
+
+        auto config = configOption.getConfig();
+        if (config.HISTORY.find(archive) != config.HISTORY.end())
+        {
+            return std::string{};
+        }
+        return std::string{"Catchup error: bad archive name"};
+    };
+
     auto catchupStringParser = ParserWithValidation{
         clara::Arg(catchupString, "DESTINATION-LEDGER/LEDGER-COUNT").required(),
         validateCatchupString};
+    auto trustedCheckpointHashesParser = [](std::string& file) {
+        return clara::Opt{file, "FILE-NAME"}["--trusted-checkpoint-hashes"](
+            "get destination ledger hash from trusted output of "
+            "'verify-checkpoints'");
+    };
+    auto catchupArchiveParser = ParserWithValidation{
+        historyArchiveParser(archive), validateCatchupArchive};
     auto disableBucketGC = false;
+
+    auto validationParser = [](bool& completeValidation) {
+        return clara::Opt{completeValidation}["--extra-verification"](
+            "verify all files from the archive for the catchup range");
+    };
+
+    auto replayInMemoryParser = [](bool& replayInMemory) {
+        return clara::Opt{replayInMemory}["--replay-in-memory"](
+            "deprecated: use --in-memory flag, common to 'catchup' and 'run'");
+    };
 
     return runWithHelp(
         args,
         {configurationParser(configOption), catchupStringParser,
-         outputFileParser(outputFile), disableBucketGCParser(disableBucketGC)},
+         catchupArchiveParser,
+         trustedCheckpointHashesParser(trustedCheckpointHashesFile),
+         outputFileParser(outputFile), disableBucketGCParser(disableBucketGC),
+         validationParser(completeValidation),
+         replayInMemoryParser(replayInMemory), inMemoryParser(inMemory),
+         startAtLedgerParser(startAtLedger), startAtHashParser(startAtHash),
+         metadataOutputStreamParser(stream)},
         [&] {
             auto config = configOption.getConfig();
-            config.setNoListen();
+            // Don't call config.setNoListen() here as we might want to
+            // access the /info HTTP endpoint during catchup.
+            config.RUN_STANDALONE = true;
+            config.MANUAL_CLOSE = true;
             config.DISABLE_BUCKET_GC = disableBucketGC;
 
             if (config.AUTOMATIC_MAINTENANCE_PERIOD.count() > 0 &&
@@ -496,14 +675,55 @@ runCatchup(CommandLineArgs const& args)
                 config.AUTOMATIC_MAINTENANCE_COUNT = 1000000;
             }
 
-            VirtualClock clock(VirtualClock::REAL_TIME);
-            auto app = Application::create(clock, config, false);
-            Json::Value catchupInfo;
-            auto result =
-                catchup(app, parseCatchup(catchupString), catchupInfo);
-            if (!catchupInfo.isNull())
-                writeCatchupInfo(catchupInfo, outputFile);
+            maybeEnableInMemoryLedgerMode(config, (inMemory || replayInMemory),
+                                          startAtLedger, startAtHash);
+            maybeSetMetadataOutputStream(config, stream);
 
+            VirtualClock clock(VirtualClock::REAL_TIME);
+            int result;
+            {
+                auto app = Application::create(clock, config, replayInMemory);
+                auto const& ham = app->getHistoryArchiveManager();
+                auto archivePtr = ham.getHistoryArchive(archive);
+                if (iequals(archive, "any"))
+                {
+                    archivePtr = ham.selectRandomReadableHistoryArchive();
+                }
+
+                CatchupConfiguration cc =
+                    parseCatchup(catchupString, completeValidation);
+                if (!trustedCheckpointHashesFile.empty())
+                {
+                    auto const& hm = app->getHistoryManager();
+                    if (!hm.isLastLedgerInCheckpoint(cc.toLedger()))
+                    {
+                        throw std::runtime_error(
+                            "destination ledger is not a checkpoint boundary,"
+                            " but trusted checkpoints file was provided");
+                    }
+                    Hash h = WriteVerifiedCheckpointHashesWork::
+                        loadHashFromJsonOutput(cc.toLedger(),
+                                               trustedCheckpointHashesFile);
+                    if (isZero(h))
+                    {
+                        throw std::runtime_error("destination ledger not found "
+                                                 "in trusted checkpoints file");
+                    }
+                    LedgerNumHashPair pair;
+                    pair.first = cc.toLedger();
+                    pair.second = make_optional<Hash>(h);
+                    LOG(INFO) << "Found trusted hash " << hexAbbrev(h)
+                              << " for ledger " << cc.toLedger();
+                    cc = CatchupConfiguration(pair, cc.count(), cc.mode());
+                }
+
+                Json::Value catchupInfo;
+                result = catchup(app, cc, catchupInfo, archivePtr);
+                if (!catchupInfo.isNull())
+                {
+                    writeCatchupInfo(catchupInfo, outputFile);
+                }
+            }
             return result;
         });
 }
@@ -538,6 +758,94 @@ runCheckQuorum(CommandLineArgs const& args)
 }
 
 int
+runWriteVerifiedCheckpointHashes(CommandLineArgs const& args)
+{
+    std::string outputFile;
+    uint32_t startLedger = 0;
+    std::string startHash;
+    CommandLine::ConfigOption configOption;
+    return runWithHelp(
+        args,
+        {configurationParser(configOption), historyLedgerNumber(startLedger),
+         historyHashParser(startHash), outputFileParser(outputFile).required()},
+        [&] {
+            VirtualClock clock(VirtualClock::REAL_TIME);
+            auto cfg = configOption.getConfig();
+
+            // Set up for quick in-memory no-catchup mode.
+            cfg.QUORUM_INTERSECTION_CHECKER = false;
+            cfg.DATABASE = SecretValue{"sqlite3://:memory:"};
+            cfg.MODE_STORES_HISTORY = false;
+            cfg.MODE_DOES_CATCHUP = false;
+            cfg.MODE_USES_IN_MEMORY_LEDGER = true;
+            cfg.MODE_ENABLES_BUCKETLIST = true;
+            cfg.DISABLE_XDR_FSYNC = true;
+
+            auto app = Application::create(clock, cfg, false);
+            app->start();
+            auto const& lm = app->getLedgerManager();
+            auto const& hm = app->getHistoryManager();
+            auto const& cm = app->getCatchupManager();
+            auto& io = clock.getIOContext();
+            asio::io_context::work mainWork(io);
+            LedgerNumHashPair authPair;
+            auto tryCheckpoint = [&](uint32_t seq, Hash h) {
+                if (hm.isLastLedgerInCheckpoint(seq))
+                {
+                    LOG(INFO) << "Found authenticated checkpoint hash "
+                              << hexAbbrev(h) << " for ledger " << seq;
+                    authPair.first = seq;
+                    authPair.second = make_optional<Hash>(h);
+                }
+                else if (authPair.first != seq)
+                {
+                    authPair.first = seq;
+                    LOG(INFO) << "Ledger " << seq
+                              << " is not a checkpoint boundary, waiting.";
+                }
+            };
+
+            if (startLedger != 0 && !startHash.empty())
+            {
+                Hash h = hexToBin256(startHash);
+                tryCheckpoint(startLedger, h);
+            }
+
+            while (!(io.stopped() || authPair.second))
+            {
+                clock.crank();
+                if (lm.isSynced())
+                {
+                    auto const& lhe = lm.getLastClosedLedgerHeader();
+                    tryCheckpoint(lhe.header.ledgerSeq, lhe.hash);
+                }
+                else if (cm.hasBufferedLedger())
+                {
+                    auto const& lcd = cm.getLastBufferedLedger();
+                    uint32_t seq = lcd.getLedgerSeq() - 1;
+                    Hash hash = lcd.getTxSet()->previousLedgerHash();
+                    tryCheckpoint(seq, hash);
+                }
+            }
+            if (authPair.second)
+            {
+                app->getOverlayManager().shutdown();
+                app->getHerder().shutdown();
+                app->getWorkScheduler()
+                    .executeWork<WriteVerifiedCheckpointHashesWork>(authPair,
+                                                                    outputFile);
+                app->gracefulStop();
+                return 0;
+            }
+            else
+            {
+                app->gracefulStop();
+                return 1;
+            }
+        });
+}
+
+int
 runConvertId(CommandLineArgs const& args)
 {
     std::string id;
@@ -552,11 +860,13 @@ int
 runDumpXDR(CommandLineArgs const& args)
 {
     std::string xdr;
+    bool compact = false;
 
-    return runWithHelp(args, {fileNameParser(xdr)}, [&] {
-        dumpXdrStream(xdr);
-        return 0;
-    });
+    return runWithHelp(args, {compactParser(compact), fileNameParser(xdr)},
+                       [&] {
+                           dumpXdrStream(xdr, compact);
+                           return 0;
+                       });
 }
 
 int
@@ -566,13 +876,13 @@ runForceSCP(CommandLineArgs const& args)
     auto reset = false;
 
     auto resetOption = clara::Opt{reset}["--reset"](
-        "reset force SCP flag, so next time DiamNet-core "
+        "reset force SCP flag, so next time diamnet-core "
         "is run it will wait to hear from the network "
         "rather than starting with the local ledger");
 
     return runWithHelp(args, {configurationParser(configOption), resetOption},
                        [&] {
-                           setForceSCPFlag(configOption.getConfig(), !reset);
+                           setForceSCPFlag();
                            return 0;
                        });
 }
@@ -673,15 +983,18 @@ runPrintXdr(CommandLineArgs const& args)
     std::string xdr;
     std::string fileType{"auto"};
     auto base64 = false;
+    auto compact = false;
 
     auto fileTypeOpt = clara::Opt(fileType, "FILE-TYPE")["--filetype"](
         "[auto|ledgerheader|meta|result|resultpair|tx|txfee]");
 
-    return runWithHelp(
-        args, {fileNameParser(xdr), fileTypeOpt, base64Parser(base64)}, [&] {
-            printXdr(xdr, fileType, base64);
-            return 0;
-        });
+    return runWithHelp(args,
+                       {fileNameParser(xdr), fileTypeOpt, base64Parser(base64),
+                        compactParser(compact)},
+                       [&] {
+                           printXdr(xdr, fileType, base64, compact);
+                           return 0;
+                       });
 }
 
 int
@@ -703,27 +1016,60 @@ run(CommandLineArgs const& args)
 {
     CommandLine::ConfigOption configOption;
     auto disableBucketGC = false;
+    uint32_t simulateSleepPerOp = 0;
+    std::string stream;
+    bool inMemory = false;
+    bool waitForConsensus = false;
+    uint32_t startAtLedger = 0;
+    std::string startAtHash;
 
-    return runWithHelp(args,
-                       {configurationParser(configOption),
-                        disableBucketGCParser(disableBucketGC)},
-                       [&] {
-                           Config cfg;
-                           try
-                           {
-                               cfg = configOption.getConfig();
-                               cfg.DISABLE_BUCKET_GC = disableBucketGC;
-                           }
-                           catch (std::exception& e)
-                           {
-                               LOG(FATAL) << "Got an exception: " << e.what();
-                               LOG(FATAL) << REPORT_INTERNAL_BUG;
-                               return 1;
-                           }
-                           // run outside of catch block so that we properly
-                           // capture crashes
-                           return runWithConfig(cfg);
-                       });
+    auto simulateParser = [](uint32_t& simulateSleepPerOp) {
+        return clara::Opt{simulateSleepPerOp,
+                          "MICROSECONDS"}["--simulate-apply-per-op"](
+            "simulate application time per operation");
+    };
+
+    return runWithHelp(
+        args,
+        {configurationParser(configOption),
+         disableBucketGCParser(disableBucketGC),
+         simulateParser(simulateSleepPerOp), metadataOutputStreamParser(stream),
+         inMemoryParser(inMemory), waitForConsensusParser(waitForConsensus),
+         startAtLedgerParser(startAtLedger), startAtHashParser(startAtHash)},
+        [&] {
+            Config cfg;
+            optional<CatchupConfiguration> cc;
+            try
+            {
+                cfg = configOption.getConfig();
+                cfg.DISABLE_BUCKET_GC = disableBucketGC;
+                if (simulateSleepPerOp > 0)
+                {
+                    cfg.DATABASE = SecretValue{"sqlite3://:memory:"};
+                    cfg.OP_APPLY_SLEEP_TIME_FOR_TESTING = simulateSleepPerOp;
+                    cfg.MODE_STORES_HISTORY = false;
+                    cfg.MODE_USES_IN_MEMORY_LEDGER = false;
+                    cfg.MODE_ENABLES_BUCKETLIST = false;
+                    cfg.PREFETCH_BATCH_SIZE = 0;
+                }
+
+                cc = maybeEnableInMemoryLedgerMode(cfg, inMemory, startAtLedger,
+                                                   startAtHash);
+                maybeSetMetadataOutputStream(cfg, stream);
+                cfg.FORCE_SCP =
+                    cfg.NODE_IS_VALIDATOR ? !waitForConsensus : false;
+            }
+            catch (std::exception& e)
+            {
+                LOG(FATAL) << "Got an exception: " << e.what();
+                LOG(FATAL) << REPORT_INTERNAL_BUG;
+                return 1;
+            }
+
+            // run outside of catch block so that we properly
+            // capture crashes
+            return runWithConfig(cfg, cc);
+        });
 }
 
 int
@@ -759,7 +1105,7 @@ runSignTransaction(CommandLineArgs const& args)
 int
 runVersion(CommandLineArgs const&)
 {
-    std::cout << DiamNet_CORE_VERSION << std::endl;
+    std::cout << DIAMNET_CORE_VERSION << std::endl;
     return 0;
 }
 
@@ -805,13 +1151,19 @@ runRebuildLedgerFromBuckets(CommandLineArgs const& args)
 }
 
 int
-runSimulate(CommandLineArgs const& args)
+runGenerateOrSimulateTxs(CommandLineArgs const& args, bool generate)
 {
     CommandLine::ConfigOption configOption;
+    // If >0, packs mMaxOperations into a ledger maintaining a sustained load
+    // If 0, scale the existing ledgers with multiplier
     uint32_t opsPerLedger = 0;
     uint32_t firstLedgerInclusive = 0;
     uint32_t lastLedgerInclusive = 0;
     std::string historyArchiveGet;
+    bool upgrade = false;
+    // Default to no simulated transactions, just real data
+    uint32_t multiplier = 1;
+    bool verifyResults = false;
 
     auto validateFirstLedger = [&] {
         if (firstLedgerInclusive == 0)
@@ -829,41 +1181,190 @@ runSimulate(CommandLineArgs const& args)
             "first ledger to read from history archive"),
         validateFirstLedger};
 
+    auto opsPerLedgerParser = [](uint32_t& opsPerLedger) {
+        return clara::Opt{opsPerLedger, "OPS-PER-LEDGER"}["--ops-per-ledger"](
+            "desired number of operations per ledger, will never be less but "
+            "could be up to 100 * multiplier more. If 0, real ledger sizes "
+            "from the archive stream are used");
+    };
+
+    auto multiplierParser = [](uint32_t& multiplier) {
+        return clara::Opt{multiplier,
+                          "N"}["--multiplier"]("amplification factor, "
+                                               "must be consistent with "
+                                               "simulated bucketlist");
+    };
+
+    std::vector<ParserWithValidation> parsers = {
+        configurationParser(configOption), firstLedgerParser,
+        clara::Opt{upgrade}["--upgrade"](
+            "upgrade to latest known protocol version"),
+        clara::Opt{verifyResults}["--verify"](
+            "check results after application and log inconsistencies"),
+        clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
+            "last ledger to read from history archive")};
+
+    // Allow passing multiplier during transaction generation, ops-per-ledger
+    // during simulation
+    parsers.emplace_back((generate ? multiplierParser(multiplier)
+                                   : opsPerLedgerParser(opsPerLedger)));
+
+    return runWithHelp(args, parsers, [&] {
+        auto config = configOption.getConfig();
+        config.setNoListen();
+
+        auto found = config.HISTORY.find("simulate");
+        if (!generate)
+        {
+            // Check if special `simulate` archive is present in the config
+            // If so, ensure we're getting historical data from it exclusively
+            if (found != config.HISTORY.end())
+            {
+                auto simArchive = *found;
+                config.HISTORY.clear();
+                config.HISTORY[simArchive.first] = simArchive.second;
+            }
+
+            LOG(INFO) << "Publishing is disabled in `simulate` mode";
+            config.setNoPublish();
+        }
+        else if (found == config.HISTORY.end())
+        {
+            throw std::runtime_error("Must provide writable `simulate` archive "
+                                     "when generating transactions");
+        }
+
+        VirtualClock clock(VirtualClock::REAL_TIME);
+        auto app = Application::create(clock, config, false);
+        app->start();
+
+        if (generate && app->getHistoryManager().checkpointContainingLedger(
+                            lastLedgerInclusive) == lastLedgerInclusive)
+        {
+            // Bump last ledger to unblock publish
+            ++lastLedgerInclusive;
+        }
+
+        auto lr =
+            LedgerRange::inclusive(firstLedgerInclusive, lastLedgerInclusive);
+        CheckpointRange cr(lr, app->getHistoryManager());
+        TmpDir dir(app->getTmpDirManager().tmpDir("simulate"));
+
+        auto downloadLedgers = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_LEDGER, dir);
+        auto downloadTransactions = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
+        auto downloadResults = std::make_shared<BatchDownloadWork>(
+            *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
+        auto apply = std::make_shared<txsimulation::TxSimApplyTransactionsWork>(
+            *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE, opsPerLedger,
+            upgrade, multiplier, verifyResults);
+        std::vector<std::shared_ptr<BasicWork>> seq{
+            downloadLedgers, downloadTransactions, downloadResults, apply};
+
+        app->getWorkScheduler().executeWork<WorkSequence>(
+            "download-simulate-seq", seq);
+
+        // Publish all simulated transactions to a simulated archive to avoid
+        // re-generating and signing them
+        if (generate)
+        {
+            publish(app);
+        }
+
+        return 0;
+    });
+}
+
+int
+runSimulateTxs(CommandLineArgs const& args)
+{
+    return runGenerateOrSimulateTxs(args, false);
+}
+
+int
+runGenerateTxs(CommandLineArgs const& args)
+{
+    return runGenerateOrSimulateTxs(args, true);
+}
+
+int
+runSimulateBuckets(CommandLineArgs const& args)
+{
+    CommandLine::ConfigOption configOption;
+    uint32_t ledger = 0;
+    uint32_t n = 2;
+    std::string hasStr = "";
+
+    ParserWithValidation ledgerParser{
+        clara::Arg(ledger, "LEDGER").required(),
+        [&] { return ledger > 0 ? "" : "Ledger must be non-zero"; }};
+
     return runWithHelp(
         args,
-        {configurationParser(configOption),
-         clara::Opt{opsPerLedger, "OPS-PER-LEDGER"}["--ops-per-ledger"](
-             "desired number of operations per ledger, will never be less but "
-             "could be up to 100 more"),
-         firstLedgerParser,
-         clara::Opt{lastLedgerInclusive, "LEDGER"}["--last-ledger-inclusive"](
-             "last ledger to read from history archive")},
+        {configurationParser(configOption), ledgerParser,
+         clara::Opt{n, "N"}["--multiplier"]("amplification factor"),
+         clara::Opt{hasStr, "FILENAME"}["--history-archive-state"](
+             "skip directly to application if buckets already generated")},
         [&] {
             auto config = configOption.getConfig();
             config.setNoListen();
 
+            std::shared_ptr<HistoryArchiveState> has;
+            if (!hasStr.empty())
+            {
+                LOG(INFO) << "Loading state from " << hasStr;
+                has = std::make_shared<HistoryArchiveState>();
+                has->load(hasStr);
+                config.DISABLE_BUCKET_GC =
+                    true; /* Do not wipe out simulated buckets */
+            }
+
             VirtualClock clock(VirtualClock::REAL_TIME);
-            auto app = Application::create(clock, config, false);
+            auto app = Application::create(clock, config, !has);
             app->start();
+            TmpDir dir(app->getTmpDirManager().tmpDir("simulate-buckets-tmp"));
 
-            LedgerRange lr{firstLedgerInclusive, lastLedgerInclusive};
-            CheckpointRange cr(lr, app->getHistoryManager());
-            TmpDir dir(app->getTmpDirManager().tmpDir("simulate"));
+            auto checkpoint =
+                app->getHistoryManager().checkpointContainingLedger(ledger);
 
-            auto downloadLedgers = std::make_shared<BatchDownloadWork>(
+            auto simulateBuckets =
+                std::make_shared<txsimulation::TxSimScaleBucketlistWork>(
+                    *app, n, checkpoint, dir, has);
+
+            // Once simulated bucketlist is good to go, download ledgers headers
+            // to convince LedgerManager that we have succesfully restored
+            // ledger state
+            auto cr = CheckpointRange::inclusive(
+                checkpoint, checkpoint,
+                app->getHistoryManager().getCheckpointFrequency());
+            auto downloadHeaders = std::make_shared<BatchDownloadWork>(
                 *app, cr, HISTORY_FILE_TYPE_LEDGER, dir);
-            auto downloadTransactions = std::make_shared<BatchDownloadWork>(
-                *app, cr, HISTORY_FILE_TYPE_TRANSACTIONS, dir);
-            auto downloadResults = std::make_shared<BatchDownloadWork>(
-                *app, cr, HISTORY_FILE_TYPE_RESULTS, dir);
-            auto apply = std::make_shared<ApplyTransactionsWork>(
-                *app, dir, lr, app->getConfig().NETWORK_PASSPHRASE,
-                opsPerLedger);
-            std::vector<std::shared_ptr<BasicWork>> seq{
-                downloadLedgers, downloadTransactions, downloadResults, apply};
 
-            app->getWorkScheduler().executeWork<WorkSequence>(
-                "download-simulate-seq", seq);
+            std::vector<std::shared_ptr<BasicWork>> seq{simulateBuckets,
+                                                        downloadHeaders};
+
+            auto w = app->getWorkScheduler().executeWork<WorkSequence>(
+                "simulate-bucketlist-application", seq);
+
+            if (w->getState() == BasicWork::State::WORK_SUCCESS)
+            {
+                // Ensure that LedgerManager's view of LCL is consistent with
+                // the bucketlist
+                FileTransferInfo ft(dir, HISTORY_FILE_TYPE_LEDGER, checkpoint);
+                XDRInputFileStream hdrIn;
+                hdrIn.open(ft.localPath_nogz());
+                LedgerHeaderHistoryEntry curr;
+                // Read the last LedgerHeaderHistoryEntry to use as LCL
+                while (hdrIn && hdrIn.readOne(curr))
+                    ;
+
+                LOG(INFO) << "Assuming state for ledger "
+                          << curr.header.ledgerSeq;
+                app->getLedgerManager().setLastClosedLedger(curr);
+                app->getBucketManager().forgetUnreferencedBuckets();
+            }
+
             return 0;
         });
 }
@@ -942,15 +1443,14 @@ handleCommandLine(int argc, char* const* argv)
           runCatchup},
          {"check-quorum", "check quorum intersection of last network activity",
           runCheckQuorum},
+         {"verify-checkpoints", "write verified checkpoint ledger hashes",
+          runWriteVerifiedCheckpointHashes},
          {"convert-id", "displays ID in all known forms", runConvertId},
          {"dump-xdr", "dump an XDR file, for debugging", runDumpXDR},
-         {"force-scp",
-          "next time DiamNet-core is run, SCP will start with "
-          "the local ledger rather than waiting to hear from the "
-          "network",
+         {"force-scp", "deprecated, use --wait-for-consensus option instead",
           runForceSCP},
          {"gen-seed", "generate and print a random node seed", runGenSeed},
-         {"http-command", "send a command to local DiamNet-core",
+         {"http-command", "send a command to local diamnet-core",
           runHttpCommand},
          {"infer-quorum", "print a quorum set inferred from history",
           runInferQuorum},
@@ -969,13 +1469,13 @@ handleCommandLine(int argc, char* const* argv)
           "report information about last checkpoint available in "
           "history archives",
           runReportLastHistoryCheckpoint},
-         {"run", "run DiamNet-core node", run},
+         {"run", "run diamnet-core node", run},
          {"sec-to-pub", "print the public key corresponding to a secret key",
           runSecToPub},
          {"sign-transaction",
           "add signature to transaction envelope, then quit",
           runSignTransaction},
-         {"upgrade-db", "upgade database schema to current version",
+         {"upgrade-db", "upgrade database schema to current version",
           runUpgradeDB},
 #ifdef BUILD_TESTS
          {"load-xdr", "load an XDR bucket file, for testing", runLoadXDR},
@@ -984,7 +1484,15 @@ handleCommandLine(int argc, char* const* argv)
           runRebuildLedgerFromBuckets},
          {"fuzz", "run a single fuzz input and exit", runFuzz},
          {"gen-fuzz", "generate a random fuzzer input file", runGenFuzz},
-         {"simulate", "simulate applying ledgers", runSimulate},
+         {"generate-transactions",
+          "generate simulated transactions based on a multiplier. Ensure a "
+          "proper writeable test archive is configured",
+          runGenerateTxs},
+         {"simulate-transactions",
+          "simulate applying ledgers from a real or simulated archive (must be "
+          "caught up)",
+          runSimulateTxs},
+         {"simulate-bucketlist", "simulate bucketlist", runSimulateBuckets},
          {"test", "execute test suite", runTest},
 #endif
          {"write-quorum", "print a quorum set graph from history",
@@ -995,7 +1503,7 @@ handleCommandLine(int argc, char* const* argv)
     auto command = commandLine.selectCommand(adjustedCommandLine.first);
     bool didDefaultToHelp = command->name() != adjustedCommandLine.first;
 
-    auto exeName = "DiamNet-core";
+    auto exeName = "diamnet-core";
     auto commandName = fmt::format("{0} {1}", exeName, command->name());
     auto args = CommandLineArgs{exeName, commandName, command->description(),
                                 adjustedCommandLine.second};

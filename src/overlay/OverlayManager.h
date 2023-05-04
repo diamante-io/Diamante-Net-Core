@@ -1,11 +1,11 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/Peer.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 
 /**
  * OverlayManager maintains a virtual broadcast network, consisting of a set of
@@ -14,13 +14,13 @@
  * pairs (ItemFetcher).
  *
  * Overlay network messages are defined as the XDR structure type
- * `DiamNetMessage`, in the file src/xdr/DiamNet-overlay.x
+ * `DiamnetMessage`, in the file src/xdr/Diamnet-overlay.x
  *
  * They are minimally framed using the Record Marking (RM) standard of RFC5531
  * (https://tools.ietf.org/html/rfc5531#page-16) and the RM-framed messages are
  * transmitted over TCP/IP sockets, between peers.
  *
- * The `DiamNetMessage` union contains 3 logically distinct kinds of message:
+ * The `DiamnetMessage` union contains 3 logically distinct kinds of message:
  *
  *  - Messages directed to or from a specific peer, with or without a response:
  *    HELLO, GET_PEERS, PEERS, DONT_HAVE, ERROR_MSG
@@ -43,13 +43,14 @@
  * records with other peers when asked.
  */
 
-namespace DiamNet
+namespace diamnet
 {
 
 class LoadManager;
 class PeerAuth;
 class PeerBareAddress;
 class PeerManager;
+class SurveyManager;
 
 class OverlayManager
 {
@@ -66,18 +67,41 @@ class OverlayManager
 
     // Send a given message to all peers, via the FloodGate. This is called by
     // Herder.
-    virtual void broadcastMessage(DiamNetMessage const& msg,
+    virtual void broadcastMessage(DiamnetMessage const& msg,
                                   bool force = false) = 0;
 
     // Make a note in the FloodGate that a given peer has provided us with a
     // given broadcast message, so that it is inhibited from being resent to
     // that peer. This does _not_ cause the message to be broadcast anew; to do
     // that, call broadcastMessage, above.
-    virtual void recvFloodedMsg(DiamNetMessage const& msg,
-                                Peer::pointer peer) = 0;
+    // Returns true if this is a new message
+    // fills msgID with msg's hash
+    virtual bool recvFloodedMsgID(DiamnetMessage const& msg, Peer::pointer peer,
+                                  Hash& msgID) = 0;
+
+    bool
+    recvFloodedMsg(DiamnetMessage const& msg, Peer::pointer peer)
+    {
+        Hash msgID;
+        return recvFloodedMsgID(msg, peer, msgID);
+    }
+
+    // removes msgID from the floodgate's internal state
+    // as it's not tracked anymore, calling "broadcast" with a (now forgotten)
+    // message with the ID msgID will cause it to be broadcast to all peers
+    virtual void forgetFloodedMsg(Hash const& msgID) = 0;
 
     // Return a list of random peers from the set of authenticated peers.
     virtual std::vector<Peer::pointer> getRandomAuthenticatedPeers() = 0;
+
+    // Return a list of random peers from the set of inbound authenticated
+    // peers.
+    virtual std::vector<Peer::pointer> getRandomInboundAuthenticatedPeers() = 0;
+
+    // Return a list of random peers from the set of outbound authenticated
+    // peers.
+    virtual std::vector<Peer::pointer>
+    getRandomOutboundAuthenticatedPeers() = 0;
 
     // Return an already-connected peer at the given address; returns a
     // `nullptr`-valued pointer if no such connected peer exists.
@@ -149,6 +173,8 @@ class OverlayManager
     // Return the persistent peer manager
     virtual PeerManager& getPeerManager() = 0;
 
+    virtual SurveyManager& getSurveyManager() = 0;
+
     // start up all background tasks for overlay
     virtual void start() = 0;
     // drops all connections
@@ -156,8 +182,11 @@ class OverlayManager
 
     virtual bool isShuttingDown() const = 0;
 
-    virtual void
-    recordDuplicateMessageMetric(DiamNetMessage const& DiamNetMsg) = 0;
+    virtual void recordMessageMetric(DiamnetMessage const& diamnetMsg,
+                                     Peer::pointer peer) = 0;
+
+    virtual void updateFloodRecord(DiamnetMessage const& oldMsg,
+                                   DiamnetMessage const& newMsg) = 0;
 
     virtual ~OverlayManager()
     {

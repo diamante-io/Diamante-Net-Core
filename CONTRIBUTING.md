@@ -2,9 +2,9 @@
 
 👍🎉 First off, thanks for taking the time to contribute! 🎉👍
 
-Check out the [DiamNet Contribution
-Guide](https://github.com/DiamNet/.github/blob/master/CONTRIBUTING.md) for details on contributing
-to DiamNet-core and DiamNet's other repositories, especially with regard to our code of conduct and
+Check out the [Diamnet Contribution
+Guide](https://github.com/diamnet/.github/blob/master/CONTRIBUTING.md) for details on contributing
+to diamnet-core and Diamnet's other repositories, especially with regard to our code of conduct and
 contributor license agreement.
 
 ## Submitting Changes
@@ -17,13 +17,13 @@ Submit a pull request rebased on top of master
 At this point you're waiting on us. We like to at least comment on pull requests within one week
 (and, typically, three business days). We may suggest some changes or improvements or alternatives.
 
-## DiamNet Core Contribution Specifics
+## Diamnet Core Contribution Specifics
 
 ### General
 * Try to separate logically distinct changes into separate commits and thematically distinct
   commits into separate pull requests.
 * Please ensure that all tests pass before submitting changes. The local testsuite can be run as
-  `make check` or `src/DiamNet-core test`, see [README](./README.md) for details on running tests.
+  `make check` or `src/diamnet-core test`, see [README](./README.md) for details on running tests.
 
 ### Keeping our commit history clean
 
@@ -40,7 +40,7 @@ master as you pull changes from upstream.
 ### Testing
 
 Please ensure that all tests pass before submitting changes. The local testsuite can be run as
-`make check` or `src/DiamNet-core --test`, see [README](./README.md) for details on running tests.
+`make check` or `src/diamnet-core --test`, see [README](./README.md) for details on running tests.
 
 ### Code Style
 
@@ -78,7 +78,8 @@ This enables additional debug checks such as passed the end iterators.
 More information can be found:
 * [libstdc++ debug mode](https://gcc.gnu.org/onlinedocs/libstdc++/manual/debug_mode.html)
 * [libc++ debug mode](https://libcxx.llvm.org/docs/DesignDocs/DebugMode.html#using-debug-mode)
-
+  * Note that when using the default libc++, we set `_LIBCPP_DEBUG=0` to avoid compatibility issues with the default shared runtimes.
+  * To enable full debug mode `_LIBCPP_DEBUG=1`, you need to build a custom libc++ with the same flags, including `_LIBCPP_DEBUG=1` (see below on how to do this)
 
 ## Sanitizers
 
@@ -124,13 +125,13 @@ to the configure script).
 
 ## Running tests basics
 run tests with:
-  `src/DiamNet-core test`
+  `src/diamnet-core test`
 
 run one test with:
-  `src/DiamNet-core test  testName`
+  `src/diamnet-core test  testName`
 
 run one test category with:
-  `src/DiamNet-core test '[categoryName]'`
+  `src/diamnet-core test '[categoryName]'`
 
 Categories (or tags) can be combined: AND-ed (by juxtaposition) or OR-ed (by comma-listing).
 
@@ -139,13 +140,13 @@ Tests tagged as [.] or [hide] are not part of the default test.
 Tests tagged as [acceptance] are not part of `make check` test runs.
 
 supported test options can be seen with
-  `src/DiamNet-core test --help`
+  `src/diamnet-core test --help`
 
 display tests timing information:
-  `src/DiamNet-core test -d yes '[categoryName]'`
+  `src/diamnet-core test -d yes '[categoryName]'`
 
 xml test output (includes nested section information):
-  `src/DiamNet-core test -r xml '[categoryName]'`
+  `src/diamnet-core test -r xml '[categoryName]'`
 
 ## Running tests against postgreSQL
 
@@ -191,6 +192,6 @@ We adopt the convention of tagging a stress-test for subsystem foo as [foo-stres
 
 Then, running:
 
-* `DiamNet-core test [stress]` will run all the stress tests,
-* `DiamNet-core test [foo-stress]` will run the stress tests for subsystem foo alone, and
-* neither `DiamNet-core test` nor `DiamNet-core test [foo]` will run stress tests.
+* `diamnet-core test [stress]` will run all the stress tests,
+* `diamnet-core test [foo-stress]` will run the stress tests for subsystem foo alone, and
+* neither `diamnet-core test` nor `diamnet-core test [foo]` will run stress tests.

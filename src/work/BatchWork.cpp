@@ -1,13 +1,14 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "work/BatchWork.h"
 #include "catchup/CatchupManager.h"
 #include "util/Logging.h"
-#include "util/format.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 BatchWork::BatchWork(Application& app, std::string name)
@@ -25,6 +26,7 @@ BatchWork::doReset()
 BasicWork::State
 BatchWork::doWork()
 {
+    ZoneScoped;
     if (anyChildRaiseFailure())
     {
         return State::WORK_FAILURE;
@@ -62,6 +64,7 @@ BatchWork::doWork()
 void
 BatchWork::addMoreWorkIfNeeded()
 {
+    ZoneScoped;
     if (isAborting())
     {
         throw std::runtime_error(getName() + " is being aborted!");

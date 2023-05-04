@@ -1,9 +1,10 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "main/ApplicationUtils.h"
 #include "bucket/Bucket.h"
+#include "bucket/BucketManager.h"
 #include "catchup/ApplyBucketsWork.h"
 #include "catchup/CatchupConfiguration.h"
 #include "database/Database.h"
@@ -15,36 +16,51 @@
 #include "main/ExternalQueue.h"
 #include "main/Maintainer.h"
 #include "main/PersistentState.h"
-#include "main/DiamNetCoreVersion.h"
+#include "main/DiamnetCoreVersion.h"
+#include "overlay/OverlayManager.h"
 #include "util/Logging.h"
 #include "work/WorkScheduler.h"
 
 #include <lib/http/HttpClient.h>
 #include <locale>
 
-namespace DiamNet
+namespace diamnet
 {
 
 int
-runWithConfig(Config cfg)
+runWithConfig(Config cfg, optional<CatchupConfiguration> cc)
 {
+    VirtualClock::Mode clockMode = VirtualClock::REAL_TIME;
+
     if (cfg.MANUAL_CLOSE)
     {
         if (!cfg.NODE_IS_VALIDATOR)
         {
-            LOG(ERROR) << "Starting DiamNet-core in MANUAL_CLOSE mode requires "
+            LOG(ERROR) << "Starting diamnet-core in MANUAL_CLOSE mode requires "
                           "NODE_IS_VALIDATOR to be set";
             return 1;
         }
-
-        // in manual close mode, we set FORCE_SCP
-        // so that the node starts fully in sync
-        // (this is to avoid to force scp all the time when testing)
-        cfg.FORCE_SCP = true;
+        if (cfg.RUN_STANDALONE)
+        {
+            clockMode = VirtualClock::VIRTUAL_TIME;
+            if (cfg.AUTOMATIC_MAINTENANCE_COUNT != 0 ||
+                cfg.AUTOMATIC_MAINTENANCE_PERIOD.count() != 0)
+            {
+                LOG(WARNING)
+                    << "Using MANUAL_CLOSE and RUN_STANDALONE together "
+                       "induces virtual time, which requires automatic "
+                       "maintenance to be disabled.  "
+                       "AUTOMATIC_MAINTENANCE_COUNT and "
+                       "AUTOMATIC_MAINTENANCE_PERIOD are being overridden to "
+                       "0.";
+                cfg.AUTOMATIC_MAINTENANCE_COUNT = 0;
+                cfg.AUTOMATIC_MAINTENANCE_PERIOD = std::chrono::seconds{0};
+            }
+        }
     }
 
-    LOG(INFO) << "Starting DiamNet-core " << DiamNet_CORE_VERSION;
-    VirtualClock clock(VirtualClock::REAL_TIME);
+    LOG(INFO) << "Starting diamnet-core " << DIAMNET_CORE_VERSION;
+    VirtualClock clock(clockMode);
     Application::pointer app;
     try
     {
@@ -60,7 +76,27 @@ runWithConfig(Config cfg)
                          << "(for testing only)";
         }
 
-        app->start();
+        if (cc)
+        {
+            Json::Value catchupInfo;
+            std::shared_ptr<HistoryArchive> archive;
+            auto const& ham = app->getHistoryArchiveManager();
+            archive = ham.selectRandomReadableHistoryArchive();
+            int res = catchup(app, *cc, catchupInfo, archive);
+            if (res != 0)
+            {
+                return res;
+            }
+        }
+        else
+        {
+            app->start();
+        }
+
+        if (!cfg.MODE_AUTO_STARTS_OVERLAY)
+        {
+            app->getOverlayManager().start();
+        }
 
         app->applyCfgCommands();
     }
@@ -136,33 +172,12 @@ httpCommand(std::string const& command, unsigned short port)
 }
 
 void
-setForceSCPFlag(Config cfg, bool set)
+setForceSCPFlag()
 {
-    VirtualClock clock;
-    cfg.setNoListen();
-    Application::pointer app = Application::create(clock, cfg, false);
-
-    app->getPersistentState().setState(PersistentState::kForceSCPOnNextLaunch,
-                                       (set ? "true" : "false"));
-    if (set)
-    {
-        LOG(INFO) << "* ";
-        LOG(INFO) << "* The `force scp` flag has been set in the db.";
-        LOG(INFO) << "* ";
-        LOG(INFO)
-            << "* The next launch will start scp from the account balances";
-        LOG(INFO) << "* as they stand in the db now, without waiting to "
-                     "hear from";
-        LOG(INFO) << "* the network.";
-        LOG(INFO) << "* ";
-    }
-    else
-    {
-        LOG(INFO) << "* ";
-        LOG(INFO) << "* The `force scp` flag has been cleared.";
-        LOG(INFO) << "* The next launch will start normally.";
-        LOG(INFO) << "* ";
-    }
+    LOG(WARNING) << "* ";
+    LOG(WARNING) << "* Nothing to do: `force scp` command has been deprecated";
+    LOG(WARNING) << "* Refer to `--wait-for-consensus` run option instead";
+    LOG(WARNING) << "* ";
 }
 
 void
@@ -236,8 +251,7 @@ rebuildLedgerFromBuckets(Config cfg)
     has.prepareForPublish(*app);
 
     auto applyBucketsWork = ws.executeWork<ApplyBucketsWork>(
-        localBuckets, has, Config::CURRENT_LEDGER_PROTOCOL_VERSION,
-        /* resolveMerges */ false);
+        localBuckets, has, Config::CURRENT_LEDGER_PROTOCOL_VERSION);
     auto ok = applyBucketsWork->getState() == BasicWork::State::WORK_SUCCESS;
     if (ok)
     {
@@ -345,6 +359,7 @@ writeCatchupInfo(Json::Value const& catchupInfo, std::string const& outputFile)
     else
     {
         std::ofstream out{};
+        out.exceptions(std::ios::failbit | std::ios::badbit);
         out.open(filename);
         out.write(content.c_str(), content.size());
         out.close();
@@ -357,13 +372,13 @@ writeCatchupInfo(Json::Value const& catchupInfo, std::string const& outputFile)
 
 int
 catchup(Application::pointer app, CatchupConfiguration cc,
-        Json::Value& catchupInfo)
+        Json::Value& catchupInfo, std::shared_ptr<HistoryArchive> archive)
 {
     app->start();
 
     try
     {
-        app->getLedgerManager().startCatchup(cc);
+        app->getLedgerManager().startCatchup(cc, archive);
     }
     catch (std::invalid_argument const&)
     {
@@ -373,7 +388,7 @@ catchup(Application::pointer app, CatchupConfiguration cc,
                   << app->getLedgerManager().getLastClosedLedgerNum()
                   << " - nothing to do";
         LOG(INFO) << "* If you really want to catchup to " << cc.toLedger()
-                  << " run DiamNet-core new-db";
+                  << " run diamnet-core new-db";
         LOG(INFO) << "*";
         return 2;
     }
@@ -385,29 +400,26 @@ catchup(Application::pointer app, CatchupConfiguration cc,
     auto done = false;
     while (!done && clock.crank(true))
     {
-        switch (app->getLedgerManager().getState())
+        switch (app->getCatchupManager().getCatchupWorkState())
         {
-        case LedgerManager::LM_BOOTING_STATE:
+        case BasicWork::State::WORK_ABORTED:
+        case BasicWork::State::WORK_FAILURE:
         {
             done = true;
             break;
         }
-        case LedgerManager::LM_SYNCED_STATE:
+        case BasicWork::State::WORK_SUCCESS:
         {
             done = true;
             synced = true;
             break;
         }
-        case LedgerManager::LM_CATCHING_UP_STATE:
+        case BasicWork::State::WORK_RUNNING:
+        case BasicWork::State::WORK_WAITING:
         {
-            if (app->getLedgerManager().getCatchupState() ==
-                LedgerManager::CatchupState::NONE)
-            {
-                abort();
-            }
             break;
         }
-        case LedgerManager::LM_NUM_STATE:
+        default:
             abort();
         }
     }
@@ -437,8 +449,7 @@ publish(Application::pointer app)
     asio::io_context::work mainWork(io);
 
     auto lcl = app->getLedgerManager().getLastClosedLedgerNum();
-    auto isCheckpoint =
-        lcl == app->getHistoryManager().checkpointContainingLedger(lcl);
+    auto isCheckpoint = app->getHistoryManager().isLastLedgerInCheckpoint(lcl);
     auto expectedPublishQueueSize = isCheckpoint ? 1 : 0;
 
     app->getHistoryManager().publishQueuedHistory();
@@ -447,6 +458,9 @@ publish(Application::pointer app)
            clock.crank(true))
     {
     }
+
+    // Cleanup buckets not referenced by publish queue anymore
+    app->getBucketManager().forgetUnreferencedBuckets();
 
     LOG(INFO) << "*";
     LOG(INFO) << "* Publish finished.";

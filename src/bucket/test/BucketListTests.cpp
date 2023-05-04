@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,6 +16,7 @@
 #include "bucket/BucketManager.h"
 #include "bucket/BucketOutputIterator.h"
 #include "bucket/BucketTests.h"
+#include "ledger/test/LedgerTestUtils.h"
 #include "lib/catch.hpp"
 #include "main/Application.h"
 #include "main/Config.h"
@@ -28,7 +29,7 @@
 #include <deque>
 #include <sstream>
 
-using namespace DiamNet;
+using namespace diamnet;
 using namespace BucketTests;
 
 namespace BucketListTests
@@ -285,12 +286,12 @@ TEST_CASE("bucket tombstones expire at bottom level",
             level.setCurr(Bucket::fresh(
                 bm, getAppLedgerVersion(app), {},
                 LedgerTestUtils::generateValidLedgerEntries(8), deadGen(8),
-                /*countMergeEvents=*/true,
+                /*countMergeEvents=*/true, clock.getIOContext(),
                 /*doFsync=*/true));
             level.setSnap(Bucket::fresh(
                 bm, getAppLedgerVersion(app), {},
                 LedgerTestUtils::generateValidLedgerEntries(8), deadGen(8),
-                /*countMergeEvents=*/true,
+                /*countMergeEvents=*/true, clock.getIOContext(),
                 /*doFsync=*/true));
         }
 
@@ -413,8 +414,8 @@ TEST_CASE("single entry bubbling up", "[bucket][bucketlist][bucketbubble]")
         for_versions_with_differing_bucket_logic(cfg, [&](Config const& cfg) {
             Application::pointer app = createTestApplication(clock, cfg);
             BucketList bl;
-            std::vector<DiamNet::LedgerKey> emptySet;
-            std::vector<DiamNet::LedgerEntry> emptySetEntry;
+            std::vector<diamnet::LedgerKey> emptySet;
+            std::vector<diamnet::LedgerEntry> emptySetEntry;
 
             CLOG(DEBUG, "Bucket") << "Adding single entry in lowest level";
             bl.addBatch(*app, 1, getAppLedgerVersion(app), {},

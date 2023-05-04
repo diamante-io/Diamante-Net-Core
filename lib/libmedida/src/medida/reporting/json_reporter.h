@@ -22,6 +22,7 @@ class JsonReporter : public MetricProcessor {
   virtual void Process(Meter& meter);
   virtual void Process(Histogram& histogram);
   virtual void Process(Timer& timer);
+  virtual void Process(Buckets& buckets);
   virtual std::string Report();
  private:
   class Impl;

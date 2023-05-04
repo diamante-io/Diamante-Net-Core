@@ -1,17 +1,18 @@
 #pragma once
 
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include <memory>
 #include <vector>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
 class AbstractLedgerTxn;
+struct AccountEntry;
 struct LedgerEntry;
 struct OperationResult;
 
@@ -34,5 +35,9 @@ UpdateList makeUpdateList(std::vector<LedgerEntry> const& current,
                           std::vector<LedgerEntry> const& previous);
 UpdateList makeUpdateList(std::nullptr_t current,
                           std::vector<LedgerEntry> const& previous);
+
+void normalizeSigners(AccountEntry& acc);
+
+int64_t getMinBalance(Application& app, AccountEntry const& acc);
 }
 }

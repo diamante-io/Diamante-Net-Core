@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,14 +11,16 @@
 #include "test/TestUtils.h"
 #include "test/TxTests.h"
 #include "test/test.h"
+#include "transactions/TransactionBridge.h"
 #include "util/Timer.h"
 
 #include <algorithm>
 #include <lib/catch.hpp>
 #include <xdrpp/printer.h>
 
-using namespace DiamNet;
-using namespace DiamNet::txtest;
+using namespace diamnet;
+using namespace diamnet::txbridge;
+using namespace diamnet::txtest;
 
 /*
   Test how TxResults are created from valid and malformed transactions,
@@ -50,43 +52,6 @@ enum class PaymentValidity
     MALFORMED,
     UNDERFUNDED
 };
-
-static auto signedTypes = std::vector<Signed>{
-    Signed::NOT_SIGNED, Signed::SIGNED, Signed::DOUBLE_SIGNED};
-static auto signedNames =
-    std::map<Signed, std::string>{{Signed::NOT_SIGNED, "not signed"},
-                                  {Signed::SIGNED, "signed"},
-                                  {Signed::DOUBLE_SIGNED, "double signed"}};
-static auto paymentValidityTypes = std::vector<PaymentValidity>{
-    PaymentValidity::VALID, PaymentValidity::MALFORMED,
-    PaymentValidity::UNDERFUNDED};
-static auto paymentValidityNames = std::map<PaymentValidity, std::string>{
-    {PaymentValidity::VALID, "valid"},
-    {PaymentValidity::MALFORMED, "malformed"},
-    {PaymentValidity::UNDERFUNDED, "underfunded"}};
-}
-
-template <typename T>
-std::vector<std::vector<T>>
-variations(int count, std::vector<T> values)
-{
-    if (count == 0)
-    {
-        return {{}};
-    }
-
-    auto result = std::vector<std::vector<T>>{};
-    auto sub = variations(count - 1, values);
-    for (auto s : sub)
-    {
-        for (auto v : values)
-        {
-            result.push_back(s);
-            result.back().push_back(v);
-        }
-    }
-
-    return result;
 }
 
 TEST_CASE("txresults", "[tx][txresults]")
@@ -274,63 +239,60 @@ TEST_CASE("txresults", "[tx][txresults]")
         {
             SECTION("missing operation")
             {
-                auto tx = a.tx({});
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app, {0, txMISSING_OPERATION});
+                    auto tx = a.tx({});
+                    validateTxResults(tx, *app, {baseFee, txMISSING_OPERATION});
                 });
             }
 
             SECTION("too early")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().tx.timeBounds.activate().minTime =
-                    getCloseTime() + 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    setMinTime(tx, getCloseTime() + 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_EARLY});
                 });
             }
 
             SECTION("too late")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().tx.timeBounds.activate().maxTime =
-                    getCloseTime() - 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    setMaxTime(tx, getCloseTime() - 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_LATE});
                 });
             }
 
             SECTION("insufficent fee")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().tx.fee--;
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app,
-                                      {baseFee - 1, txINSUFFICIENT_FEE});
+                    auto tx = a.tx({payment(root, 1)});
+                    setFee(tx, static_cast<uint32_t>(tx->getFeeBid()) - 1);
+                    validateTxResults(tx, *app, {baseFee, txINSUFFICIENT_FEE});
                 });
             }
 
             SECTION("no account")
             {
-                auto tx = f.tx({payment(root, 1)});
                 for_all_versions(*app, [&] {
+                    auto tx = f.tx({payment(root, 1)});
                     validateTxResults(tx, *app, {baseFee, txNO_ACCOUNT});
                 });
             }
 
             SECTION("bad seq")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().tx.seqNum++;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    setSeqNum(tx, tx->getSeqNum() + 1);
                     validateTxResults(tx, *app, {baseFee, txBAD_SEQ});
                 });
             }
 
             SECTION("insufficent balance")
             {
-                auto tx = g.tx({payment(root, 1)});
                 for_all_versions(*app, [&] {
+                    auto tx = g.tx({payment(root, 1)});
                     validateTxResults(tx, *app,
                                       {baseFee, txINSUFFICIENT_BALANCE});
                 });
@@ -341,77 +303,78 @@ TEST_CASE("txresults", "[tx][txresults]")
         {
             SECTION("missing operation")
             {
-                auto tx = a.tx({});
-                tx->getEnvelope().signatures.clear();
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app, {0, txMISSING_OPERATION});
+                    auto tx = a.tx({});
+                    getSignatures(tx).clear();
+                    validateTxResults(tx, *app, {baseFee, txMISSING_OPERATION});
                 });
             }
 
             SECTION("too early")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
-                tx->getEnvelope().tx.timeBounds.activate().minTime =
-                    getCloseTime() + 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
+                    setMinTime(tx, getCloseTime() + 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_EARLY});
                 });
             }
 
             SECTION("too late")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
-                tx->getEnvelope().tx.timeBounds.activate().maxTime =
-                    getCloseTime() - 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
+                    setMaxTime(tx, getCloseTime() - 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_LATE});
                 });
             }
 
             SECTION("insufficent fee")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
-                tx->getEnvelope().tx.fee--;
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app,
-                                      {baseFee - 1, txINSUFFICIENT_FEE});
+                    auto tx = a.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
+                    setFee(tx, static_cast<uint32_t>(tx->getFeeBid()) - 1);
+                    validateTxResults(tx, *app, {baseFee, txINSUFFICIENT_FEE});
                 });
             }
 
             SECTION("no account")
             {
-                auto tx = f.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
                 for_all_versions(*app, [&] {
+                    auto tx = f.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
                     validateTxResults(tx, *app, {baseFee, txNO_ACCOUNT});
                 });
             }
 
             SECTION("bad seq")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
-                tx->getEnvelope().tx.seqNum++;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
+                    setSeqNum(tx, tx->getSeqNum() + 1);
                     validateTxResults(tx, *app, {baseFee, txBAD_SEQ});
                 });
             }
 
             SECTION("insufficent balance")
             {
-                auto tx = g.tx({payment(root, 1)});
-                tx->getEnvelope().signatures.clear();
                 for_versions_to(6, *app, [&] {
+                    auto tx = g.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
                     validateTxResults(tx, *app, {baseFee, txBAD_AUTH});
                 });
                 for_versions({7}, *app, [&] {
+                    auto tx = g.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
                     validateTxResults(tx, *app,
                                       {baseFee, txINSUFFICIENT_BALANCE});
                 });
                 for_versions_from(8, *app, [&] {
+                    auto tx = g.tx({payment(root, 1)});
+                    getSignatures(tx).clear();
                     validateTxResults(tx, *app, {baseFee, txBAD_AUTH});
                 });
             }
@@ -421,70 +384,67 @@ TEST_CASE("txresults", "[tx][txresults]")
         {
             SECTION("missing operation")
             {
-                auto tx = a.tx({});
-                tx->addSignature(a);
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app, {0, txMISSING_OPERATION});
+                    auto tx = a.tx({});
+                    tx->addSignature(a);
+                    validateTxResults(tx, *app, {baseFee, txMISSING_OPERATION});
                 });
             }
 
             SECTION("too early")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->addSignature(a);
-                tx->getEnvelope().tx.timeBounds.activate().minTime =
-                    getCloseTime() + 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    tx->addSignature(a);
+                    setMinTime(tx, getCloseTime() + 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_EARLY});
                 });
             }
 
             SECTION("too late")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->addSignature(a);
-                tx->getEnvelope().tx.timeBounds.activate().maxTime =
-                    getCloseTime() - 1;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    tx->addSignature(a);
+                    setMaxTime(tx, getCloseTime() - 1);
                     validateTxResults(tx, *app, {baseFee, txTOO_LATE});
                 });
             }
 
             SECTION("insufficent fee")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->addSignature(a);
-                tx->getEnvelope().tx.fee--;
                 for_all_versions(*app, [&] {
-                    validateTxResults(tx, *app,
-                                      {baseFee - 1, txINSUFFICIENT_FEE});
+                    auto tx = a.tx({payment(root, 1)});
+                    tx->addSignature(a);
+                    setFee(tx, static_cast<uint32_t>(tx->getFeeBid()) - 1);
+                    validateTxResults(tx, *app, {baseFee, txINSUFFICIENT_FEE});
                 });
             }
 
             SECTION("no account")
             {
-                auto tx = f.tx({payment(root, 1)});
-                tx->addSignature(a);
                 for_all_versions(*app, [&] {
+                    auto tx = f.tx({payment(root, 1)});
+                    tx->addSignature(a);
                     validateTxResults(tx, *app, {baseFee, txNO_ACCOUNT});
                 });
             }
 
             SECTION("bad seq")
             {
-                auto tx = a.tx({payment(root, 1)});
-                tx->addSignature(a);
-                tx->getEnvelope().tx.seqNum++;
                 for_all_versions(*app, [&] {
+                    auto tx = a.tx({payment(root, 1)});
+                    tx->addSignature(a);
+                    setSeqNum(tx, tx->getSeqNum() + 1);
                     validateTxResults(tx, *app, {baseFee, txBAD_SEQ});
                 });
             }
 
             SECTION("insufficent balance")
             {
-                auto tx = g.tx({payment(root, 1)});
-                tx->addSignature(a);
                 for_all_versions(*app, [&] {
+                    auto tx = g.tx({payment(root, 1)});
+                    tx->addSignature(a);
                     validateTxResults(tx, *app,
                                       {baseFee, txINSUFFICIENT_BALANCE});
                 });
@@ -492,98 +452,16 @@ TEST_CASE("txresults", "[tx][txresults]")
         }
     }
 
-    auto sign3 = variations<Signed>(3, signedTypes);
-    auto op3 = variations<PaymentValidity>(3, paymentValidityTypes);
-
-    auto signSectionName = [](std::vector<Signed> const& signs) {
-        auto result = std::string{"tx and op1 " + signedNames[signs[0]]};
-        for (size_t i = 1; i < signs.size(); i++)
-            result +=
-                ", op" + std::to_string(i + 1) + " " + signedNames[signs[i]];
-        return result;
-    };
-    auto opSectionName = [](std::vector<PaymentValidity> const& ops) {
-        auto result = std::string{"op1 " + paymentValidityNames[ops[0]]};
-        for (size_t i = 1; i < ops.size(); i++)
-            result += ", op" + std::to_string(i + 1) + " " +
-                      paymentValidityNames[ops[i]];
-        return result;
-    };
-
-    auto accounts = std::vector<TestAccount*>{&a, &b, &c, &d, &e};
-    auto makeTx = [&](std::vector<Signed> const& signs,
-                      std::vector<PaymentValidity> const& ops) {
-        auto operations = std::vector<Operation>{};
-        for (size_t i = 0; i < ops.size(); i++)
-        {
-            auto destination = accounts[(i + 1) % ops.size()];
-            auto op = payment(*destination, amount(ops[i]));
-            if (i != 0)
-                op = accounts[i]->op(op);
-            operations.push_back(op);
-        }
-
-        auto tx = a.tx(operations);
-        tx->getEnvelope().signatures.clear();
-
-        for (size_t i = 0; i < signs.size(); i++)
-        {
-            sign(tx, *accounts[i], signs[i]);
-        }
-
-        return tx;
-    };
-
-    auto test = [&](std::vector<Signed> const& signs,
-                    std::vector<PaymentValidity> const& ops) {
-        auto tx = makeTx(signs, ops);
-        for_all_versions(*app, [&] {
-            uint32_t ledgerVersion = 0;
-            {
-                LedgerTxn ltx(app->getLedgerTxnRoot());
-                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
-            }
-            auto validationResult =
-                makeValidationResult(signs, ops, ledgerVersion);
-            auto applyResult = makeApplyResult(signs, ops, ledgerVersion);
-            validateTxResults(tx, *app, validationResult, applyResult);
-        });
-    };
-
-    for (auto signs : sign3)
-    {
-        SECTION(signSectionName(signs))
-        {
-            for (auto ops : op3)
-            {
-                SECTION(opSectionName(ops))
-                {
-                    test(signs, ops);
-                }
-            }
-        }
-    }
-
-    SECTION("5 signed but underfunded")
-    {
-        test({Signed::SIGNED, Signed::SIGNED, Signed::SIGNED, Signed::SIGNED,
-              Signed::SIGNED},
-             {PaymentValidity::UNDERFUNDED, PaymentValidity::UNDERFUNDED,
-              PaymentValidity::UNDERFUNDED, PaymentValidity::UNDERFUNDED,
-              PaymentValidity::UNDERFUNDED});
-    }
-
     SECTION("merge account")
     {
         closeLedgerOn(*app, 2, 1, 1, 2016);
         SECTION("normal")
         {
-            auto tx = a.tx({payment(b, 1000), accountMerge(root)});
-
             auto applyResult = expectedResult(
                 baseFee * 2, 2, txSUCCESS,
                 {PAYMENT_SUCCESS, {ACCOUNT_MERGE_SUCCESS, startAmount - 1200}});
             for_all_versions(*app, [&] {
+                auto tx = a.tx({payment(b, 1000), accountMerge(root)});
                 validateTxResults(tx, *app, {baseFee * 2, txSUCCESS},
                                   applyResult);
             });
@@ -591,15 +469,16 @@ TEST_CASE("txresults", "[tx][txresults]")
 
         SECTION("with operation after")
         {
-            auto tx =
-                a.tx({payment(b, 1000), accountMerge(root), payment(c, 1000)});
-
             for_versions_to(7, *app, [&] {
+                auto tx = a.tx(
+                    {payment(b, 1000), accountMerge(root), payment(c, 1000)});
                 validateTxResults(
                     tx, *app, {baseFee * 3, txSUCCESS},
                     expectedResult(baseFee * 3, 3, txINTERNAL_ERROR));
             });
             for_versions_from(8, *app, [&] {
+                auto tx = a.tx(
+                    {payment(b, 1000), accountMerge(root), payment(c, 1000)});
                 validateTxResults(
                     tx, *app, {baseFee * 3, txSUCCESS},
                     expectedResult(baseFee * 3, 3, txFAILED,
@@ -615,9 +494,8 @@ TEST_CASE("txresults", "[tx][txresults]")
     {
         SECTION("normal")
         {
-            auto tx = root.tx({createAccount(f, startAmount)});
-
             for_all_versions(*app, [&] {
+                auto tx = root.tx({createAccount(f, startAmount)});
                 validateTxResults(tx, *app, {baseFee * 1, txSUCCESS},
                                   expectedResult(baseFee * 1, 1, txSUCCESS,
                                                  {CREATE_ACCOUNT_SUCCESS}));
@@ -626,11 +504,10 @@ TEST_CASE("txresults", "[tx][txresults]")
 
         SECTION("with payment after")
         {
-            auto tx = root.tx({createAccount(f, startAmount),
-                               a.op(payment(root, startAmount / 2))});
-            tx->addSignature(a);
-
             for_all_versions(*app, [&] {
+                auto tx = root.tx({createAccount(f, startAmount),
+                                   a.op(payment(root, startAmount / 2))});
+                tx->addSignature(a);
                 validateTxResults(
                     tx, *app, {baseFee * 2, txSUCCESS},
                     expectedResult(baseFee * 2, 2, txSUCCESS,
@@ -646,8 +523,8 @@ TEST_CASE("txresults", "[tx][txresults]")
 
         SECTION("normal")
         {
-            auto tx = a.tx({payment(b, 1000), setOptions(th)});
             for_all_versions(*app, [&] {
+                auto tx = a.tx({payment(b, 1000), setOptions(th)});
                 validateTxResults(
                     tx, *app, {baseFee * 2, txSUCCESS},
                     expectedResult(baseFee * 2, 2, txSUCCESS,
@@ -657,10 +534,9 @@ TEST_CASE("txresults", "[tx][txresults]")
 
         SECTION("with operation after")
         {
-            auto tx =
-                a.tx({payment(b, 1000), setOptions(th), payment(c, 1000)});
-
             for_versions_to(6, *app, [&] {
+                auto tx =
+                    a.tx({payment(b, 1000), setOptions(th), payment(c, 1000)});
                 validateTxResults(
                     tx, *app, {baseFee * 3, txSUCCESS},
                     expectedResult(
@@ -668,6 +544,8 @@ TEST_CASE("txresults", "[tx][txresults]")
                         {PAYMENT_SUCCESS, SET_OPTIONS_SUCCESS, opBAD_AUTH}));
             });
             for_versions({8, 9}, *app, [&] {
+                auto tx =
+                    a.tx({payment(b, 1000), setOptions(th), payment(c, 1000)});
                 validateTxResults(
                     tx, *app, {baseFee * 3, txSUCCESS},
                     expectedResult(
@@ -675,6 +553,8 @@ TEST_CASE("txresults", "[tx][txresults]")
                         {PAYMENT_SUCCESS, SET_OPTIONS_SUCCESS, opBAD_AUTH}));
             });
             for_versions_from({7, 10}, *app, [&] {
+                auto tx =
+                    a.tx({payment(b, 1000), setOptions(th), payment(c, 1000)});
                 validateTxResults(
                     tx, *app, {baseFee * 3, txSUCCESS},
                     expectedResult(baseFee * 3, 3, txSUCCESS,
@@ -686,17 +566,18 @@ TEST_CASE("txresults", "[tx][txresults]")
         SECTION("before tx")
         {
             a.setOptions(th);
-            auto tx = a.tx({payment(b, 1000)});
-
             for_versions_to(6, *app, [&] {
+                auto tx = a.tx({payment(b, 1000)});
                 validateTxResults(tx, *app, {baseFee * 1, txFAILED});
             });
             for_versions({7}, *app, [&] {
+                auto tx = a.tx({payment(b, 1000)});
                 validateTxResults(tx, *app, {baseFee * 1, txSUCCESS},
                                   expectedResult(baseFee * 1, 1, txSUCCESS,
                                                  {PAYMENT_SUCCESS}));
             });
             for_versions_from(8, *app, [&] {
+                auto tx = a.tx({payment(b, 1000)});
                 validateTxResults(tx, *app, {baseFee * 1, txFAILED});
             });
         }
@@ -714,13 +595,14 @@ TEST_CASE("txresults", "[tx][txresults]")
             market.requireChangesWithOffer({}, [&] {
                 return market.addOffer(acc, {native, cur1, Price{1, 1}, 1000});
             });
-            auto tx = acc.tx({payment(root, 1)});
             for_versions_to(9, *app, [&] {
+                auto tx = acc.tx({payment(root, 1)});
                 auto res =
                     expectedResult(baseFee, 1, txSUCCESS, {PAYMENT_SUCCESS});
                 validateTxResults(tx, *app, {baseFee, txSUCCESS}, res);
             });
             for_versions_from(10, *app, [&] {
+                auto tx = acc.tx({payment(root, 1)});
                 validateTxResults(tx, *app, {baseFee, txINSUFFICIENT_BALANCE});
             });
         }
@@ -729,8 +611,8 @@ TEST_CASE("txresults", "[tx][txresults]")
             market.requireChangesWithOffer({}, [&] {
                 return market.addOffer(acc, {cur1, native, Price{1, 1}, 1000});
             });
-            auto tx = acc.tx({payment(root, 1)});
             for_all_versions(*app, [&] {
+                auto tx = acc.tx({payment(root, 1)});
                 auto res =
                     expectedResult(baseFee, 1, txSUCCESS, {PAYMENT_SUCCESS});
                 validateTxResults(tx, *app, {baseFee, txSUCCESS}, res);

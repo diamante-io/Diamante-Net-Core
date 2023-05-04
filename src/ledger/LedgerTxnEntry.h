@@ -1,13 +1,14 @@
 #pragma once
 
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "xdr/DiamNet-ledger-entries.h"
+#include "ledger/GeneralizedLedgerEntry.h"
+#include "xdr/Diamnet-ledger-entries.h"
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class AbstractLedgerTxn;
@@ -51,14 +52,17 @@ class LedgerTxnEntry
     LedgerEntry& current();
     LedgerEntry const& current() const;
 
+    GeneralizedLedgerEntry& currentGeneralized();
+    GeneralizedLedgerEntry const& currentGeneralized() const;
+
     void deactivate();
 
     void erase();
 
     void swap(LedgerTxnEntry& other);
 
-    static std::shared_ptr<Impl> makeSharedImpl(AbstractLedgerTxn& ltx,
-                                                LedgerEntry& current);
+    static std::shared_ptr<Impl>
+    makeSharedImpl(AbstractLedgerTxn& ltx, GeneralizedLedgerEntry& current);
 };
 
 class ConstLedgerTxnEntry
@@ -91,12 +95,15 @@ class ConstLedgerTxnEntry
 
     LedgerEntry const& current() const;
 
+    GeneralizedLedgerEntry const& currentGeneralized() const;
+
     void deactivate();
 
     void swap(ConstLedgerTxnEntry& other);
 
-    static std::shared_ptr<Impl> makeSharedImpl(AbstractLedgerTxn& ltx,
-                                                LedgerEntry const& current);
+    static std::shared_ptr<Impl>
+    makeSharedImpl(AbstractLedgerTxn& ltx,
+                   GeneralizedLedgerEntry const& current);
 };
 
 std::shared_ptr<EntryImplBase>

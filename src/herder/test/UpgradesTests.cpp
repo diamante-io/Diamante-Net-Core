@@ -1,10 +1,11 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/BucketInputIterator.h"
 #include "bucket/BucketTests.h"
 #include "herder/Herder.h"
+#include "herder/HerderImpl.h"
 #include "herder/LedgerCloseData.h"
 #include "herder/Upgrades.h"
 #include "history/HistoryArchiveManager.h"
@@ -18,13 +19,17 @@
 #include "test/TestMarket.h"
 #include "test/TestUtils.h"
 #include "test/test.h"
+#include "transactions/SignatureUtils.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/StatusManager.h"
 #include "util/Timer.h"
 #include "util/optional.h"
+#include <fmt/format.h>
 #include <xdrpp/marshal.h>
 
-using namespace DiamNet;
+using namespace diamnet;
+using namespace diamnet::txtest;
 
 struct LedgerUpgradeableData
 {
@@ -44,12 +49,12 @@ struct LedgerUpgradeableData
 struct LedgerUpgradeNode
 {
     LedgerUpgradeableData desiredUpgrades;
-    VirtualClock::time_point preferredUpgradeDatetime;
+    VirtualClock::system_time_point preferredUpgradeDatetime;
 };
 
 struct LedgerUpgradeCheck
 {
-    VirtualClock::time_point time;
+    VirtualClock::system_time_point time;
     std::vector<LedgerUpgradeableData> expected;
 };
 
@@ -75,7 +80,8 @@ simulateUpgrade(std::vector<LedgerUpgradeNode> const& nodes,
             SecretKey::fromSeed(sha256("NODE_SEED_" + std::to_string(i))));
         configs.push_back(simulation->newConfig());
         // disable upgrade from config
-        configs.back().TESTING_UPGRADE_DATETIME = VirtualClock::time_point();
+        configs.back().TESTING_UPGRADE_DATETIME =
+            VirtualClock::system_time_point();
         configs.back().USE_CONFIG_FOR_GENESIS = false;
         // first node can write to history, all can read
         configurator.configure(configs.back(), i == 0);
@@ -223,7 +229,7 @@ executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades)
     auto const& lcl = lm.getLastClosedLedgerHeader();
     auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
 
-    DiamNetValue sv{txSet->getContentsHash(), 2, upgrades, DiamNet_VALUE_BASIC};
+    DiamnetValue sv{txSet->getContentsHash(), 2, upgrades, DIAMNET_VALUE_BASIC};
     LedgerCloseData ledgerData(lcl.header.ledgerSeq + 1, txSet, sv);
 
     app.getLedgerManager().closeLedger(ledgerData);
@@ -237,7 +243,7 @@ executeUpgrade(Application& app, LedgerUpgrade const& lupgrade)
 };
 
 void
-testListUpgrades(VirtualClock::time_point preferredUpgradeDatetime,
+testListUpgrades(VirtualClock::system_time_point preferredUpgradeDatetime,
                  bool shouldListAny)
 {
     auto cfg = getTestConfig();
@@ -320,7 +326,7 @@ testListUpgrades(VirtualClock::time_point preferredUpgradeDatetime,
 }
 
 void
-testValidateUpgrades(VirtualClock::time_point preferredUpgradeDatetime,
+testValidateUpgrades(VirtualClock::system_time_point preferredUpgradeDatetime,
                      bool canBeValid)
 {
     auto cfg = getTestConfig();
@@ -441,9 +447,12 @@ testValidateUpgrades(VirtualClock::time_point preferredUpgradeDatetime,
                     toUpgradeType(makeTxCountUpgrade(51)), ledgerUpgradeType,
                     nomination, cfg, baseLH));
             }
-            REQUIRE(!Upgrades{cfg}.isValid(toUpgradeType(makeTxCountUpgrade(0)),
-                                           ledgerUpgradeType, nomination, cfg,
-                                           baseLH));
+            auto cfg0TxSize = cfg;
+            cfg0TxSize.TESTING_UPGRADE_MAX_TX_SET_SIZE = 0;
+            REQUIRE(canBeValid == Upgrades{cfg0TxSize}.isValid(
+                                      toUpgradeType(makeTxCountUpgrade(0)),
+                                      ledgerUpgradeType, nomination, cfg,
+                                      baseLH));
         }
 
         SECTION("reserve")
@@ -604,7 +613,7 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
     auto getLiabilities = [&](TestAccount& acc) {
         Liabilities res;
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto account = DiamNet::loadAccount(ltx, acc.getPublicKey());
+        auto account = diamnet::loadAccount(ltx, acc.getPublicKey());
         res.selling = getSellingLiabilities(ltx.loadHeader(), account);
         res.buying = getBuyingLiabilities(ltx.loadHeader(), account);
         return res;
@@ -614,7 +623,7 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
         if (acc.hasTrustLine(asset))
         {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto trust = DiamNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
+            auto trust = diamnet::loadTrustLine(ltx, acc.getPublicKey(), asset);
             res.selling = trust.getSellingLiabilities(ltx.loadHeader());
             res.buying = trust.getBuyingLiabilities(ltx.loadHeader());
         }
@@ -1453,8 +1462,8 @@ TEST_CASE("upgrade to version 11", "[upgrades]")
             CLOG(INFO, "Ledger")
                 << "Ledger " << ledgerSeq << " upgrading to v" << newProto;
         }
-        DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                        DiamNet_VALUE_BASIC);
+        DiamnetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                        DIAMNET_VALUE_BASIC);
         lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         auto& bm = app->getBucketManager();
         auto mc = bm.readMergeCounters();
@@ -1487,12 +1496,13 @@ TEST_CASE("upgrade to version 11", "[upgrades]")
             // Check several subtle characteristics of the post-upgrade
             // environment:
             //   - Old-protocol merges stop happening (there should have
-            //     been 6 before the upgrade, and we stop there.)
+            //     been 6 before the upgrade, but we re-use a merge we did at
+            //     ledger 1 for ledger 2 spill, so the counter is at 5)
             //   - New-protocol merges start happening.
             //   - At the upgrade (5), we find 1 INITENTRY in lev[0].curr
             //   - The next two (6, 7), propagate INITENTRYs to lev[0].snap
             //   - From 8 on, the INITENTRYs propagate to lev[1].curr
-            REQUIRE(mc.mPreInitEntryProtocolMerges == 6);
+            REQUIRE(mc.mPreInitEntryProtocolMerges == 5);
             REQUIRE(mc.mPostInitEntryProtocolMerges != 0);
             auto& lev0 = bm.getBucketList().getLevel(0);
             auto& lev1 = bm.getBucketList().getLevel(1);
@@ -1566,16 +1576,16 @@ TEST_CASE("upgrade to version 12", "[upgrades]")
             CLOG(INFO, "Ledger")
                 << "Ledger " << ledgerSeq << " upgrading to v" << newProto;
         }
-        DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                        DiamNet_VALUE_BASIC);
+        DiamnetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                        DIAMNET_VALUE_BASIC);
         lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         auto& bm = app->getBucketManager();
-        auto mc = bm.readMergeCounters();
         auto& bl = bm.getBucketList();
         while (!bl.futuresAllResolved())
         {
             bl.resolveAnyReadyFutures();
         }
+        auto mc = bm.readMergeCounters();
 
         if (ledgerSeq < 5)
         {
@@ -1601,30 +1611,80 @@ TEST_CASE("upgrade to version 12", "[upgrades]")
                 // One more old-style merge despite the upgrade
                 // At ledger 8, level 2 spills, and starts an old-style merge,
                 // as level 1 snap is still of old version
-                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 7);
+                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 6);
                 break;
             case 7:
                 REQUIRE(getVers(lev0Snap) == newProto);
                 REQUIRE(getVers(lev1Curr) == oldProto);
                 REQUIRE(mc.mPostShadowRemovalProtocolMerges == 4);
-                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 6);
+                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 5);
                 break;
             case 6:
                 REQUIRE(getVers(lev0Snap) == newProto);
                 REQUIRE(getVers(lev1Curr) == oldProto);
                 REQUIRE(mc.mPostShadowRemovalProtocolMerges == 3);
-                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 6);
+                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 5);
                 break;
             case 5:
                 REQUIRE(getVers(lev0Curr) == newProto);
                 REQUIRE(getVers(lev0Snap) == oldProto);
                 REQUIRE(mc.mPostShadowRemovalProtocolMerges == 1);
-                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 6);
+                REQUIRE(mc.mPreShadowRemovalProtocolMerges == 5);
                 break;
             default:
                 break;
             }
         }
+    }
+}
+
+TEST_CASE("upgrade to version 13", "[upgrades]")
+{
+    VirtualClock clock;
+    auto cfg = getTestConfig(0);
+    cfg.USE_CONFIG_FOR_GENESIS = false;
+
+    auto app = createTestApplication(clock, cfg);
+    app->start();
+    executeUpgrade(*app, makeProtocolVersionUpgrade(12));
+
+    auto& lm = app->getLedgerManager();
+    auto& herder = static_cast<HerderImpl&>(app->getHerder());
+
+    auto root = TestAccount::createRoot(*app);
+    auto acc = root.create("A", lm.getLastMinBalance(2));
+
+    herder.recvTransaction(root.tx({payment(root, 1)}));
+    herder.recvTransaction(root.tx({payment(root, 2)}));
+    herder.recvTransaction(acc.tx({payment(acc, 1)}));
+    herder.recvTransaction(acc.tx({payment(acc, 2)}));
+
+    auto txSet = herder.getTransactionQueue().toTxSet({});
+    for (auto const& tx : txSet->mTransactions)
+    {
+        REQUIRE(tx->getEnvelope().type() == ENVELOPE_TYPE_TX_V0);
+    }
+
+    {
+        auto const& lcl = lm.getLastClosedLedgerHeader();
+        auto ledgerSeq = lcl.header.ledgerSeq + 1;
+
+        auto emptyTxSet = std::make_shared<TxSetFrame>(lcl.hash);
+        herder.getPendingEnvelopes().putTxSet(emptyTxSet->getContentsHash(),
+                                              ledgerSeq, emptyTxSet);
+
+        auto upgrade = toUpgradeType(makeProtocolVersionUpgrade(13));
+        DiamnetValue sv{emptyTxSet->getContentsHash(), 2,
+                        xdr::xvector<UpgradeType, 6>({upgrade}),
+                        DIAMNET_VALUE_BASIC};
+        herder.getHerderSCPDriver().valueExternalized(ledgerSeq,
+                                                      xdr::xdr_to_opaque(sv));
+    }
+
+    txSet = herder.getTransactionQueue().toTxSet({});
+    for (auto const& tx : txSet->mTransactions)
+    {
+        REQUIRE(tx->getEnvelope().type() == ENVELOPE_TYPE_TX);
     }
 }
 
@@ -1662,7 +1722,7 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
     auto getLiabilities = [&](TestAccount& acc) {
         Liabilities res;
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto account = DiamNet::loadAccount(ltx, acc.getPublicKey());
+        auto account = diamnet::loadAccount(ltx, acc.getPublicKey());
         res.selling = getSellingLiabilities(ltx.loadHeader(), account);
         res.buying = getBuyingLiabilities(ltx.loadHeader(), account);
         return res;
@@ -1672,11 +1732,21 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
         if (acc.hasTrustLine(asset))
         {
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto trust = DiamNet::loadTrustLine(ltx, acc.getPublicKey(), asset);
+            auto trust = diamnet::loadTrustLine(ltx, acc.getPublicKey(), asset);
             res.selling = trust.getSellingLiabilities(ltx.loadHeader());
             res.buying = trust.getBuyingLiabilities(ltx.loadHeader());
         }
         return res;
+    };
+    auto getNumSponsoringEntries = [&](TestAccount& acc) {
+        LedgerTxn ltx(app->getLedgerTxnRoot());
+        auto account = diamnet::loadAccount(ltx, acc.getPublicKey());
+        return getNumSponsoring(account.current());
+    };
+    auto getNumSponsoredEntries = [&](TestAccount& acc) {
+        LedgerTxn ltx(app->getLedgerTxnRoot());
+        auto account = diamnet::loadAccount(ltx, acc.getPublicKey());
+        return getNumSponsored(account.current());
     };
 
     auto createOffer = [&](TestAccount& acc, Asset const& selling,
@@ -1697,13 +1767,17 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
     };
 
     auto createOffers = [&](TestAccount& acc,
-                            std::vector<TestMarketOffer>& offers) {
-        createOffer(acc, native, cur1, offers);
-        createOffer(acc, native, cur1, offers);
+                            std::vector<TestMarketOffer>& offers,
+                            bool expectToDeleteNativeSells = false) {
+        OfferState nativeSellState =
+            expectToDeleteNativeSells ? OfferState::DELETED : OfferState::SAME;
+
+        createOffer(acc, native, cur1, offers, nativeSellState);
+        createOffer(acc, native, cur1, offers, nativeSellState);
         createOffer(acc, cur1, native, offers);
         createOffer(acc, cur1, native, offers);
-        createOffer(acc, native, cur2, offers);
-        createOffer(acc, native, cur2, offers);
+        createOffer(acc, native, cur2, offers, nativeSellState);
+        createOffer(acc, native, cur2, offers, nativeSellState);
         createOffer(acc, cur2, native, offers);
         createOffer(acc, cur2, native, offers);
         createOffer(acc, cur1, cur2, offers);
@@ -1780,7 +1854,19 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
             market.requireChanges(offers,
                                   std::bind(executeUpgrade, 2 * baseReserve));
         });
-        for_versions_from(10, *app, [&] {
+
+        auto submitTx = [&](TransactionFrameBasePtr tx) {
+            LedgerTxn ltx(app->getLedgerTxnRoot());
+            TransactionMeta txm(2);
+            REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+            REQUIRE(tx->apply(*app, ltx, txm));
+            ltx.commit();
+
+            REQUIRE(tx->getResultCode() == txSUCCESS);
+        };
+
+        auto increaseReserveFromV10 = [&](bool allowMaintainLiablities,
+                                          bool flipSponsorship) {
             auto a1 = root.create("A", 2 * lm.getLastMinBalance(14) + 3999 +
                                            14 * txFee);
             a1.changeTrust(cur1, 12000);
@@ -1796,20 +1882,45 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
             issuer.pay(a2, cur2, 4000);
 
             std::vector<TestMarketOffer> offers;
-            createOffer(a1, native, cur1, offers, OfferState::DELETED);
-            createOffer(a1, native, cur1, offers, OfferState::DELETED);
-            createOffer(a1, cur1, native, offers);
-            createOffer(a1, cur1, native, offers);
-            createOffer(a1, native, cur2, offers, OfferState::DELETED);
-            createOffer(a1, native, cur2, offers, OfferState::DELETED);
-            createOffer(a1, cur2, native, offers);
-            createOffer(a1, cur2, native, offers);
-            createOffer(a1, cur1, cur2, offers);
-            createOffer(a1, cur1, cur2, offers);
-            createOffer(a1, cur2, cur1, offers);
-            createOffer(a1, cur2, cur1, offers);
-
+            createOffers(a1, offers, true);
             createOffers(a2, offers);
+
+            if (allowMaintainLiablities)
+            {
+                issuer.setOptions(txtest::setFlags(
+                    static_cast<uint32_t>(AUTH_REQUIRED_FLAG) |
+                    static_cast<uint32_t>(AUTH_REVOCABLE_FLAG)));
+                issuer.allowMaintainLiabilities(cur1, a1);
+            }
+
+            if (flipSponsorship)
+            {
+                std::vector<Operation> opsA1 = {
+                    a1.op(beginSponsoringFutureReserves(a2))};
+                std::vector<Operation> opsA2 = {
+                    a2.op(beginSponsoringFutureReserves(a1))};
+                for (auto const& offer : offers)
+                {
+                    if (offer.key.sellerID == a2.getPublicKey())
+                    {
+                        opsA1.emplace_back(a2.op(revokeSponsorship(
+                            offerKey(a2, offer.key.offerID))));
+                    }
+                    else
+                    {
+                        opsA2.emplace_back(a1.op(revokeSponsorship(
+                            offerKey(a1, offer.key.offerID))));
+                    }
+                }
+                opsA1.emplace_back(a2.op(endSponsoringFutureReserves()));
+                opsA2.emplace_back(a1.op(endSponsoringFutureReserves()));
+
+                // submit tx to update sponsorship
+                submitTx(transactionFrameFromOps(app->getNetworkID(), a1, opsA1,
+                                                 {a2}));
+                submitTx(transactionFrameFromOps(app->getNetworkID(), a2, opsA2,
+                                                 {a1}));
+            }
 
             uint32_t baseReserve = lm.getLastReserve();
             market.requireChanges(offers,
@@ -1820,7 +1931,223 @@ TEST_CASE("upgrade base reserve", "[upgrades]")
             REQUIRE(getLiabilities(a2) == Liabilities{8000, 4000});
             REQUIRE(getAssetLiabilities(a2, cur1) == Liabilities{8000, 4000});
             REQUIRE(getAssetLiabilities(a2, cur2) == Liabilities{8000, 4000});
-        });
+        };
+
+        SECTION("authorized")
+        {
+            for_versions_from(10, *app,
+                              [&] { increaseReserveFromV10(false, false); });
+        }
+
+        SECTION("authorized to maintain liabilities")
+        {
+            for_versions_from(13, *app,
+                              [&] { increaseReserveFromV10(true, false); });
+        }
+
+        SECTION("sponsorships")
+        {
+            auto accSponsorsAllOffersTest = [&](TestAccount& sponsoringAcc,
+                                                TestAccount& sponsoredAcc,
+                                                TestAccount& sponsoredAcc2,
+                                                bool sponsoringAccPullOffers,
+                                                bool sponsoredAccPullOffers) {
+                sponsoringAcc.changeTrust(cur1, 12000);
+                sponsoringAcc.changeTrust(cur2, 12000);
+                issuer.pay(sponsoringAcc, cur1, 4000);
+                issuer.pay(sponsoringAcc, cur2, 4000);
+
+                sponsoredAcc.changeTrust(cur1, 12000);
+                sponsoredAcc.changeTrust(cur2, 12000);
+                issuer.pay(sponsoredAcc, cur1, 4000);
+                issuer.pay(sponsoredAcc, cur2, 4000);
+
+                sponsoredAcc2.changeTrust(cur1, 12000);
+                sponsoredAcc2.changeTrust(cur2, 12000);
+                issuer.pay(sponsoredAcc2, cur1, 4000);
+                issuer.pay(sponsoredAcc2, cur2, 4000);
+
+                std::vector<TestMarketOffer> offers;
+                createOffers(sponsoringAcc, offers, sponsoringAccPullOffers);
+                createOffers(sponsoredAcc, offers, sponsoredAccPullOffers);
+                createOffers(sponsoredAcc2, offers, true);
+
+                // prepare ops to transfer sponsorship of all sponsoredAcc
+                // offers and one offer from sponsoredAcc2 to sponsoringAcc
+                std::vector<Operation> ops = {
+                    sponsoringAcc.op(
+                        beginSponsoringFutureReserves(sponsoredAcc)),
+                    sponsoringAcc.op(
+                        beginSponsoringFutureReserves(sponsoredAcc2))};
+                for (auto const& offer : offers)
+                {
+                    if (offer.key.sellerID == sponsoredAcc.getPublicKey())
+                    {
+                        ops.emplace_back(sponsoredAcc.op(revokeSponsorship(
+                            offerKey(sponsoredAcc, offer.key.offerID))));
+                    }
+                }
+
+                // last offer in offers is for sponsoredAcc2
+                ops.emplace_back(sponsoredAcc2.op(revokeSponsorship(
+                    offerKey(sponsoredAcc2, offers.back().key.offerID))));
+
+                ops.emplace_back(
+                    sponsoredAcc.op(endSponsoringFutureReserves()));
+                ops.emplace_back(
+                    sponsoredAcc2.op(endSponsoringFutureReserves()));
+
+                // submit tx to update sponsorship
+                submitTx(transactionFrameFromOps(
+                    app->getNetworkID(), sponsoringAcc, ops,
+                    {sponsoredAcc, sponsoredAcc2}));
+
+                REQUIRE(getNumSponsoredEntries(sponsoredAcc) == 12);
+                REQUIRE(getNumSponsoredEntries(sponsoredAcc2) == 1);
+                REQUIRE(getNumSponsoringEntries(sponsoringAcc) == 13);
+
+                uint32_t baseReserve = lm.getLastReserve();
+
+                if (sponsoredAccPullOffers)
+                {
+                    // SponsoringAcc is now sponsoring all 12 of sponsoredAcc's
+                    // offers. SponsoredAcc has 4 subentries. It also has enough
+                    // lumens to cover 12 more subentries after the sponsorship
+                    // update. After the upgrade to double the baseReserve, this
+                    // account will need to cover the 4 subEntries, so we only
+                    // need 4 extra baseReserves before the upgrade. Pay out the
+                    // rest (8 reserves) so we can get our orders pulled on
+                    // upgrade. 16(total reserves) - 4(subEntries) -
+                    // 4(base reserve increase) = 8(extra base reserves)
+
+                    sponsoredAcc.pay(root, baseReserve * 8);
+                }
+                else
+                {
+                    sponsoredAcc.pay(root, baseReserve * 8 - 1);
+                }
+
+                if (sponsoringAccPullOffers)
+                {
+                    sponsoringAcc.pay(root, 1);
+                }
+
+                // This account needs to lose a base reserve to get its orders
+                // pulled
+                sponsoredAcc2.pay(root, baseReserve);
+
+                // execute upgrade
+                market.requireChanges(
+                    offers, std::bind(executeUpgrade, 2 * baseReserve));
+
+                if (sponsoredAccPullOffers)
+                {
+                    REQUIRE(getLiabilities(sponsoredAcc) ==
+                            Liabilities{8000, 0});
+                    REQUIRE(getAssetLiabilities(sponsoredAcc, cur1) ==
+                            Liabilities{4000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoredAcc, cur2) ==
+                            Liabilities{4000, 4000});
+
+                    // the 4 native offers were pulled
+                    REQUIRE(getNumSponsoredEntries(sponsoredAcc) == 8);
+                    REQUIRE(getNumSponsoringEntries(sponsoringAcc) == 9);
+                }
+                else
+                {
+                    REQUIRE(getLiabilities(sponsoredAcc) ==
+                            Liabilities{8000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoredAcc, cur1) ==
+                            Liabilities{8000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoredAcc, cur2) ==
+                            Liabilities{8000, 4000});
+
+                    REQUIRE(getNumSponsoredEntries(sponsoredAcc) == 12);
+                    REQUIRE(getNumSponsoringEntries(sponsoringAcc) == 13);
+                }
+
+                if (sponsoringAccPullOffers)
+                {
+                    REQUIRE(getLiabilities(sponsoringAcc) ==
+                            Liabilities{8000, 0});
+                    REQUIRE(getAssetLiabilities(sponsoringAcc, cur1) ==
+                            Liabilities{4000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoringAcc, cur2) ==
+                            Liabilities{4000, 4000});
+                }
+                else
+                {
+                    REQUIRE(getLiabilities(sponsoringAcc) ==
+                            Liabilities{8000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoringAcc, cur1) ==
+                            Liabilities{8000, 4000});
+                    REQUIRE(getAssetLiabilities(sponsoringAcc, cur2) ==
+                            Liabilities{8000, 4000});
+                }
+
+                REQUIRE(getLiabilities(sponsoredAcc2) == Liabilities{8000, 0});
+                REQUIRE(getAssetLiabilities(sponsoredAcc2, cur1) ==
+                        Liabilities{4000, 4000});
+                REQUIRE(getAssetLiabilities(sponsoredAcc2, cur2) ==
+                        Liabilities{4000, 4000});
+            };
+
+            auto sponsorshipTestsBySeed = [&](std::string sponsoringSeed,
+                                              std::string sponsoredSeed) {
+                auto sponsoring =
+                    root.create(sponsoringSeed, 2 * lm.getLastMinBalance(27) +
+                                                    4000 + 15 * txFee);
+
+                auto sponsored =
+                    root.create(sponsoredSeed,
+                                lm.getLastMinBalance(14) + 3999 + 15 * txFee);
+
+                // This account will have one sponsored offer and will always
+                // have it's offers pulled.
+                auto sponsored2 = root.create(
+                    "C", 2 * lm.getLastMinBalance(13) + 3999 + 15 * txFee);
+
+                SECTION("sponsored and sponsoring accounts get offers "
+                        "pulled on upgrade")
+                {
+                    accSponsorsAllOffersTest(sponsoring, sponsored, sponsored2,
+                                             true, true);
+                }
+                SECTION("no offers pulled")
+                {
+                    accSponsorsAllOffersTest(sponsoring, sponsored, sponsored2,
+                                             false, false);
+                }
+                SECTION("offers for sponsored account pulled")
+                {
+                    accSponsorsAllOffersTest(sponsoring, sponsored, sponsored2,
+                                             true, false);
+                }
+                SECTION("offers for sponsoring account pulled")
+                {
+                    accSponsorsAllOffersTest(sponsoring, sponsored, sponsored2,
+                                             false, true);
+                }
+            };
+
+            for_versions_from(14, *app, [&] {
+
+                // Swap the seeds to test that the ordering of accounts doesn't
+                // matter when upgrading
+                SECTION("account A is sponsored")
+                {
+                    sponsorshipTestsBySeed("B", "A");
+                }
+                SECTION("account B is sponsored")
+                {
+                    sponsorshipTestsBySeed("A", "B");
+                }
+                SECTION("swap sponsorship of orders")
+                {
+                    increaseReserveFromV10(false, true);
+                }
+            });
+        }
     }
 }
 
@@ -1872,7 +2199,7 @@ TEST_CASE("simulate upgrades", "[herder][upgrades][acceptance]")
                                                     {upgrade, genesis(0, 15)}};
         auto checks = std::vector<LedgerUpgradeCheck>{
             {genesis(0, 10), {noUpgrade, noUpgrade, noUpgrade}},
-            {genesis(0, 21), {upgrade, upgrade, upgrade}}};
+            {genesis(0, 28), {upgrade, upgrade, upgrade}}};
         simulateUpgrade(nodes, checks);
     }
 
@@ -1898,7 +2225,7 @@ TEST_CASE("simulate upgrades", "[herder][upgrades][acceptance]")
                                                     {upgrade, genesis(0, 30)}};
         auto checks = std::vector<LedgerUpgradeCheck>{
             {genesis(0, 20), {noUpgrade, noUpgrade, noUpgrade}},
-            {genesis(0, 36), {upgrade, upgrade, upgrade}}};
+            {genesis(0, 37), {upgrade, upgrade, upgrade}}};
         simulateUpgrade(nodes, checks);
     }
 
@@ -1909,7 +2236,7 @@ TEST_CASE("simulate upgrades", "[herder][upgrades][acceptance]")
                                                     {upgrade, genesis(0, 30)}};
         auto checks = std::vector<LedgerUpgradeCheck>{
             {genesis(0, 9), {noUpgrade, noUpgrade, noUpgrade}},
-            {genesis(0, 20), {upgrade, upgrade, upgrade}}};
+            {genesis(0, 27), {upgrade, upgrade, upgrade}}};
         simulateUpgrade(nodes, checks);
     }
 }
@@ -1930,8 +2257,60 @@ TEST_CASE("upgrade invalid during ledger close", "[upgrades]")
         executeUpgrade(*app, makeProtocolVersionUpgrade(
                                  Config::CURRENT_LEDGER_PROTOCOL_VERSION - 1)));
 
-    // Base Fee / TxSet size / Base Reserve to 0
+    // Base Fee / Base Reserve to 0
     REQUIRE_THROWS(executeUpgrade(*app, makeBaseFeeUpgrade(0)));
-    REQUIRE_THROWS(executeUpgrade(*app, makeTxCountUpgrade(0)));
     REQUIRE_THROWS(executeUpgrade(*app, makeBaseReserveUpgrade(0)));
+}
+
+TEST_CASE("validate upgrade expiration logic", "[upgrades]")
+{
+    auto cfg = getTestConfig();
+    cfg.LEDGER_PROTOCOL_VERSION = 10;
+    cfg.TESTING_UPGRADE_DESIRED_FEE = 100;
+    cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 50;
+    cfg.TESTING_UPGRADE_RESERVE = 100000000;
+    cfg.TESTING_UPGRADE_DATETIME = genesis(0, 0);
+
+    auto header = LedgerHeader{};
+
+    // make sure the network info is different than what's armed
+    header.ledgerVersion = cfg.LEDGER_PROTOCOL_VERSION - 1;
+    header.baseFee = cfg.TESTING_UPGRADE_DESIRED_FEE - 1;
+    header.baseReserve = cfg.TESTING_UPGRADE_RESERVE - 1;
+    header.maxTxSetSize = cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE - 1;
+
+    SECTION("remove expired upgrades")
+    {
+        header.scpValue.closeTime = VirtualClock::to_time_t(
+            cfg.TESTING_UPGRADE_DATETIME + Upgrades::UPDGRADE_EXPIRATION_HOURS);
+
+        bool updated = false;
+        auto upgrades = Upgrades{cfg}.removeUpgrades(
+            header.scpValue.upgrades.begin(), header.scpValue.upgrades.end(),
+            header.scpValue.closeTime, updated);
+
+        REQUIRE(updated);
+        REQUIRE(!upgrades.mProtocolVersion);
+        REQUIRE(!upgrades.mBaseFee);
+        REQUIRE(!upgrades.mMaxTxSize);
+        REQUIRE(!upgrades.mBaseReserve);
+    }
+
+    SECTION("upgrades not yet expired")
+    {
+        header.scpValue.closeTime = VirtualClock::to_time_t(
+            cfg.TESTING_UPGRADE_DATETIME + Upgrades::UPDGRADE_EXPIRATION_HOURS -
+            std::chrono::seconds(1));
+
+        bool updated = false;
+        auto upgrades = Upgrades{cfg}.removeUpgrades(
+            header.scpValue.upgrades.begin(), header.scpValue.upgrades.end(),
+            header.scpValue.closeTime, updated);
+
+        REQUIRE(!updated);
+        REQUIRE(upgrades.mProtocolVersion);
+        REQUIRE(upgrades.mBaseFee);
+        REQUIRE(upgrades.mMaxTxSize);
+        REQUIRE(upgrades.mBaseReserve);
+    }
 }

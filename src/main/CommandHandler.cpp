@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,21 +11,24 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "lib/http/server.hpp"
 #include "lib/json/json.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "main/Maintainer.h"
 #include "overlay/BanManager.h"
 #include "overlay/OverlayManager.h"
+#include "overlay/SurveyManager.h"
+#include "transactions/TransactionBridge.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 #include "util/StatusManager.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
 #include "medida/reporting/json_reporter.h"
 #include "util/Decoder.h"
+#include "util/XDRCereal.h"
 #include "util/XDROperators.h"
 #include "xdrpp/marshal.h"
-#include "xdrpp/printer.h"
 
 #include "ExternalQueue.h"
 
@@ -38,7 +41,7 @@
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-namespace DiamNet
+namespace diamnet
 {
 CommandHandler::CommandHandler(Application& app) : mApp(app)
 {
@@ -70,30 +73,45 @@ CommandHandler::CommandHandler(Application& app) : mApp(app)
 
     mServer->add404(std::bind(&CommandHandler::fileNotFound, this, _1, _2));
 
-    addRoute("bans", &CommandHandler::bans);
+    if (mApp.getConfig().MODE_STORES_HISTORY)
+    {
+        addRoute("dropcursor", &CommandHandler::dropcursor);
+        addRoute("getcursor", &CommandHandler::getcursor);
+        addRoute("setcursor", &CommandHandler::setcursor);
+        addRoute("maintenance", &CommandHandler::maintenance);
+    }
+
+    if (!mApp.getConfig().RUN_STANDALONE)
+    {
+        addRoute("bans", &CommandHandler::bans);
+        addRoute("connect", &CommandHandler::connect);
+        addRoute("droppeer", &CommandHandler::dropPeer);
+        addRoute("peers", &CommandHandler::peers);
+        addRoute("quorum", &CommandHandler::quorum);
+        addRoute("scp", &CommandHandler::scpInfo);
+        addRoute("stopsurvey", &CommandHandler::stopSurvey);
+#ifndef BUILD_TESTS
+        addRoute("getsurveyresult", &CommandHandler::getSurveyResult);
+        addRoute("surveytopology", &CommandHandler::surveyTopology);
+#endif
+        addRoute("unban", &CommandHandler::unban);
+    }
+
     addRoute("clearmetrics", &CommandHandler::clearMetrics);
-    addRoute("connect", &CommandHandler::connect);
-    addRoute("dropcursor", &CommandHandler::dropcursor);
-    addRoute("droppeer", &CommandHandler::dropPeer);
-    addRoute("getcursor", &CommandHandler::getcursor);
     addRoute("info", &CommandHandler::info);
     addRoute("ll", &CommandHandler::ll);
     addRoute("logrotate", &CommandHandler::logRotate);
-    addRoute("maintenance", &CommandHandler::maintenance);
     addRoute("manualclose", &CommandHandler::manualClose);
     addRoute("metrics", &CommandHandler::metrics);
-    addRoute("peers", &CommandHandler::peers);
-    addRoute("quorum", &CommandHandler::quorum);
-    addRoute("setcursor", &CommandHandler::setcursor);
-    addRoute("scp", &CommandHandler::scpInfo);
     addRoute("tx", &CommandHandler::tx);
-    addRoute("unban", &CommandHandler::unban);
     addRoute("upgrades", &CommandHandler::upgrades);
 
 #ifdef BUILD_TESTS
     addRoute("generateload", &CommandHandler::generateLoad);
     addRoute("testacc", &CommandHandler::testAcc);
     addRoute("testtx", &CommandHandler::testTx);
+    addRoute("getsurveyresult", &CommandHandler::getSurveyResult);
+    addRoute("surveytopology", &CommandHandler::surveyTopology);
 #endif
 }
 
@@ -110,21 +128,20 @@ CommandHandler::safeRouter(CommandHandler::HandlerRoute route,
 {
     try
     {
+        ZoneNamedN(httpZone, "HTTP command handler", true);
         route(this, params, retStr);
     }
-    catch (std::exception& e)
+    catch (std::exception const& e)
     {
-        retStr =
-            (fmt::MemoryWriter() << "{\"exception\": \"" << e.what() << "\"}")
-                .str();
+        retStr = fmt::format(R"({{"exception": "{}"}})", e.what());
     }
     catch (...)
     {
-        retStr = "{\"exception\": \"generic\"}";
+        retStr = R"({"exception": "generic"})";
     }
 }
 
-void
+std::string
 CommandHandler::manualCmd(std::string const& cmd)
 {
     http::server::reply reply;
@@ -132,33 +149,19 @@ CommandHandler::manualCmd(std::string const& cmd)
     request.uri = cmd;
     mServer->handle_request(request, reply);
     LOG(INFO) << cmd << " -> " << reply.content;
+    return reply.content;
 }
 
 void
 CommandHandler::fileNotFound(std::string const& params, std::string& retStr)
 {
-    retStr = "<b>Welcome to DiamNet-core!</b><p>";
+    retStr = "<b>Welcome to diamnet-core!</b><p>";
     retStr +=
         "Supported HTTP commands are listed in the <a href=\""
-        "https://github.com/DiamNet/DiamNet-core/blob/master/docs/software/"
+        "https://github.com/diamnet/diamnet-core/blob/master/docs/software/"
         "commands.md#http-commands"
         "\">docs</a> as well as in the man pages.</p>"
         "<p>Have fun!</p>";
-}
-
-void
-CommandHandler::manualClose(std::string const& params, std::string& retStr)
-{
-    if (mApp.manualClose())
-    {
-        retStr = "Forcing ledger to close...";
-    }
-    else
-    {
-        retStr =
-            "Set MANUAL_CLOSE=true in the DiamNet-core.cfg if you want this "
-            "behavior";
-    }
 }
 
 template <typename T>
@@ -201,8 +204,31 @@ parseParam(std::map<std::string, std::string> const& map,
 }
 
 void
+CommandHandler::manualClose(std::string const& params, std::string& retStr)
+{
+    ZoneScoped;
+    std::map<std::string, std::string> retMap;
+    http::server::server::parseParams(params, retMap);
+
+    if (!retMap.empty() && !mApp.getConfig().RUN_STANDALONE)
+    {
+        throw std::invalid_argument(
+            "The 'manualclose' command accepts parameters only if the "
+            "configuration includes RUN_STANDALONE=true.");
+    }
+
+    uint32_t ledgerSeq;
+    auto manualLedgerSeq = maybeParseParam(retMap, "ledgerSeq", ledgerSeq);
+    TimePoint closeTime;
+    auto manualCloseTime = maybeParseParam(retMap, "closeTime", closeTime);
+
+    retStr = mApp.manualClose(manualLedgerSeq, manualCloseTime);
+}
+
+void
 CommandHandler::peers(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
@@ -235,6 +261,7 @@ CommandHandler::peers(std::string const& params, std::string& retStr)
                 auto& peerNode = node[counter++];
                 peerNode["address"] = peer.second->toString();
                 peerNode["elapsed"] = (int)peer.second->getLifeTime().count();
+                peerNode["latency"] = (int)peer.second->getPing().count();
                 peerNode["ver"] = peer.second->getRemoteVersion();
                 peerNode["olver"] = (int)peer.second->getRemoteOverlayVersion();
                 peerNode["id"] =
@@ -252,12 +279,14 @@ CommandHandler::peers(std::string const& params, std::string& retStr)
 void
 CommandHandler::info(std::string const&, std::string& retStr)
 {
+    ZoneScoped;
     retStr = mApp.getJsonInfo().toStyledString();
 }
 
 void
 CommandHandler::metrics(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     mApp.syncAllMetrics();
     medida::reporting::JsonReporter jr(mApp.getMetrics());
     retStr = jr.Report();
@@ -266,6 +295,7 @@ CommandHandler::metrics(std::string const& params, std::string& retStr)
 void
 CommandHandler::logRotate(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     retStr = "Log rotate...";
 
     Logging::rotate();
@@ -274,6 +304,7 @@ CommandHandler::logRotate(std::string const& params, std::string& retStr)
 void
 CommandHandler::connect(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
@@ -297,6 +328,7 @@ CommandHandler::connect(std::string const& params, std::string& retStr)
 void
 CommandHandler::dropPeer(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
@@ -344,6 +376,7 @@ CommandHandler::dropPeer(std::string const& params, std::string& retStr)
 void
 CommandHandler::bans(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     Json::Value root;
 
     root["bans"];
@@ -361,6 +394,7 @@ CommandHandler::bans(std::string const& params, std::string& retStr)
 void
 CommandHandler::unban(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
@@ -390,6 +424,7 @@ CommandHandler::unban(std::string const& params, std::string& retStr)
 void
 CommandHandler::upgrades(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
     auto s = retMap["mode"];
@@ -418,7 +453,7 @@ CommandHandler::upgrades(std::string const& params, std::string& retStr)
                 fmt::format("could not parse upgradetime: '{}'", upgradeTime);
             return;
         }
-        p.mUpgradeTime = VirtualClock::tmToPoint(tm);
+        p.mUpgradeTime = VirtualClock::tmToSystemPoint(tm);
 
         uint32 baseFee;
         uint32 baseReserve;
@@ -447,6 +482,7 @@ CommandHandler::upgrades(std::string const& params, std::string& retStr)
 void
 CommandHandler::quorum(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
 
@@ -483,6 +519,7 @@ CommandHandler::quorum(std::string const& params, std::string& retStr)
 void
 CommandHandler::scpInfo(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> retMap;
     http::server::server::parseParams(params, retMap);
     size_t lim = 2;
@@ -496,6 +533,7 @@ CommandHandler::scpInfo(std::string const& params, std::string& retStr)
 void
 CommandHandler::ll(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     Json::Value root;
 
     std::map<std::string, std::string> retMap;
@@ -532,6 +570,7 @@ CommandHandler::ll(std::string const& params, std::string& retStr)
 void
 CommandHandler::tx(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::ostringstream output;
 
     const std::string prefix("?blob=");
@@ -541,11 +580,18 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
         std::string blob = params.substr(prefix.size());
         std::vector<uint8_t> binBlob;
         decoder::decode_b64(blob, binBlob);
-
         xdr::xdr_from_opaque(binBlob, envelope);
-        TransactionFramePtr transaction =
-            TransactionFrame::makeTransactionFromWire(mApp.getNetworkID(),
-                                                      envelope);
+
+        {
+            auto lhhe = mApp.getLedgerManager().getLastClosedLedgerHeader();
+            if (lhhe.header.ledgerVersion >= 13)
+            {
+                envelope = txbridge::convertForV13(envelope);
+            }
+        }
+
+        auto transaction = TransactionFrameBase::makeTransactionFromWire(
+            mApp.getNetworkID(), envelope);
         if (transaction)
         {
             // add it to our current set
@@ -555,7 +601,7 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
 
             if (status == TransactionQueue::AddResult::ADD_STATUS_PENDING)
             {
-                DiamNetMessage msg;
+                DiamnetMessage msg;
                 msg.type(TRANSACTION);
                 msg.transaction() = envelope;
                 mApp.getOverlayManager().broadcastMessage(msg);
@@ -590,6 +636,7 @@ CommandHandler::tx(std::string const& params, std::string& retStr)
 void
 CommandHandler::dropcursor(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> map;
     http::server::server::parseParams(params, map);
     std::string const& id = map["id"];
@@ -609,6 +656,7 @@ CommandHandler::dropcursor(std::string const& params, std::string& retStr)
 void
 CommandHandler::setcursor(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> map;
     http::server::server::parseParams(params, map);
     std::string const& id = map["id"];
@@ -630,6 +678,7 @@ CommandHandler::setcursor(std::string const& params, std::string& retStr)
 void
 CommandHandler::getcursor(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     Json::Value root;
     std::map<std::string, std::string> map;
     http::server::server::parseParams(params, map);
@@ -658,6 +707,7 @@ CommandHandler::getcursor(std::string const& params, std::string& retStr)
 void
 CommandHandler::maintenance(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> map;
     http::server::server::parseParams(params, map);
     if (map["queue"] == "true")
@@ -677,6 +727,7 @@ CommandHandler::maintenance(std::string const& params, std::string& retStr)
 void
 CommandHandler::clearMetrics(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     std::map<std::string, std::string> map;
     http::server::server::parseParams(params, map);
 
@@ -688,10 +739,51 @@ CommandHandler::clearMetrics(std::string const& params, std::string& retStr)
     retStr = fmt::format("Cleared {} metrics!", domain);
 }
 
+void
+CommandHandler::surveyTopology(std::string const& params, std::string& retStr)
+{
+    ZoneScoped;
+    std::map<std::string, std::string> map;
+    http::server::server::parseParams(params, map);
+
+    auto duration = std::chrono::seconds(parseParam<uint32>(map, "duration"));
+    auto idString = parseParam<std::string>(map, "node");
+    NodeID id = KeyUtils::fromStrKey<PublicKey>(idString);
+
+    auto& surveyManager = mApp.getOverlayManager().getSurveyManager();
+
+    bool success = surveyManager.startSurvey(
+        SurveyMessageCommandType::SURVEY_TOPOLOGY, duration);
+
+    surveyManager.addNodeToRunningSurveyBacklog(
+        SurveyMessageCommandType::SURVEY_TOPOLOGY, duration, id);
+    retStr = "Adding node.";
+
+    retStr += success ? "Survey started " : "Survey already running!";
+}
+
+void
+CommandHandler::stopSurvey(std::string const&, std::string& retStr)
+{
+    ZoneScoped;
+    auto& surveyManager = mApp.getOverlayManager().getSurveyManager();
+    surveyManager.stopSurvey();
+    retStr = "survey stopped";
+}
+
+void
+CommandHandler::getSurveyResult(std::string const&, std::string& retStr)
+{
+    ZoneScoped;
+    auto& surveyManager = mApp.getOverlayManager().getSurveyManager();
+    retStr = surveyManager.getJsonResults().toStyledString();
+}
+
 #ifdef BUILD_TESTS
 void
 CommandHandler::generateLoad(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     if (mApp.getConfig().ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING)
     {
         uint32_t nAccounts = 1000;
@@ -699,6 +791,8 @@ CommandHandler::generateLoad(std::string const& params, std::string& retStr)
         uint32_t txRate = 10;
         uint32_t batchSize = 100; // Only for account creations
         uint32_t offset = 0;
+        uint32_t spikeSize = 0;
+        uint32_t spikeIntervalInt = 0;
         std::string mode = "create";
 
         std::map<std::string, std::string> map;
@@ -724,31 +818,36 @@ CommandHandler::generateLoad(std::string const& params, std::string& retStr)
         maybeParseParam(map, "batchsize", batchSize);
         maybeParseParam(map, "offset", offset);
         maybeParseParam(map, "txrate", txRate);
+        maybeParseParam(map, "spikeinterval", spikeIntervalInt);
+        std::chrono::seconds spikeInterval(spikeIntervalInt);
+        maybeParseParam(map, "spikesize", spikeSize);
 
         uint32_t numItems = isCreate ? nAccounts : nTxs;
         std::string itemType = isCreate ? "accounts" : "txs";
-        double hours = (numItems / txRate) / 3600.0;
 
         if (batchSize > 100)
         {
             batchSize = 100;
             retStr = "Setting batch size to its limit of 100.";
         }
-        mApp.generateLoad(isCreate, nAccounts, offset, nTxs, txRate, batchSize);
-        retStr +=
-            fmt::format(" Generating load: {:d} {:s}, {:d} tx/s = {:f} hours",
-                        numItems, itemType, txRate, hours);
+
+        mApp.generateLoad(isCreate, nAccounts, offset, nTxs, txRate, batchSize,
+                          spikeInterval, spikeSize);
+
+        retStr += fmt::format(" Generating load: {:d} {:s}, {:d} tx/s",
+                              numItems, itemType, txRate);
     }
     else
     {
         retStr = "Set ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING=true in "
-                 "the DiamNet-core.cfg if you want this behavior";
+                 "the diamnet-core.cfg if you want this behavior";
     }
 }
 
 void
 CommandHandler::testAcc(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     using namespace txtest;
 
     std::map<std::string, std::string> retMap;
@@ -773,7 +872,7 @@ CommandHandler::testAcc(std::string const& params, std::string& retStr)
         }
 
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto acc = DiamNet::loadAccount(ltx, key.getPublicKey());
+        auto acc = diamnet::loadAccount(ltx, key.getPublicKey());
         if (acc)
         {
             auto const& ae = acc.current().data.account();
@@ -789,6 +888,7 @@ CommandHandler::testAcc(std::string const& params, std::string& retStr)
 void
 CommandHandler::testTx(std::string const& params, std::string& retStr)
 {
+    ZoneScoped;
     using namespace txtest;
 
     std::map<std::string, std::string> retMap;
@@ -844,8 +944,7 @@ CommandHandler::testTx(std::string const& params, std::string& retStr)
             break;
         case TransactionQueue::AddResult::ADD_STATUS_ERROR:
             root["status"] = "error";
-            root["detail"] =
-                xdr::xdr_to_string(txFrame->getResult().result.code());
+            root["detail"] = xdr_to_string(txFrame->getResult().result.code());
             break;
         case TransactionQueue::AddResult::ADD_STATUS_TRY_AGAIN_LATER:
             root["status"] = "try_again_later";

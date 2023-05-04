@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,14 +10,14 @@
 #include "herder/TransactionQueue.h"
 #include "lib/json/json-forwards.h"
 #include "overlay/Peer.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "scp/SCP.h"
 #include "util/Timer.h"
 #include <functional>
 #include <memory>
 #include <string>
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 class XDROutputFileStream;
@@ -44,7 +44,8 @@ class Herder
     static std::chrono::seconds const CONSENSUS_STUCK_TIMEOUT_SECONDS;
 
     // Maximum time slip between nodes.
-    static std::chrono::seconds const MAX_TIME_SLIP_SECONDS;
+    static std::chrono::seconds constexpr MAX_TIME_SLIP_SECONDS =
+        std::chrono::seconds{60};
 
     // How many seconds of inactivity before evicting a node.
     static std::chrono::seconds const NODE_EXPIRATION_SECONDS;
@@ -52,13 +53,14 @@ class Herder
     // How many ledger in the future we consider an envelope viable.
     static uint32 const LEDGER_VALIDITY_BRACKET;
 
-    // How many ledgers in the past we keep track of
-    static uint32 const MAX_SLOTS_TO_REMEMBER;
-
     // Threshold used to filter out irrelevant events.
     static std::chrono::nanoseconds const TIMERS_THRESHOLD_NANOSEC;
 
     static std::unique_ptr<Herder> create(Application& app);
+
+    // number of additional ledgers we retrieve from peers before our own lcl,
+    // this is to help recover potential missing SCP messages for other nodes
+    static uint32 const SCP_EXTRA_LOOKBACK_LEDGERS;
 
     enum State
     {
@@ -69,18 +71,19 @@ class Herder
 
     enum EnvelopeStatus
     {
-        // for some reason this envelope was discarded - either is was invalid,
+        // for some reason this envelope was discarded - either it was invalid,
         // used unsane qset or was coming from node that is not in quorum
-        ENVELOPE_STATUS_DISCARDED,
+        ENVELOPE_STATUS_DISCARDED = -100,
         // envelope was skipped as it's from this validator
-        ENVELOPE_STATUS_SKIPPED_SELF,
+        ENVELOPE_STATUS_SKIPPED_SELF = -10,
+        // envelope was already processed
+        ENVELOPE_STATUS_PROCESSED = -1,
+
         // envelope data is currently being fetched
-        ENVELOPE_STATUS_FETCHING,
+        ENVELOPE_STATUS_FETCHING = 0,
         // current call to recvSCPEnvelope() was the first when the envelope
         // was fully fetched so it is ready for processing
-        ENVELOPE_STATUS_READY,
-        // envelope was already processed
-        ENVELOPE_STATUS_PROCESSED,
+        ENVELOPE_STATUS_READY = 1
     };
 
     virtual State getState() const = 0;
@@ -91,6 +94,7 @@ class Herder
     virtual void syncMetrics() = 0;
 
     virtual void bootstrap() = 0;
+    virtual void shutdown() = 0;
 
     // restores Herder's state from disk
     virtual void restoreState() = 0;
@@ -100,8 +104,8 @@ class Herder
     virtual bool recvTxSet(Hash const& hash, TxSetFrame const& txset) = 0;
     // We are learning about a new transaction.
     virtual TransactionQueue::AddResult
-    recvTransaction(TransactionFramePtr tx) = 0;
-    virtual void peerDoesntHave(DiamNet::MessageType type,
+    recvTransaction(TransactionFrameBasePtr tx) = 0;
+    virtual void peerDoesntHave(diamnet::MessageType type,
                                 uint256 const& itemID, Peer::pointer peer) = 0;
     virtual TxSetFramePtr getTxSet(Hash const& hash) = 0;
     virtual SCPQuorumSetPtr getQSet(Hash const& qSetHash) = 0;
@@ -121,11 +125,16 @@ class Herder
     // and local state
     virtual uint32_t getCurrentLedgerSeq() const = 0;
 
+    // return the smallest ledger number we need messages for when asking peers
+    virtual uint32 getMinLedgerSeqToAskPeers() const = 0;
+
     // Return the maximum sequence number for any tx (or 0 if none) from a given
     // sender in the pending or recent tx sets.
     virtual SequenceNumber getMaxSeqInPendingTxs(AccountID const&) = 0;
 
-    virtual void triggerNextLedger(uint32_t ledgerSeqToTrigger) = 0;
+    virtual void triggerNextLedger(uint32_t ledgerSeqToTrigger,
+                                   bool forceTrackingSCP) = 0;
+    virtual void setInSyncAndTriggerNextLedger() = 0;
 
     // lookup a nodeID in config and in SCP messages
     virtual bool resolveNodeID(std::string const& s, PublicKey& retKey) = 0;
@@ -134,6 +143,8 @@ class Herder
     virtual void setUpgrades(Upgrades::UpgradeParameters const& upgrades) = 0;
     // gets the upgrades that are scheduled by this node
     virtual std::string getUpgradesJson() = 0;
+
+    virtual void forceSCPStateIntoSyncWithLastClosedLedger() = 0;
 
     virtual ~Herder()
     {

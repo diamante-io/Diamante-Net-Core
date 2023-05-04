@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,7 +6,7 @@
 
 #include "transactions/PathPaymentOpFrameBase.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
@@ -33,7 +33,7 @@ class PathPaymentStrictSendOpFrame : public PathPaymentOpFrameBase
 
     Asset const& getSourceAsset() const override;
     Asset const& getDestAsset() const override;
-    AccountID const& getDestID() const override;
+    MuxedAccount const& getDestMuxedAccount() const override;
     xdr::xvector<Asset, 5> const& getPath() const override;
 
     void setResultSuccess() override;

@@ -158,4 +158,23 @@ program other_prog {
   } = 1;
 }= 0x20000001;
 
+union voidu switch (bool b) {
+  case FALSE:
+    void;
+};
+
+typedef string string32<32>;
+struct nested_cereal_adapter_calls {
+  string32* strptr;
+  string32  strvec<>;
+  string32  strarr[2];
+};
+
+struct inner {
+  int f;
+};
+struct outer {
+  inner in;
+};
+
 }

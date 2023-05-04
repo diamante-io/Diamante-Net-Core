@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,23 +6,16 @@
 #include "invariant/InvariantManager.h"
 #include "ledger/LedgerManager.h"
 #include "ledger/LedgerTxn.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "transactions/OfferExchange.h"
+#include "transactions/TransactionUtils.h"
+#include "util/XDRCereal.h"
 #include "util/types.h"
 #include "xdrpp/printer.h"
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
-
-static int64_t
-getMinBalance(LedgerHeader const& header, uint32_t ownerCount)
-{
-    if (header.ledgerVersion <= 8)
-        return (2 + ownerCount) * header.baseReserve;
-    else
-        return (2 + ownerCount) * int64_t(header.baseReserve);
-}
 
 static int64_t
 getOfferBuyingLiabilities(LedgerEntry const& le)
@@ -77,7 +70,7 @@ getSellingLiabilities(LedgerEntry const& le)
 }
 
 static std::string
-checkAuthorized(std::shared_ptr<LedgerEntry const> const& current)
+checkAuthorized(LedgerEntry const* current, LedgerEntry const* previous)
 {
     if (!current)
     {
@@ -86,16 +79,57 @@ checkAuthorized(std::shared_ptr<LedgerEntry const> const& current)
 
     if (current->data.type() == TRUSTLINE)
     {
-        auto const& trust = current->data.trustLine();
-        if (!(trust.flags & AUTHORIZED_FLAG))
+        if (!isAuthorized(*current))
         {
-            if (getSellingLiabilities(*current) > 0 ||
-                getBuyingLiabilities(*current) > 0)
+            auto const& trust = current->data.trustLine();
+            if (isAuthorizedToMaintainLiabilities(*current))
             {
-                return fmt::format("Unauthorized trust line has liabilities {}",
-                                   xdr::xdr_to_string(trust));
+                auto curSellingLiabilities = getSellingLiabilities(*current);
+                auto curBuyingLiabilities = getBuyingLiabilities(*current);
+
+                bool sellingLiabilitiesInc =
+                    previous ? curSellingLiabilities >
+                                   getSellingLiabilities(*previous)
+                             : curSellingLiabilities > 0;
+                bool buyingLiabilitiesInc =
+                    previous
+                        ? curBuyingLiabilities > getBuyingLiabilities(*previous)
+                        : curBuyingLiabilities > 0;
+
+                if (sellingLiabilitiesInc || buyingLiabilitiesInc)
+                {
+                    return fmt::format(
+                        "Liabilities increased on unauthorized trust line {}",
+                        xdr_to_string(trust));
+                }
+            }
+            else
+            {
+                if (getSellingLiabilities(*current) > 0 ||
+                    getBuyingLiabilities(*current) > 0)
+                {
+                    return fmt::format(
+                        "Unauthorized trust line has liabilities {}",
+                        xdr_to_string(trust));
+                }
             }
         }
+    }
+    return "";
+}
+
+static std::string
+checkAuthorized(
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genCurrent,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genPrevious)
+{
+    auto type = genCurrent ? genCurrent->type() : genPrevious->type();
+    if (type == GeneralizedLedgerEntryType::LEDGER_ENTRY)
+    {
+        auto const* current = genCurrent ? &genCurrent->ledgerEntry() : nullptr;
+        auto const* previous =
+            genPrevious ? &genPrevious->ledgerEntry() : nullptr;
+        return checkAuthorized(current, previous);
     }
     return "";
 }
@@ -103,7 +137,7 @@ checkAuthorized(std::shared_ptr<LedgerEntry const> const& current)
 static void
 addOrSubtractLiabilities(
     std::map<AccountID, std::map<Asset, Liabilities>>& deltaLiabilities,
-    std::shared_ptr<LedgerEntry const> const& entry, bool isAdd)
+    LedgerEntry const* entry, bool isAdd)
 {
     if (!entry)
     {
@@ -148,18 +182,30 @@ addOrSubtractLiabilities(
 }
 
 static void
+addOrSubtractLiabilities(
+    std::map<AccountID, std::map<Asset, Liabilities>>& deltaLiabilities,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genEntry, bool isAdd)
+{
+    if (genEntry &&
+        genEntry->type() == GeneralizedLedgerEntryType::LEDGER_ENTRY)
+    {
+        addOrSubtractLiabilities(deltaLiabilities, &genEntry->ledgerEntry(),
+                                 isAdd);
+    }
+}
+
+static void
 accumulateLiabilities(
     std::map<AccountID, std::map<Asset, Liabilities>>& deltaLiabilities,
-    std::shared_ptr<LedgerEntry const> const& current,
-    std::shared_ptr<LedgerEntry const> const& previous)
+    std::shared_ptr<GeneralizedLedgerEntry const> const& current,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& previous)
 {
     addOrSubtractLiabilities(deltaLiabilities, current, true);
     addOrSubtractLiabilities(deltaLiabilities, previous, false);
 }
 
 static bool
-shouldCheckAccount(std::shared_ptr<LedgerEntry const> const& current,
-                   std::shared_ptr<LedgerEntry const> const& previous,
+shouldCheckAccount(LedgerEntry const* current, LedgerEntry const* previous,
                    uint32_t ledgerVersion)
 {
     if (!previous)
@@ -174,9 +220,9 @@ shouldCheckAccount(std::shared_ptr<LedgerEntry const> const& current,
     if (ledgerVersion >= 10)
     {
         bool sellingLiabilitiesInc =
-            getSellingLiabilities(*current) > getSellingLiabilities(*current);
+            getSellingLiabilities(*current) > getSellingLiabilities(*previous);
         bool buyingLiabilitiesInc =
-            getBuyingLiabilities(*current) > getBuyingLiabilities(*current);
+            getBuyingLiabilities(*current) > getBuyingLiabilities(*previous);
         bool didLiabilitiesIncrease =
             sellingLiabilitiesInc || buyingLiabilitiesInc;
         return didBalanceDecrease || didLiabilitiesIncrease;
@@ -188,10 +234,8 @@ shouldCheckAccount(std::shared_ptr<LedgerEntry const> const& current,
 }
 
 static std::string
-checkBalanceAndLimit(LedgerHeader const& header,
-                     std::shared_ptr<LedgerEntry const> const& current,
-                     std::shared_ptr<LedgerEntry const> const& previous,
-                     uint32_t ledgerVersion)
+checkBalanceAndLimit(LedgerHeader const& header, LedgerEntry const* current,
+                     LedgerEntry const* previous, uint32_t ledgerVersion)
 {
     if (!current)
     {
@@ -209,13 +253,13 @@ checkBalanceAndLimit(LedgerHeader const& header,
                 liabilities.selling = getSellingLiabilities(*current);
                 liabilities.buying = getBuyingLiabilities(*current);
             }
-            int64_t minBalance = getMinBalance(header, account.numSubEntries);
+            int64_t minBalance = getMinBalance(header, account);
             if ((account.balance < minBalance + liabilities.selling) ||
                 (INT64_MAX - account.balance < liabilities.buying))
             {
                 return fmt::format(
                     "Balance not compatible with liabilities for account {}",
-                    xdr::xdr_to_string(account));
+                    xdr_to_string(account));
             }
         }
     }
@@ -233,10 +277,28 @@ checkBalanceAndLimit(LedgerHeader const& header,
         {
             return fmt::format(
                 "Balance not compatible with liabilities for trustline {}",
-                xdr::xdr_to_string(trust));
+                xdr_to_string(trust));
         }
     }
     return {};
+}
+
+static std::string
+checkBalanceAndLimit(
+    LedgerHeader const& header,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genCurrent,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genPrevious,
+    uint32_t ledgerVersion)
+{
+    auto type = genCurrent ? genCurrent->type() : genPrevious->type();
+    if (type == GeneralizedLedgerEntryType::LEDGER_ENTRY)
+    {
+        auto const* current = genCurrent ? &genCurrent->ledgerEntry() : nullptr;
+        auto const* previous =
+            genPrevious ? &genPrevious->ledgerEntry() : nullptr;
+        return checkBalanceAndLimit(header, current, previous, ledgerVersion);
+    }
+    return "";
 }
 
 std::shared_ptr<Invariant>
@@ -267,8 +329,8 @@ LiabilitiesMatchOffers::checkOnOperationApply(Operation const& operation,
         std::map<AccountID, std::map<Asset, Liabilities>> deltaLiabilities;
         for (auto const& entryDelta : ltxDelta.entry)
         {
-            auto checkAuthStr =
-                DiamNet::checkAuthorized(entryDelta.second.current);
+            auto checkAuthStr = checkAuthorized(entryDelta.second.current,
+                                                entryDelta.second.previous);
             if (!checkAuthStr.empty())
             {
                 return checkAuthStr;
@@ -288,8 +350,8 @@ LiabilitiesMatchOffers::checkOnOperationApply(Operation const& operation,
                         "change in total buying liabilities of "
                         "offers by {} for account {} in asset {}",
                         assetLiabilities.second.buying,
-                        xdr::xdr_to_string(accLiabilities.first),
-                        xdr::xdr_to_string(assetLiabilities.first));
+                        xdr_to_string(accLiabilities.first),
+                        xdr_to_string(assetLiabilities.first));
                 }
                 else if (assetLiabilities.second.selling != 0)
                 {
@@ -298,8 +360,8 @@ LiabilitiesMatchOffers::checkOnOperationApply(Operation const& operation,
                         "change in total selling liabilities of "
                         "offers by {} for account {} in asset {}",
                         assetLiabilities.second.selling,
-                        xdr::xdr_to_string(accLiabilities.first),
-                        xdr::xdr_to_string(assetLiabilities.first));
+                        xdr_to_string(accLiabilities.first),
+                        xdr_to_string(assetLiabilities.first));
                 }
             }
         }
@@ -307,7 +369,7 @@ LiabilitiesMatchOffers::checkOnOperationApply(Operation const& operation,
 
     for (auto const& entryDelta : ltxDelta.entry)
     {
-        auto msg = DiamNet::checkBalanceAndLimit(
+        auto msg = diamnet::checkBalanceAndLimit(
             ltxDelta.header.current, entryDelta.second.current,
             entryDelta.second.previous, ledgerVersion);
         if (!msg.empty())

@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@
 Another peer out there that we are connected to
 */
 
-namespace DiamNet
+namespace diamnet
 {
 // [testing] Peer that communicates via byte-buffer delivery events queued in
 // in-process io_contexts.
@@ -25,8 +25,8 @@ class LoopbackPeer : public Peer
 {
   private:
     std::weak_ptr<LoopbackPeer> mRemote;
-    std::deque<xdr::msg_ptr> mOutQueue; // sending queue
-    std::queue<xdr::msg_ptr> mInQueue;  // receiving queue
+    std::deque<TimestampedMessage> mOutQueue; // sending queue
+    std::queue<xdr::msg_ptr> mInQueue;        // receiving queue
 
     bool mCorked{false};
     bool mStraggling{false};

@@ -1,14 +1,14 @@
 #pragma once
 
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/LedgerTxnEntry.h"
-#include "xdr/DiamNet-ledger-entries.h"
+#include "xdr/Diamnet-ledger-entries.h"
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class LedgerTxn;
@@ -51,6 +51,7 @@ class TrustLineWrapper
     int64_t addSellingLiabilities(LedgerTxnHeader const& header, int64_t delta);
 
     bool isAuthorized() const;
+    bool isAuthorizedToMaintainLiabilities() const;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const;
 
@@ -89,6 +90,7 @@ class TrustLineWrapper::AbstractImpl
                                           int64_t delta) = 0;
 
     virtual bool isAuthorized() const = 0;
+    virtual bool isAuthorizedToMaintainLiabilities() const = 0;
 
     virtual int64_t
     getAvailableBalance(LedgerTxnHeader const& header) const = 0;
@@ -124,6 +126,7 @@ class ConstTrustLineWrapper
     int64_t getBalance() const;
 
     bool isAuthorized() const;
+    bool isAuthorizedToMaintainLiabilities() const;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const;
 
@@ -150,6 +153,7 @@ class ConstTrustLineWrapper::AbstractImpl
     virtual int64_t getBalance() const = 0;
 
     virtual bool isAuthorized() const = 0;
+    virtual bool isAuthorizedToMaintainLiabilities() const = 0;
 
     virtual int64_t
     getAvailableBalance(LedgerTxnHeader const& header) const = 0;

@@ -1,15 +1,15 @@
 #pragma once
 
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/SecretKey.h"
 #include "transactions/TransactionFrame.h"
-#include "xdr/DiamNet-ledger-entries.h"
-#include "xdr/DiamNet-transaction.h"
+#include "xdr/Diamnet-ledger-entries.h"
+#include "xdr/Diamnet-transaction.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -41,8 +41,11 @@ class TestAccount
 
     Asset asset(std::string const& name);
     void changeTrust(Asset const& asset, int64_t limit);
+    void allowTrust(Asset const& asset, PublicKey const& trustor,
+                    uint32_t flag);
     void allowTrust(Asset const& asset, PublicKey const& trustor);
     void denyTrust(Asset const& asset, PublicKey const& trustor);
+    void allowMaintainLiabilities(Asset const& asset, PublicKey const& trustor);
 
     TrustLineEntry loadTrustLine(Asset const& asset) const;
     bool hasTrustLine(Asset const& asset) const;
@@ -52,6 +55,14 @@ class TestAccount
     void manageData(std::string const& name, DataValue* value);
 
     void bumpSequence(SequenceNumber to);
+
+    ClaimableBalanceID
+    createClaimableBalance(Asset const& asset, int64_t amount,
+                           xdr::xvector<Claimant, 10> const& claimants);
+
+    void claimClaimableBalance(ClaimableBalanceID const& balanceID);
+
+    ClaimableBalanceID getBalanceID(uint32_t opIndex, SequenceNumber sn = 0);
 
     int64_t
     manageOffer(int64_t offerID, Asset const& selling, Asset const& buying,
@@ -91,12 +102,12 @@ class TestAccount
         return getPublicKey();
     }
 
-    const SecretKey&
+    SecretKey const&
     getSecretKey() const
     {
         return mSk;
     }
-    PublicKey
+    PublicKey const&
     getPublicKey() const
     {
         return mSk.getPublicKey();
@@ -130,6 +141,7 @@ class TestAccount
     }
 
     int64_t getBalance() const;
+    int64_t getAvailableBalance() const;
 
     bool exists() const;
 

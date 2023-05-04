@@ -1,13 +1,14 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "work/BasicWork.h"
-#include "lib/util/format.h"
 #include "util/Logging.h"
 #include "util/Math.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 size_t const BasicWork::RETRY_NEVER = 0;
@@ -330,6 +331,7 @@ BasicWork::wakeSelfUpCallback(std::function<void()> innerCallback)
 void
 BasicWork::crankWork()
 {
+    ZoneScoped;
     assert(!isDone() && mState != InternalState::WAITING);
 
     InternalState nextState;
@@ -352,17 +354,25 @@ VirtualClock::duration
 BasicWork::getRetryDelay() const
 {
     // Cap to 512 sec or ~8 minutes
-    uint64_t m = 2 << std::min(uint64_t(8), uint64_t(mRetries));
+    uint64_t m = 2ULL << std::min(uint64_t(8), uint64_t(mRetries));
     return std::chrono::seconds(rand_uniform<uint64_t>(1ULL, m));
 }
 
 uint64_t
 BasicWork::getRetryETA() const
 {
-    uint64_t now = mApp.timeNow();
-    uint64_t retry =
-        mRetryTimer ? VirtualClock::to_time_t(mRetryTimer->expiry_time()) : 0;
-    return now > retry ? 0 : retry - now;
+    if (!mRetryTimer)
+    {
+        return 0;
+    }
+    auto now = mApp.getClock().now();
+    auto retry = mRetryTimer->expiry_time();
+    if (now > retry)
+    {
+        return 0;
+    }
+    auto secs = std::chrono::duration_cast<std::chrono::seconds>(retry - now);
+    return secs.count();
 }
 
 void

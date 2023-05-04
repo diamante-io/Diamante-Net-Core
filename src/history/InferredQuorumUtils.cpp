@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,16 +9,16 @@
 #include "main/Config.h"
 #include "util/Logging.h"
 #include "util/XDROperators.h"
-#include "xdr/DiamNet-SCP.h"
-#include "xdr/DiamNet-types.h"
+#include "xdr/Diamnet-SCP.h"
+#include "xdr/Diamnet-types.h"
 
 #include <algorithm>
 #include <set>
 
-namespace DiamNet
+namespace diamnet
 {
 
-static DiamNet::QuorumTracker::QuorumMap
+static diamnet::QuorumTracker::QuorumMap
 getQuorumMapForLedger(Application::pointer app, uint32_t ledgerNum)
 {
     if (ledgerNum == 0)
@@ -41,7 +41,8 @@ checkQuorumIntersection(Config const& cfg, uint32_t ledgerNum)
     LOG(INFO) << "Checking last-heard quorum from herder";
     app->start();
     auto qmap = getQuorumMapForLedger(app, ledgerNum);
-    auto qic = QuorumIntersectionChecker::create(qmap, cfg);
+    std::atomic<bool> interruptFlag{false};
+    auto qic = QuorumIntersectionChecker::create(qmap, cfg, interruptFlag);
     qic->networkEnjoysQuorumIntersection();
 }
 
@@ -85,7 +86,9 @@ writeQuorumGraph(Config const& cfg, std::string const& outputFile,
     }
     else
     {
-        std::ofstream out(filename);
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(filename);
         iq.writeQuorumGraph(cfg2, out);
         LOG(INFO) << "*";
         LOG(INFO) << "* Wrote quorum graph to " << filename;

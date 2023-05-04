@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 #pragma once
@@ -6,7 +6,7 @@
 #include "main/Application.h"
 #include <set>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -238,7 +238,7 @@ class BasicWork : public std::enable_shared_from_this<BasicWork>,
     size_t mRetries{0};
     size_t const mMaxRetries{RETRY_A_FEW};
 
-    // Whitelist legal state transitions in work state machine
+    // Legal and allowed state transitions in work state machine
     static std::set<Transition> const ALLOWED_TRANSITIONS;
 };
 }

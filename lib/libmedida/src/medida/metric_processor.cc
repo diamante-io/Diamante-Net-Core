@@ -28,6 +28,9 @@ void MetricProcessor::Process(Timer& timer) {
 void MetricProcessor::Process(MetricInterface& metric) {
 }
 
-
+void
+MetricProcessor::Process(Buckets& buckets)
+{
+}
 
 } // namespace medida

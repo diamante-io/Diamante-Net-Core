@@ -12,6 +12,7 @@ class Histogram;
 class Meter;
 class MetricInterface;
 class Timer;
+class Buckets;
 
 class MetricProcessor {
 public:
@@ -21,6 +22,7 @@ public:
   virtual void Process(Meter& meter);
   virtual void Process(Timer& timer);
   virtual void Process(MetricInterface& metric);
+  virtual void Process(Buckets& buckets);
 };
 
 } // namespace medida

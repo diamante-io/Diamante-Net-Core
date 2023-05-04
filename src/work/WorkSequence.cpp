@@ -1,10 +1,11 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "WorkSequence.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 WorkSequence::WorkSequence(Application& app, std::string name,
@@ -19,6 +20,7 @@ WorkSequence::WorkSequence(Application& app, std::string name,
 BasicWork::State
 WorkSequence::onRun()
 {
+    ZoneScoped;
     if (mNextInSequence == mSequenceOfWork.end())
     {
         // Completed all the work
@@ -53,6 +55,7 @@ WorkSequence::onRun()
 bool
 WorkSequence::onAbort()
 {
+    ZoneScoped;
     if (mCurrentExecuting && !mCurrentExecuting->isDone())
     {
         // Wait for the current work in sequence to finish aborting
@@ -65,6 +68,7 @@ WorkSequence::onAbort()
 void
 WorkSequence::onReset()
 {
+    ZoneScoped;
     assert(std::all_of(
         mSequenceOfWork.cbegin(), mNextInSequence,
         [](std::shared_ptr<BasicWork> const& w) { return w->isDone(); }));
@@ -85,6 +89,7 @@ WorkSequence::getStatus() const
 void
 WorkSequence::shutdown()
 {
+    ZoneScoped;
     if (mCurrentExecuting)
     {
         mCurrentExecuting->shutdown();

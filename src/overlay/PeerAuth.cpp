@@ -1,9 +1,9 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/PeerAuth.h"
-#include "crypto/ECDH.h"
+#include "crypto/Curve25519.h"
 #include "crypto/Hex.h"
 #include "crypto/SHA.h"
 #include "crypto/SecretKey.h"
@@ -13,7 +13,7 @@
 #include "util/XDROperators.h"
 #include "xdrpp/marshal.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Certs expire every hour, are reissued every half hour.
@@ -36,8 +36,8 @@ makeAuthCert(Application& app, Curve25519Public const& pub)
 
 PeerAuth::PeerAuth(Application& app)
     : mApp(app)
-    , mECDHSecretKey(EcdhRandomSecret())
-    , mECDHPublicKey(EcdhDerivePublic(mECDHSecretKey))
+    , mECDHSecretKey(curve25519RandomSecret())
+    , mECDHPublicKey(curve25519DerivePublic(mECDHSecretKey))
     , mCert(makeAuthCert(app, mECDHPublicKey))
     , mSharedKeyCache(0xffff)
 {
@@ -81,8 +81,8 @@ PeerAuth::getSharedKey(Curve25519Public const& remotePublic,
         return mSharedKeyCache.get(key);
     }
     auto value =
-        EcdhDeriveSharedKey(mECDHSecretKey, mECDHPublicKey, remotePublic,
-                            role == Peer::WE_CALLED_REMOTE);
+        curve25519DeriveSharedKey(mECDHSecretKey, mECDHPublicKey, remotePublic,
+                                  role == Peer::WE_CALLED_REMOTE);
     mSharedKeyCache.put(key, value);
     return value;
 }

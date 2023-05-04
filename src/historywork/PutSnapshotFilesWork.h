@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "history/HistoryArchive.h"
 #include "work/Work.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 struct StateSnapshot;
@@ -29,6 +29,8 @@ class PutSnapshotFilesWork : public Work
     PutSnapshotFilesWork(Application& app,
                          std::shared_ptr<StateSnapshot> snapshot);
     ~PutSnapshotFilesWork() = default;
+
+    std::string getStatus() const override;
 
   protected:
     State doWork() override;

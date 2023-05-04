@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,15 +6,14 @@
 #include "crypto/Hex.h"
 #include <sstream>
 
-namespace DiamNet
+namespace diamnet
 {
 
-MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
+MergeKey::MergeKey(bool keepDeadEntries,
                    std::shared_ptr<Bucket> const& inputCurr,
                    std::shared_ptr<Bucket> const& inputSnap,
                    std::vector<std::shared_ptr<Bucket>> const& inputShadows)
-    : mMaxProtocolVersion(maxProtocolVersion)
-    , mKeepDeadEntries(keepDeadEntries)
+    : mKeepDeadEntries(keepDeadEntries)
     , mInputCurrBucket(inputCurr->getHash())
     , mInputSnapBucket(inputSnap->getHash())
 {
@@ -25,22 +24,10 @@ MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
     }
 }
 
-MergeKey::MergeKey(uint32_t maxProtocolVersion, bool keepDeadEntries,
-                   Hash& inputCurr, Hash& inputSnap,
-                   std::vector<Hash> const& inputShadows)
-    : mMaxProtocolVersion(maxProtocolVersion)
-    , mKeepDeadEntries(keepDeadEntries)
-    , mInputCurrBucket(inputCurr)
-    , mInputSnapBucket(inputSnap)
-    , mInputShadowBuckets(inputShadows)
-{
-}
-
 bool
 MergeKey::operator==(MergeKey const& other) const
 {
-    return mMaxProtocolVersion == other.mMaxProtocolVersion &&
-           mKeepDeadEntries == other.mKeepDeadEntries &&
+    return mKeepDeadEntries == other.mKeepDeadEntries &&
            mInputCurrBucket == other.mInputCurrBucket &&
            mInputSnapBucket == other.mInputSnapBucket &&
            mInputShadowBuckets == other.mInputShadowBuckets;
@@ -69,15 +56,15 @@ operator<<(std::ostream& out, MergeKey const& b)
 namespace std
 {
 size_t
-hash<DiamNet::MergeKey>::operator()(DiamNet::MergeKey const& key) const noexcept
+hash<diamnet::MergeKey>::operator()(diamnet::MergeKey const& key) const noexcept
 {
     std::ostringstream oss;
-    oss << key.mMaxProtocolVersion << ',' << key.mKeepDeadEntries << ','
-        << DiamNet::binToHex(key.mInputCurrBucket) << ','
-        << DiamNet::binToHex(key.mInputSnapBucket);
+    oss << key.mKeepDeadEntries << ','
+        << diamnet::binToHex(key.mInputCurrBucket) << ','
+        << diamnet::binToHex(key.mInputSnapBucket);
     for (auto const& e : key.mInputShadowBuckets)
     {
-        oss << DiamNet::binToHex(e) << ',';
+        oss << diamnet::binToHex(e) << ',';
     }
     std::hash<std::string> h;
     return h(oss.str());

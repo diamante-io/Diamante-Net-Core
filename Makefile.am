@@ -4,34 +4,16 @@ SUBDIRS = lib src
 AM_EXTRA_RECURSIVE_TARGETS = check-valgrind
 ACLOCAL_AMFLAGS = -I m4
 
-dist_doc_DATA = docs/DiamNet-core_example.cfg			\
-	docs/DiamNet-core_standalone.cfg			\
-	docs/DiamNet-core_testnet.cfg docs/software/admin.md	\
+dist_doc_DATA = docs/diamnet-core_example.cfg			\
+	docs/diamnet-core_standalone.cfg			\
+	docs/diamnet-core_testnet.cfg docs/software/admin.md	\
 	docs/software/commands.md
-
-man_MANS = docs/DiamNet-core.1
 
 include $(top_srcdir)/common.mk
 
 .PHONY: always
 always:
 	@:
-
-# This formats the man page, substituting the file
-# software/commands.md for the line contianing %commands%.  After
-# formatting the man page with pandoc, it substitutes $(PREFIX) for
-# the string %prefix%.  In the event that pandoc is not found, instead
-# of failing with an error, just use the last version successfully
-docs/DiamNet-core.1: docs/DiamNet-core.1.md docs/software/commands.md
-	mkdir -p docs
-	sed -ne '/^#/,$$p' "$(top_srcdir)/docs/software/commands.md" \
-	    | sed -e '/^%commands%$$/{s///; r/dev/stdin' -e '}' \
-	    $(top_srcdir)/docs/DiamNet-core.1.md > tmp.man.md
-	-pandoc -s -f markdown -t man -o "$(top_srcdir)/$@.in~" tmp.man.md \
-	    && mv -f "$(top_srcdir)/$@.in~" "$(top_srcdir)/$@.in"
-	rm -f tmp.man.md
-	-sed -e "s|%prefix%|$(prefix)|g" "$(top_srcdir)/$@.in" > "$@~" \
-	    && mv -f "$@~" "$@"
 
 if USE_CLANG_FORMAT
 format: always
@@ -43,13 +25,37 @@ fuzz-testcases fuzz fuzz-clean: all
 	cd src && $(MAKE) $(AM_MAKEFLAGS) $@
 endif # USE_AFL_FUZZ
 
-EXTRA_DIST = DiamNet-core.supp test/testnet/multitail.conf	\
+if USE_TRACY_GUI
+TRACY_GUI_DIR=$(top_srcdir)/lib/tracy/profiler
+TRACY_GUI_SOURCE=$(TRACY_GUI_DIR)/src
+TRACY_GUI_BUILD=$(TRACY_GUI_DIR)/build/unix
+
+$(TRACY_GUI_BUILD)/Tracy-release: $(wildcard $(TRACY_GUI_SOURCE)/*.*)
+	$(MAKE) -C $(TRACY_GUI_BUILD) release CC="$(CC)" CXX="$(CXX)"
+
+tracy-gui: $(TRACY_GUI_BUILD)/Tracy-release
+	cp -v $< $@
+endif # USE_TRACY_GUI
+
+if USE_TRACY_CAPTURE
+TRACY_CAPTURE_DIR=$(top_srcdir)/lib/tracy/capture
+TRACY_CAPTURE_SOURCE=$(TRACY_CAPTURE_DIR)/src
+TRACY_CAPTURE_BUILD=$(TRACY_CAPTURE_DIR)/build/unix
+
+$(TRACY_CAPTURE_BUILD)/capture-release: $(wildcard $(TRACY_CAPTURE_SOURCE)/*.*)
+	$(MAKE) -C $(TRACY_CAPTURE_BUILD) release CC="$(CC)" CXX="$(CXX)"
+
+tracy-capture: $(TRACY_CAPTURE_BUILD)/capture-release
+	cp -v $< $@
+endif # USE_TRACY_CAPTURE
+
+EXTRA_DIST = diamnet-core.supp test/testnet/multitail.conf	\
 	test/testnet/run-test.sh README.md make-mks
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_FLAGS = --num-callers=30 --trace-children=yes \
           --trace-children-skip=hostname,aws,gcutil,gcloud,azure,node,python
-VALGRIND_SUPPRESSIONS_FILES = DiamNet-core.supp
+VALGRIND_SUPPRESSIONS_FILES = diamnet-core.supp
 
 maintainer-clean-local:
 	cd $(srcdir) && rm -rf `sed -ne 's!^/!!p' .gitignore` *~ .gitignore~

@@ -1,9 +1,10 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "transactions/TransactionUtils.h"
 #include "crypto/SecretKey.h"
+#include "ledger/GeneralizedLedgerEntry.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
@@ -11,9 +12,96 @@
 #include "transactions/OfferExchange.h"
 #include "util/XDROperators.h"
 #include "util/types.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
+
+AccountEntryExtensionV1&
+prepareAccountEntryExtensionV1(AccountEntry& ae)
+{
+    if (ae.ext.v() == 0)
+    {
+        ae.ext.v(1);
+        ae.ext.v1().liabilities = Liabilities{0, 0};
+    }
+    return ae.ext.v1();
+}
+
+AccountEntryExtensionV2&
+prepareAccountEntryExtensionV2(AccountEntry& ae)
+{
+    auto& extV1 = prepareAccountEntryExtensionV1(ae);
+    if (extV1.ext.v() == 0)
+    {
+        extV1.ext.v(2);
+        auto& extV2 = extV1.ext.v2();
+        extV2.signerSponsoringIDs.resize(
+            static_cast<uint32_t>(ae.signers.size()));
+    }
+    return extV1.ext.v2();
+}
+
+TrustLineEntry::_ext_t::_v1_t&
+prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
+{
+    if (tl.ext.v() == 0)
+    {
+        tl.ext.v(1);
+        tl.ext.v1().liabilities = Liabilities{0, 0};
+    }
+    return tl.ext.v1();
+}
+
+LedgerEntryExtensionV1&
+prepareLedgerEntryExtensionV1(LedgerEntry& le)
+{
+    if (le.ext.v() == 0)
+    {
+        le.ext.v(1);
+        le.ext.v1().sponsoringID.reset();
+    }
+    return le.ext.v1();
+}
+
+AccountEntryExtensionV2&
+getAccountEntryExtensionV2(AccountEntry& ae)
+{
+    if (ae.ext.v() != 1 || ae.ext.v1().ext.v() != 2)
+    {
+        throw std::runtime_error("expected AccountEntry extension V2");
+    }
+    return ae.ext.v1().ext.v2();
+}
+
+LedgerEntryExtensionV1&
+getLedgerEntryExtensionV1(LedgerEntry& le)
+{
+    if (le.ext.v() != 1)
+    {
+        throw std::runtime_error("expected LedgerEntry extension V1");
+    }
+
+    return le.ext.v1();
+}
+
+static bool
+checkAuthorization(LedgerHeader const& header, LedgerEntry const& entry)
+{
+    if (header.ledgerVersion < 10)
+    {
+        if (!isAuthorized(entry))
+        {
+            return false;
+        }
+    }
+    else if (!isAuthorizedToMaintainLiabilities(entry))
+    {
+        throw std::runtime_error("Invalid authorization");
+    }
+
+    return true;
+}
 
 LedgerKey
 accountKey(AccountID const& accountID)
@@ -50,15 +138,41 @@ dataKey(AccountID const& accountID, std::string const& dataName)
     return key;
 }
 
+LedgerKey
+claimableBalanceKey(ClaimableBalanceID const& balanceID)
+{
+    LedgerKey key(CLAIMABLE_BALANCE);
+    key.claimableBalance().balanceID = balanceID;
+    return key;
+}
+
+GeneralizedLedgerKey
+sponsorshipKey(AccountID const& sponsoredID)
+{
+    GeneralizedLedgerKey gkey(GeneralizedLedgerEntryType::SPONSORSHIP);
+    gkey.sponsorshipKey().sponsoredID = sponsoredID;
+    return gkey;
+}
+
+GeneralizedLedgerKey
+sponsorshipCounterKey(AccountID const& sponsoringID)
+{
+    GeneralizedLedgerKey gkey(GeneralizedLedgerEntryType::SPONSORSHIP_COUNTER);
+    gkey.sponsorshipCounterKey().sponsoringID = sponsoringID;
+    return gkey;
+}
+
 LedgerTxnEntry
 loadAccount(AbstractLedgerTxn& ltx, AccountID const& accountID)
 {
+    ZoneScoped;
     return ltx.load(accountKey(accountID));
 }
 
 ConstLedgerTxnEntry
 loadAccountWithoutRecord(AbstractLedgerTxn& ltx, AccountID const& accountID)
 {
+    ZoneScoped;
     return ltx.loadWithoutRecord(accountKey(accountID));
 }
 
@@ -66,19 +180,29 @@ LedgerTxnEntry
 loadData(AbstractLedgerTxn& ltx, AccountID const& accountID,
          std::string const& dataName)
 {
+    ZoneScoped;
     return ltx.load(dataKey(accountID, dataName));
 }
 
 LedgerTxnEntry
 loadOffer(AbstractLedgerTxn& ltx, AccountID const& sellerID, int64_t offerID)
 {
+    ZoneScoped;
     return ltx.load(offerKey(sellerID, offerID));
+}
+
+LedgerTxnEntry
+loadClaimableBalance(AbstractLedgerTxn& ltx,
+                     ClaimableBalanceID const& balanceID)
+{
+    return ltx.load(claimableBalanceKey(balanceID));
 }
 
 TrustLineWrapper
 loadTrustLine(AbstractLedgerTxn& ltx, AccountID const& accountID,
               Asset const& asset)
 {
+    ZoneScoped;
     return TrustLineWrapper(ltx, accountID, asset);
 }
 
@@ -86,6 +210,7 @@ ConstTrustLineWrapper
 loadTrustLineWithoutRecord(AbstractLedgerTxn& ltx, AccountID const& accountID,
                            Asset const& asset)
 {
+    ZoneScoped;
     return ConstTrustLineWrapper(ltx, accountID, asset);
 }
 
@@ -93,6 +218,7 @@ TrustLineWrapper
 loadTrustLineIfNotNative(AbstractLedgerTxn& ltx, AccountID const& accountID,
                          Asset const& asset)
 {
+    ZoneScoped;
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
         return {};
@@ -105,6 +231,7 @@ loadTrustLineWithoutRecordIfNotNative(AbstractLedgerTxn& ltx,
                                       AccountID const& accountID,
                                       Asset const& asset)
 {
+    ZoneScoped;
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
         return {};
@@ -112,11 +239,24 @@ loadTrustLineWithoutRecordIfNotNative(AbstractLedgerTxn& ltx,
     return ConstTrustLineWrapper(ltx, accountID, asset);
 }
 
+LedgerTxnEntry
+loadSponsorship(AbstractLedgerTxn& ltx, AccountID const& sponsoredID)
+{
+    return ltx.load(sponsorshipKey(sponsoredID));
+}
+
+LedgerTxnEntry
+loadSponsorshipCounter(AbstractLedgerTxn& ltx, AccountID const& sponsoringID)
+{
+    return ltx.load(sponsorshipCounterKey(sponsoringID));
+}
+
 static void
 acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,
                             LedgerTxnHeader const& header,
                             LedgerTxnEntry const& offerEntry, bool isAcquire)
 {
+    ZoneScoped;
     // This should never happen
     auto const& offer = offerEntry.current().data.offer();
     if (offer.buying == offer.selling)
@@ -126,7 +266,7 @@ acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,
     auto const& sellerID = offer.sellerID;
 
     auto loadAccountAndValidate = [&ltx, &sellerID]() {
-        auto account = DiamNet::loadAccount(ltx, sellerID);
+        auto account = diamnet::loadAccount(ltx, sellerID);
         if (!account)
         {
             throw std::runtime_error("account does not exist");
@@ -135,7 +275,7 @@ acquireOrReleaseLiabilities(AbstractLedgerTxn& ltx,
     };
 
     auto loadTrustAndValidate = [&ltx, &sellerID](Asset const& asset) {
-        auto trust = DiamNet::loadTrustLine(ltx, sellerID, asset);
+        auto trust = diamnet::loadTrustLine(ltx, sellerID, asset);
         if (!trust)
         {
             throw std::runtime_error("trustline does not exist");
@@ -203,13 +343,13 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
 
         auto& acc = entry.current().data.account();
         auto newBalance = acc.balance;
-        if (!DiamNet::addBalance(newBalance, delta))
+        if (!diamnet::addBalance(newBalance, delta))
         {
             return false;
         }
         if (header.current().ledgerVersion >= 10)
         {
-            auto minBalance = getMinBalance(header, acc.numSubEntries);
+            auto minBalance = getMinBalance(header.current(), acc);
             if (delta < 0 &&
                 newBalance - minBalance < getSellingLiabilities(header, entry))
             {
@@ -230,14 +370,15 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
         {
             return true;
         }
-        if (!isAuthorized(entry))
+
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
 
         auto& tl = entry.current().data.trustLine();
         auto newBalance = tl.balance;
-        if (!DiamNet::addBalance(newBalance, delta, tl.limit))
+        if (!diamnet::addBalance(newBalance, delta, tl.limit))
         {
             return false;
         }
@@ -279,36 +420,27 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
         auto& acc = entry.current().data.account();
 
         int64_t maxLiabilities = INT64_MAX - acc.balance;
-        bool res = DiamNet::addBalance(buyingLiab, delta, maxLiabilities);
+        bool res = diamnet::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (acc.ext.v() == 0)
-            {
-                acc.ext.v(1);
-                acc.ext.v1().liabilities = Liabilities{0, 0};
-            }
-            acc.ext.v1().liabilities.buying = buyingLiab;
+            prepareAccountEntryExtensionV1(acc).liabilities.buying = buyingLiab;
         }
         return res;
     }
     else if (entry.current().data.type() == TRUSTLINE)
     {
-        auto& tl = entry.current().data.trustLine();
-        if (!isAuthorized(entry))
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
 
+        auto& tl = entry.current().data.trustLine();
         int64_t maxLiabilities = tl.limit - tl.balance;
-        bool res = DiamNet::addBalance(buyingLiab, delta, maxLiabilities);
+        bool res = diamnet::addBalance(buyingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (tl.ext.v() == 0)
-            {
-                tl.ext.v(1);
-                tl.ext.v1().liabilities = Liabilities{0, 0};
-            }
-            tl.ext.v1().liabilities.buying = buyingLiab;
+            prepareTrustLineEntryExtensionV1(tl).liabilities.buying =
+                buyingLiab;
         }
         return res;
     }
@@ -316,38 +448,6 @@ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
     {
         throw std::runtime_error("Unknown LedgerEntry type");
     }
-}
-
-AddSubentryResult
-addNumEntries(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int count)
-{
-    auto& acc = entry.current().data.account();
-    int newEntriesCount = unsignedToSigned(acc.numSubEntries) + count;
-    if (newEntriesCount < 0)
-    {
-        throw std::runtime_error("invalid account state");
-    }
-    if (header.current().ledgerVersion >=
-            FIRST_PROTOCOL_SUPPORTING_OPERATION_LIMITS &&
-        count > 0 && newEntriesCount > ACCOUNT_SUBENTRY_LIMIT)
-    {
-        return AddSubentryResult::TOO_MANY_SUBENTRIES;
-    }
-
-    int64_t effMinBalance = getMinBalance(header, newEntriesCount);
-    if (header.current().ledgerVersion >= 10)
-    {
-        effMinBalance += getSellingLiabilities(header, entry);
-    }
-
-    // only check minBalance when attempting to add subEntries
-    if (count > 0 && acc.balance < effMinBalance)
-    {
-        // balance too low
-        return AddSubentryResult::LOW_RESERVE;
-    }
-    acc.numSubEntries = newEntriesCount;
-    return AddSubentryResult::SUCCESS;
 }
 
 bool
@@ -366,42 +466,34 @@ addSellingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
     {
         auto& acc = entry.current().data.account();
         int64_t maxLiabilities =
-            acc.balance - getMinBalance(header, acc.numSubEntries);
+            acc.balance - getMinBalance(header.current(), acc);
         if (maxLiabilities < 0)
         {
             return false;
         }
 
-        bool res = DiamNet::addBalance(sellingLiab, delta, maxLiabilities);
+        bool res = diamnet::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (acc.ext.v() == 0)
-            {
-                acc.ext.v(1);
-                acc.ext.v1().liabilities = Liabilities{0, 0};
-            }
-            acc.ext.v1().liabilities.selling = sellingLiab;
+            prepareAccountEntryExtensionV1(acc).liabilities.selling =
+                sellingLiab;
         }
         return res;
     }
     else if (entry.current().data.type() == TRUSTLINE)
     {
-        auto& tl = entry.current().data.trustLine();
-        if (!isAuthorized(entry))
+        if (!checkAuthorization(header.current(), entry.current()))
         {
             return false;
         }
 
+        auto& tl = entry.current().data.trustLine();
         int64_t maxLiabilities = tl.balance;
-        bool res = DiamNet::addBalance(sellingLiab, delta, maxLiabilities);
+        bool res = diamnet::addBalance(sellingLiab, delta, maxLiabilities);
         if (res)
         {
-            if (tl.ext.v() == 0)
-            {
-                tl.ext.v(1);
-                tl.ext.v1().liabilities = Liabilities{0, 0};
-            }
-            tl.ext.v1().liabilities.selling = sellingLiab;
+            prepareTrustLineEntryExtensionV1(tl).liabilities.selling =
+                sellingLiab;
         }
         return res;
     }
@@ -418,16 +510,20 @@ generateID(LedgerTxnHeader& header)
 }
 
 int64_t
-getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
+getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
 {
     int64_t avail = 0;
     if (le.data.type() == ACCOUNT)
     {
         auto const& acc = le.data.account();
-        avail = acc.balance - getMinBalance(header, acc.numSubEntries);
+        avail = acc.balance - getMinBalance(header, acc);
     }
     else if (le.data.type() == TRUSTLINE)
     {
+        // We only want to check auth starting from V10, so no need to look at
+        // the return value. This will throw if unauthorized
+        checkAuthorization(header, le);
+
         avail = le.data.trustLine().balance;
     }
     else
@@ -435,7 +531,7 @@ getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
         throw std::runtime_error("Unknown LedgerEntry type");
     }
 
-    if (header.current().ledgerVersion >= 10)
+    if (header.ledgerVersion >= 10)
     {
         avail -= getSellingLiabilities(header, le);
     }
@@ -445,14 +541,14 @@ getAvailableBalance(LedgerTxnHeader const& header, LedgerEntry const& le)
 int64_t
 getAvailableBalance(LedgerTxnHeader const& header, LedgerTxnEntry const& entry)
 {
-    return getAvailableBalance(header, entry.current());
+    return getAvailableBalance(header.current(), entry.current());
 }
 
 int64_t
 getAvailableBalance(LedgerTxnHeader const& header,
                     ConstLedgerTxnEntry const& entry)
 {
-    return getAvailableBalance(header, entry.current());
+    return getAvailableBalance(header.current(), entry.current());
 }
 
 int64_t
@@ -497,15 +593,16 @@ getMaxAmountReceive(LedgerTxnHeader const& header, LedgerEntry const& le)
     }
     if (le.data.type() == TRUSTLINE)
     {
-        int64_t amount = 0;
-        if (isAuthorized(le))
+        if (!checkAuthorization(header.current(), le))
         {
-            auto const& tl = le.data.trustLine();
-            amount = tl.limit - tl.balance;
-            if (header.current().ledgerVersion >= 10)
-            {
-                amount -= getBuyingLiabilities(header, le);
-            }
+            return 0;
+        }
+
+        auto const& tl = le.data.trustLine();
+        int64_t amount = tl.limit - tl.balance;
+        if (header.current().ledgerVersion >= 10)
+        {
+            amount -= getBuyingLiabilities(header, le);
         }
         return amount;
     }
@@ -529,13 +626,44 @@ getMaxAmountReceive(LedgerTxnHeader const& header,
 }
 
 int64_t
-getMinBalance(LedgerTxnHeader const& header, uint32_t ownerCount)
+getMinBalance(LedgerHeader const& header, AccountEntry const& acc)
 {
-    auto const& lh = header.current();
+    uint32_t numSponsoring = 0;
+    uint32_t numSponsored = 0;
+    if (header.ledgerVersion >= 14 && hasAccountEntryExtV2(acc))
+    {
+        numSponsoring = acc.ext.v1().ext.v2().numSponsoring;
+        numSponsored = acc.ext.v1().ext.v2().numSponsored;
+    }
+    return getMinBalance(header, acc.numSubEntries, numSponsoring,
+                         numSponsored);
+}
+
+int64_t
+getMinBalance(LedgerHeader const& lh, uint32_t numSubentries,
+              uint32_t numSponsoring, uint32_t numSponsored)
+{
+    if (lh.ledgerVersion < 14 && (numSponsored != 0 || numSponsoring != 0))
+    {
+        throw std::runtime_error("unexpected sponsorship state");
+    }
+
     if (lh.ledgerVersion <= 8)
-        return (2 + ownerCount) * lh.baseReserve;
+    {
+        return (2 + numSubentries) * lh.baseReserve;
+    }
     else
-        return (2 + ownerCount) * int64_t(lh.baseReserve);
+    {
+        int64_t effEntries = 2LL;
+        effEntries += numSubentries;
+        effEntries += numSponsoring;
+        effEntries -= numSponsored;
+        if (effEntries < 0)
+        {
+            throw std::runtime_error("unexpected account state");
+        }
+        return effEntries * int64_t(lh.baseReserve);
+    }
 }
 
 int64_t
@@ -609,9 +737,9 @@ getOfferSellingLiabilities(LedgerTxnHeader const& header,
 }
 
 int64_t
-getSellingLiabilities(LedgerTxnHeader const& header, LedgerEntry const& le)
+getSellingLiabilities(LedgerHeader const& header, LedgerEntry const& le)
 {
-    if (header.current().ledgerVersion < 10)
+    if (header.ledgerVersion < 10)
     {
         throw std::runtime_error("Liabilities accessed before version 10");
     }
@@ -633,13 +761,19 @@ int64_t
 getSellingLiabilities(LedgerTxnHeader const& header,
                       LedgerTxnEntry const& entry)
 {
-    return getSellingLiabilities(header, entry.current());
+    return getSellingLiabilities(header.current(), entry.current());
+}
+
+uint64_t
+getStartingSequenceNumber(uint32_t ledgerSeq)
+{
+    return static_cast<uint64_t>(ledgerSeq) << 32;
 }
 
 uint64_t
 getStartingSequenceNumber(LedgerTxnHeader const& header)
 {
-    return static_cast<uint64_t>(header.current().ledgerSeq) << 32;
+    return getStartingSequenceNumber(header.current().ledgerSeq);
 }
 
 bool
@@ -661,6 +795,25 @@ isAuthorized(ConstLedgerTxnEntry const& entry)
 }
 
 bool
+isAuthorizedToMaintainLiabilities(LedgerEntry const& le)
+{
+    return isAuthorized(le) || (le.data.trustLine().flags &
+                                AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG) != 0;
+}
+
+bool
+isAuthorizedToMaintainLiabilities(LedgerTxnEntry const& entry)
+{
+    return isAuthorizedToMaintainLiabilities(entry.current());
+}
+
+bool
+isAuthorizedToMaintainLiabilities(ConstLedgerTxnEntry const& entry)
+{
+    return isAuthorizedToMaintainLiabilities(entry.current());
+}
+
+bool
 isAuthRequired(ConstLedgerTxnEntry const& entry)
 {
     return (entry.current().data.account().flags & AUTH_REQUIRED_FLAG) != 0;
@@ -673,15 +826,6 @@ isImmutableAuth(LedgerTxnEntry const& entry)
 }
 
 void
-normalizeSigners(LedgerTxnEntry& entry)
-{
-    auto& acc = entry.current().data.account();
-    std::sort(
-        acc.signers.begin(), acc.signers.end(),
-        [](Signer const& s1, Signer const& s2) { return s1.key < s2.key; });
-}
-
-void
 releaseLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                    LedgerTxnEntry const& offer)
 {
@@ -689,16 +833,136 @@ releaseLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
 }
 
 void
-setAuthorized(LedgerTxnEntry& entry, bool authorized)
+setAuthorized(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
+              uint32_t authorized)
 {
-    auto& tl = entry.current().data.trustLine();
-    if (authorized)
+    if (!trustLineFlagIsValid(authorized, header))
     {
-        tl.flags |= AUTHORIZED_FLAG;
+        throw std::runtime_error("trying to set invalid trust line flag");
+    }
+    auto& tl = entry.current().data.trustLine();
+    tl.flags = authorized;
+}
+
+bool
+trustLineFlagIsValid(uint32_t flag, uint32_t ledgerVersion)
+{
+    if (ledgerVersion < 13)
+    {
+        return (flag & ~MASK_TRUSTLINE_FLAGS) == 0;
     }
     else
     {
-        tl.flags &= ~AUTHORIZED_FLAG;
+        uint32_t invalidAuthCombo =
+            AUTHORIZED_FLAG | AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG;
+        return (flag & ~MASK_TRUSTLINE_FLAGS_V13) == 0 &&
+               (flag & invalidAuthCombo) != invalidAuthCombo;
     }
 }
+
+AccountID
+toAccountID(MuxedAccount const& m)
+{
+    AccountID ret(static_cast<PublicKeyType>(m.type() & 0xff));
+    switch (m.type())
+    {
+    case KEY_TYPE_ED25519:
+        ret.ed25519() = m.ed25519();
+        break;
+    case KEY_TYPE_MUXED_ED25519:
+        ret.ed25519() = m.med25519().ed25519;
+        break;
+    default:
+        // this would be a bug
+        abort();
+    }
+    return ret;
 }
+
+MuxedAccount
+toMuxedAccount(AccountID const& a)
+{
+    MuxedAccount ret(static_cast<CryptoKeyType>(a.type()));
+    switch (a.type())
+    {
+    case PUBLIC_KEY_TYPE_ED25519:
+        ret.ed25519() = a.ed25519();
+        break;
+    default:
+        // this would be a bug
+        abort();
+    }
+    return ret;
+}
+
+bool
+trustLineFlagIsValid(uint32_t flag, LedgerTxnHeader const& header)
+{
+    return trustLineFlagIsValid(flag, header.current().ledgerVersion);
+}
+
+uint64_t
+getUpperBoundCloseTimeOffset(Application& app, uint64_t lastCloseTime)
+{
+    uint64_t currentTime = VirtualClock::to_time_t(app.getClock().system_now());
+
+    // account for the time between closeTime and now
+    uint64_t closeTimeDrift =
+        currentTime <= lastCloseTime ? 0 : currentTime - lastCloseTime;
+
+    return app.getConfig().getExpectedLedgerCloseTime().count() *
+               EXPECTED_CLOSE_TIME_MULT +
+           closeTimeDrift;
+}
+
+bool
+hasAccountEntryExtV2(AccountEntry const& ae)
+{
+    return ae.ext.v() == 1 && ae.ext.v1().ext.v() == 2;
+}
+
+namespace detail
+{
+struct MuxChecker
+{
+    bool mHasMuxedAccount{false};
+
+    void
+    operator()(diamnet::MuxedAccount const& t)
+    {
+        // checks if this is a multiplexed account,
+        // such as KEY_TYPE_MUXED_ED25519
+        if ((t.type() & 0x100) != 0)
+        {
+            mHasMuxedAccount = true;
+        }
+    }
+
+    template <typename T>
+    std::enable_if_t<(xdr::xdr_traits<T>::is_container ||
+                      xdr::xdr_traits<T>::is_class)>
+    operator()(T const& t)
+    {
+        if (!mHasMuxedAccount)
+        {
+            xdr::xdr_traits<T>::save(*this, t);
+        }
+    }
+
+    template <typename T>
+    std::enable_if_t<!(xdr::xdr_traits<T>::is_container ||
+                       xdr::xdr_traits<T>::is_class)>
+    operator()(T const& t)
+    {
+    }
+};
+} // namespace detail
+
+bool
+hasMuxedAccount(TransactionEnvelope const& e)
+{
+    detail::MuxChecker c;
+    c(e);
+    return c.mHasMuxedAccount;
+}
+} // namespace diamnet

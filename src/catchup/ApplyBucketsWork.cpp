@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,18 +15,18 @@
 #include "invariant/InvariantManager.h"
 #include "ledger/LedgerTxn.h"
 #include "main/Application.h"
-#include "util/format.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 #include <medida/meter.h>
 #include <medida/metrics_registry.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ApplyBucketsWork::ApplyBucketsWork(
     Application& app,
     std::map<std::string, std::shared_ptr<Bucket>> const& buckets,
-    HistoryArchiveState const& applyState, uint32_t maxProtocolVersion,
-    bool resolveMerges)
+    HistoryArchiveState const& applyState, uint32_t maxProtocolVersion)
     : BasicWork(app, "apply-buckets", BasicWork::RETRY_NEVER)
     , mBuckets(buckets)
     , mApplyState(applyState)
@@ -41,7 +41,6 @@ ApplyBucketsWork::ApplyBucketsWork(
     , mBucketApplyFailure(app.getMetrics().NewMeter(
           {"history", "bucket-apply", "failure"}, "event"))
     , mCounters(app.getClock().now())
-    , mResolveMerges(resolveMerges)
 {
 }
 
@@ -65,6 +64,7 @@ ApplyBucketsWork::getBucket(std::string const& hash)
 void
 ApplyBucketsWork::onReset()
 {
+    ZoneScoped;
     CLOG(INFO, "History") << "Applying buckets";
 
     mTotalBuckets = 0;
@@ -95,7 +95,6 @@ ApplyBucketsWork::onReset()
     mLevel = BucketList::kNumLevels - 1;
     mApplying = false;
 
-    mDelayTimer.reset();
     mSnapBucket.reset();
     mCurrBucket.reset();
     mSnapApplicator.reset();
@@ -105,6 +104,7 @@ ApplyBucketsWork::onReset()
 void
 ApplyBucketsWork::startLevel()
 {
+    ZoneScoped;
     assert(isLevelComplete());
 
     CLOG(DEBUG, "History") << "ApplyBuckets : starting level " << mLevel;
@@ -113,7 +113,9 @@ ApplyBucketsWork::startLevel()
 
     bool applySnap = (i.snap != binToHex(level.getSnap()->getHash()));
     bool applyCurr = (i.curr != binToHex(level.getCurr()->getHash()));
-    if (!mApplying && (applySnap || applyCurr))
+
+    if (!mApplying && !mApp.getConfig().MODE_USES_IN_MEMORY_LEDGER &&
+        (applySnap || applyCurr))
     {
         uint32_t oldestLedger = applySnap
                                     ? BucketList::oldestLedgerInSnap(
@@ -149,40 +151,15 @@ ApplyBucketsWork::startLevel()
 BasicWork::State
 ApplyBucketsWork::onRun()
 {
-    if (mLevel == BucketList::kNumLevels - 1 &&
-        !mApplyState.containsValidBuckets(mApp))
+    ZoneScoped;
+    if (!mHaveCheckedApplyStateValidity && mLevel == BucketList::kNumLevels - 1)
     {
-        CLOG(ERROR, "History") << "Malformed HAS: unable to apply buckets";
-        return State::WORK_FAILURE;
-    }
-
-    if (mResolveMerges && mDelayTimer)
-    {
-        CLOG(INFO, "History") << "ApplyBucketsWork: application completed; "
-                                 "waiting for merge resolution";
-        auto& bl = mApp.getBucketManager().getBucketList();
-        bl.resolveAnyReadyFutures();
-        if (bl.futuresAllResolved())
+        if (!mApplyState.containsValidBuckets(mApp))
         {
-            return State::WORK_SUCCESS;
+            CLOG(ERROR, "History") << "Malformed HAS: unable to apply buckets";
+            return State::WORK_FAILURE;
         }
-        else
-        {
-            std::weak_ptr<ApplyBucketsWork> weak(
-                std::static_pointer_cast<ApplyBucketsWork>(shared_from_this()));
-            auto handler = [weak](asio::error_code const& ec) {
-                auto self = weak.lock();
-                if (self)
-                {
-                    self->wakeUp();
-                }
-            };
-
-            // Check back later
-            mDelayTimer->expires_from_now(std::chrono::milliseconds(500));
-            mDelayTimer->async_wait(handler);
-            return State::WORK_WAITING;
-        }
+        mHaveCheckedApplyStateValidity = true;
     }
 
     // Check if we're at the beginning of the new level
@@ -235,12 +212,6 @@ ApplyBucketsWork::onRun()
     CLOG(INFO, "History") << "ApplyBuckets : done, restarting merges";
     mApp.getBucketManager().assumeState(mApplyState, mMaxProtocolVersion);
 
-    if (mResolveMerges)
-    {
-        mDelayTimer = std::make_unique<VirtualTimer>(mApp.getClock());
-        return State::WORK_RUNNING;
-    }
-
     return State::WORK_SUCCESS;
 }
 
@@ -248,6 +219,7 @@ void
 ApplyBucketsWork::advance(std::string const& bucketName,
                           BucketApplicator& applicator)
 {
+    ZoneScoped;
     assert(applicator);
     assert(mTotalSize != 0);
     auto sz = applicator.advance(mCounters);
@@ -305,16 +277,10 @@ ApplyBucketsWork::onFailureRetry()
     mBucketApplyFailure.Mark();
 }
 
-void
-ApplyBucketsWork::onSuccess()
+std::string
+ApplyBucketsWork::getStatus() const
 {
-    if (mResolveMerges)
-    {
-        if (!mApp.getBucketManager().getBucketList().futuresAllResolved())
-        {
-            throw std::runtime_error(
-                "Not all futures were resolved after bucket application!");
-        }
-    }
+    return fmt::format("Applying buckets {}%. Currently on level {}",
+                       (100 * mAppliedSize / mTotalSize), mLevel);
 }
 }

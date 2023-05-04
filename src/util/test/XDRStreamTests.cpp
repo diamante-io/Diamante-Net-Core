@@ -1,22 +1,23 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/Bucket.h"
 #include "ledger/test/LedgerTestUtils.h"
 #include "lib/catch.hpp"
-#include "lib/util/format.h"
 #include "test/test.h"
 #include "util/Logging.h"
 #include "util/XDRStream.h"
+#include <fmt/format.h>
 
 #include <chrono>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 TEST_CASE("XDROutputFileStream fail modes", "[xdrstream]")
 {
-    XDROutputFileStream out(/*doFsync=*/true);
+    VirtualClock clock;
+    XDROutputFileStream out(clock.getIOContext(), /*doFsync=*/true);
     auto filename = "someFile";
 
     SECTION("open throws")
@@ -28,13 +29,13 @@ TEST_CASE("XDROutputFileStream fail modes", "[xdrstream]")
     }
     SECTION("write throws")
     {
-        auto hasher = SHA256::create();
+        SHA256 hasher;
         size_t bytes = 0;
         auto ledgerEntries = LedgerTestUtils::generateValidLedgerEntries(1);
         auto bucketEntries =
             Bucket::convertToBucketEntry(false, {}, ledgerEntries, {});
 
-        REQUIRE_THROWS_AS(out.writeOne(bucketEntries[0], hasher.get(), &bytes),
+        REQUIRE_THROWS_AS(out.writeOne(bucketEntries[0], &hasher, &bytes),
                           std::runtime_error);
     }
     SECTION("close throws")
@@ -45,9 +46,10 @@ TEST_CASE("XDROutputFileStream fail modes", "[xdrstream]")
 
 TEST_CASE("XDROutputFileStream fsync bench", "[!hide][xdrstream][bench]")
 {
+    VirtualClock clock;
     Config const& cfg = getTestConfig(0);
 
-    auto hasher = SHA256::create();
+    SHA256 hasher;
     auto ledgerEntries = LedgerTestUtils::generateValidLedgerEntries(10000000);
     auto bucketEntries =
         Bucket::convertToBucketEntry(false, {}, ledgerEntries, {});
@@ -56,8 +58,8 @@ TEST_CASE("XDROutputFileStream fsync bench", "[!hide][xdrstream][bench]")
 
     for (int i = 0; i < 10; ++i)
     {
-        XDROutputFileStream outFsync(/*doFsync=*/true);
-        XDROutputFileStream outNoFsync(/*doFsync=*/false);
+        XDROutputFileStream outFsync(clock.getIOContext(), /*doFsync=*/true);
+        XDROutputFileStream outNoFsync(clock.getIOContext(), /*doFsync=*/false);
 
         outFsync.open(
             fmt::format("{}/outFsync-{}.xdr", cfg.BUCKET_DIR_PATH, i));
@@ -68,7 +70,7 @@ TEST_CASE("XDROutputFileStream fsync bench", "[!hide][xdrstream][bench]")
         auto start = std::chrono::system_clock::now();
         for (auto const& e : bucketEntries)
         {
-            outFsync.writeOne(e, hasher.get(), &bytes);
+            outFsync.writeOne(e, &hasher, &bytes);
         }
         outFsync.close();
         auto stop = std::chrono::system_clock::now();
@@ -81,7 +83,7 @@ TEST_CASE("XDROutputFileStream fsync bench", "[!hide][xdrstream][bench]")
         start = std::chrono::system_clock::now();
         for (auto const& e : bucketEntries)
         {
-            outNoFsync.writeOne(e, hasher.get(), &bytes);
+            outNoFsync.writeOne(e, &hasher, &bytes);
         }
         outNoFsync.close();
         stop = std::chrono::system_clock::now();

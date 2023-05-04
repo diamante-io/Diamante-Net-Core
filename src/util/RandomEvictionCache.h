@@ -1,5 +1,5 @@
 #pragma once
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,14 +9,14 @@
 #include <random>
 #include <unordered_map>
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Implements a simple fixed-size cache that does
 // least-recent-out-of-2-random-choices eviction. Degrades more-gracefully
 // across pathological load patterns than LRU, and also takes somewhat less
 // book-keeping.
-template <typename K, typename V>
+template <typename K, typename V, typename Hash = std::hash<K>>
 class RandomEvictionCache : public NonMovableOrCopyable
 {
   public:
@@ -43,8 +43,9 @@ class RandomEvictionCache : public NonMovableOrCopyable
     };
 
     // Cache itself is stored in a hashmap.
-    std::unordered_map<K, CacheValue> mValueMap;
-    using MapValueType = typename std::unordered_map<K, CacheValue>::value_type;
+    using MapType = std::unordered_map<K, CacheValue, Hash>;
+    using MapValueType = typename MapType::value_type;
+    MapType mValueMap;
 
     // Pointers to hashmap elements are stored redundantly here just so we can
     // randomly pick some to evict; unordered_map has no random-access iterators

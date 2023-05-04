@@ -1,8 +1,9 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/BucketManager.h"
+#include "bucket/BucketTests.h"
 #include "catchup/test/CatchupWorkTests.h"
 #include "history/FileTransferInfo.h"
 #include "history/HistoryArchiveManager.h"
@@ -24,30 +25,56 @@
 #include "util/Logging.h"
 #include "work/WorkScheduler.h"
 
+#include "historywork/BatchDownloadWork.h"
 #include "historywork/DownloadBucketsWork.h"
+#include "historywork/DownloadVerifyTxResultsWork.h"
+#include "historywork/VerifyTxResultsWork.h"
+#include <fmt/format.h>
 #include <lib/catch.hpp>
-#include <lib/util/format.h>
 
-using namespace DiamNet;
+using namespace diamnet;
 using namespace historytestutils;
 
-TEST_CASE("next checkpoint ledger", "[history]")
+TEST_CASE("checkpoint containing ledger", "[history]")
 {
-    CatchupSimulation catchupSimulation{};
-    HistoryManager& hm = catchupSimulation.getApp().getHistoryManager();
-    REQUIRE(hm.nextCheckpointLedger(0) == 64);
-    REQUIRE(hm.nextCheckpointLedger(1) == 64);
-    REQUIRE(hm.nextCheckpointLedger(32) == 64);
-    REQUIRE(hm.nextCheckpointLedger(62) == 64);
-    REQUIRE(hm.nextCheckpointLedger(63) == 64);
-    REQUIRE(hm.nextCheckpointLedger(64) == 64);
-    REQUIRE(hm.nextCheckpointLedger(65) == 128);
-    REQUIRE(hm.nextCheckpointLedger(66) == 128);
-    REQUIRE(hm.nextCheckpointLedger(126) == 128);
-    REQUIRE(hm.nextCheckpointLedger(127) == 128);
-    REQUIRE(hm.nextCheckpointLedger(128) == 128);
-    REQUIRE(hm.nextCheckpointLedger(129) == 192);
-    REQUIRE(hm.nextCheckpointLedger(130) == 192);
+    VirtualClock clock;
+    auto app = createTestApplication(clock, getTestConfig());
+    auto& hm = app->getHistoryManager();
+    // Technically ledger 0 doesn't exist so it's not "in" any checkpoint; but
+    // the first checkpoint's ledger range covers ledger 0 so we consider it
+    // "contained" in that checkpoint for the sake of this function.
+    CHECK(hm.checkpointContainingLedger(0) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(1) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(2) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(3) == 0x3f);
+    // ...
+    CHECK(hm.checkpointContainingLedger(61) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(62) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(63) == 0x3f);
+    CHECK(hm.checkpointContainingLedger(64) == 0x7f);
+    CHECK(hm.checkpointContainingLedger(65) == 0x7f);
+    CHECK(hm.checkpointContainingLedger(66) == 0x7f);
+    // ...
+    CHECK(hm.checkpointContainingLedger(125) == 0x7f);
+    CHECK(hm.checkpointContainingLedger(126) == 0x7f);
+    CHECK(hm.checkpointContainingLedger(127) == 0x7f);
+    CHECK(hm.checkpointContainingLedger(128) == 0xbf);
+    CHECK(hm.checkpointContainingLedger(129) == 0xbf);
+    CHECK(hm.checkpointContainingLedger(130) == 0xbf);
+    // ...
+    CHECK(hm.checkpointContainingLedger(189) == 0xbf);
+    CHECK(hm.checkpointContainingLedger(190) == 0xbf);
+    CHECK(hm.checkpointContainingLedger(191) == 0xbf);
+    CHECK(hm.checkpointContainingLedger(192) == 0xff);
+    CHECK(hm.checkpointContainingLedger(193) == 0xff);
+    CHECK(hm.checkpointContainingLedger(194) == 0xff);
+    // ...
+    CHECK(hm.checkpointContainingLedger(253) == 0xff);
+    CHECK(hm.checkpointContainingLedger(254) == 0xff);
+    CHECK(hm.checkpointContainingLedger(255) == 0xff);
+    CHECK(hm.checkpointContainingLedger(256) == 0x13f);
+    CHECK(hm.checkpointContainingLedger(257) == 0x13f);
+    CHECK(hm.checkpointContainingLedger(258) == 0x13f);
 }
 
 TEST_CASE("HistoryManager compress", "[history]")
@@ -58,7 +85,9 @@ TEST_CASE("HistoryManager compress", "[history]")
     HistoryManager& hm = catchupSimulation.getApp().getHistoryManager();
     std::string fname = hm.localFilename("compressme");
     {
-        std::ofstream out(fname, std::ofstream::binary);
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(fname, std::ofstream::binary);
         out.write(s.data(), s.size());
     }
     std::string compressed = fname + ".gz";
@@ -183,9 +212,9 @@ TEST_CASE("Ledger chain verification", "[ledgerheaderverification]")
     LedgerHeaderHistoryEntry verifiedAhead{};
 
     uint32_t initLedger = 127;
-    LedgerRange ledgerRange{
+    auto ledgerRange = LedgerRange::inclusive(
         initLedger,
-        initLedger + app->getHistoryManager().getCheckpointFrequency() * 10};
+        initLedger + (app->getHistoryManager().getCheckpointFrequency() * 10));
     CheckpointRange checkpointRange{ledgerRange, app->getHistoryManager()};
     auto ledgerChainGenerator = TestLedgerChainGenerator{
         *app,
@@ -200,8 +229,12 @@ TEST_CASE("Ledger chain verification", "[ledgerheaderverification]")
                                          make_optional<Hash>(lcl.hash));
         auto ledgerRangeEnd = LedgerNumHashPair(last.header.ledgerSeq,
                                                 make_optional<Hash>(last.hash));
-        auto w = wm.executeWork<VerifyLedgerChainWork>(tmpDir, ledgerRange,
-                                                       lclPair, ledgerRangeEnd);
+        std::promise<LedgerNumHashPair> ledgerRangeEndPromise;
+        std::shared_future<LedgerNumHashPair> ledgerRangeEndFuture =
+            ledgerRangeEndPromise.get_future().share();
+        ledgerRangeEndPromise.set_value(ledgerRangeEnd);
+        auto w = wm.executeWork<VerifyLedgerChainWork>(
+            tmpDir, ledgerRange, lclPair, ledgerRangeEndFuture);
         REQUIRE(expectedState == w->getState());
     };
 
@@ -287,6 +320,99 @@ TEST_CASE("Ledger chain verification", "[ledgerheaderverification]")
     }
 }
 
+TEST_CASE("Tx results verification", "[batching][resultsverification]")
+{
+    CatchupSimulation catchupSimulation{};
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(2);
+    catchupSimulation.ensureOfflineCatchupPossible(checkpointLedger);
+
+    auto tmpDir =
+        catchupSimulation.getApp().getTmpDirManager().tmpDir("tx-results-test");
+    auto& wm = catchupSimulation.getApp().getWorkScheduler();
+    CheckpointRange range{LedgerRange::inclusive(1, checkpointLedger),
+                          catchupSimulation.getApp().getHistoryManager()};
+
+    auto verifyHeadersWork = wm.executeWork<BatchDownloadWork>(
+        range, HISTORY_FILE_TYPE_LEDGER, tmpDir);
+    REQUIRE(verifyHeadersWork->getState() == BasicWork::State::WORK_SUCCESS);
+    SECTION("basic")
+    {
+        auto verify =
+            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
+        REQUIRE(verify->getState() == BasicWork::State::WORK_SUCCESS);
+    }
+    SECTION("header file missing")
+    {
+        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_LEDGER, range.last());
+        std::remove(ft.localPath_nogz().c_str());
+        auto verify =
+            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
+        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
+    }
+    SECTION("hash mismatch")
+    {
+        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_LEDGER, range.last());
+        XDRInputFileStream res;
+        res.open(ft.localPath_nogz());
+        std::vector<LedgerHeaderHistoryEntry> entries;
+        LedgerHeaderHistoryEntry curr;
+        while (res && res.readOne(curr))
+        {
+            entries.push_back(curr);
+        }
+        res.close();
+        REQUIRE_FALSE(entries.empty());
+        auto& lastEntry = entries.at(entries.size() - 1);
+        lastEntry.header.txSetResultHash = HashUtils::random();
+        std::remove(ft.localPath_nogz().c_str());
+
+        XDROutputFileStream out(
+            catchupSimulation.getApp().getClock().getIOContext(), true);
+        out.open(ft.localPath_nogz());
+        for (auto const& item : entries)
+        {
+            out.writeOne(item);
+        }
+        out.close();
+
+        auto verify =
+            wm.executeWork<DownloadVerifyTxResultsWork>(range, tmpDir);
+        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
+    }
+    SECTION("invalid result entries")
+    {
+        auto getResults = wm.executeWork<BatchDownloadWork>(
+            range, HISTORY_FILE_TYPE_RESULTS, tmpDir);
+        REQUIRE(getResults->getState() == BasicWork::State::WORK_SUCCESS);
+
+        FileTransferInfo ft(tmpDir, HISTORY_FILE_TYPE_RESULTS, range.last());
+        XDRInputFileStream res;
+        res.open(ft.localPath_nogz());
+        std::vector<TransactionHistoryResultEntry> entries;
+        TransactionHistoryResultEntry curr;
+        while (res && res.readOne(curr))
+        {
+            entries.push_back(curr);
+        }
+        res.close();
+        REQUIRE_FALSE(entries.empty());
+        std::remove(ft.localPath_nogz().c_str());
+
+        XDROutputFileStream out(
+            catchupSimulation.getApp().getClock().getIOContext(), true);
+        out.open(ft.localPath_nogz());
+        // Duplicate entries
+        for (int i = 0; i < entries.size(); ++i)
+        {
+            out.writeOne(entries[0]);
+        }
+        out.close();
+
+        auto verify = wm.executeWork<VerifyTxResultsWork>(tmpDir, range.last());
+        REQUIRE(verify->getState() == BasicWork::State::WORK_FAILURE);
+    }
+}
+
 TEST_CASE("History publish", "[history][publish]")
 {
     CatchupSimulation catchupSimulation{};
@@ -318,6 +444,18 @@ TEST_CASE("History publish to multiple archives", "[history]")
 
     // Actually perform catchup and make sure everything is correct
     REQUIRE(catchupSimulation.catchupOffline(catchupApp, checkpointLedger));
+}
+
+TEST_CASE("History catchup with extra validation", "[history][publish]")
+{
+    CatchupSimulation catchupSimulation{};
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(3);
+    catchupSimulation.ensureOfflineCatchupPossible(checkpointLedger);
+
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_ON_DISK_SQLITE,
+        "app");
+    REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger, true));
 }
 
 TEST_CASE("Publish works correctly post shadow removal", "[history]")
@@ -526,6 +664,18 @@ TEST_CASE("History catchup", "[history][catchup][acceptance]")
         catchupSimulation.ensurePublishesComplete();
         REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3));
     }
+}
+
+TEST_CASE("Publish throttles catchup", "[history][catchup][acceptance]")
+{
+    CatchupSimulation catchupSimulation{};
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(20);
+    catchupSimulation.ensureLedgerAvailable(checkpointLedger + 1);
+    catchupSimulation.ensurePublishesComplete();
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app", /* publish */ true);
+    REQUIRE(catchupSimulation.catchupOffline(app, checkpointLedger));
 }
 
 TEST_CASE("History catchup with different modes",
@@ -738,8 +888,8 @@ TEST_CASE("Catchup non-initentry buckets to initentry-supporting works",
                 << txSet->size(lm.getLastClosedLedgerHeader().header)
                 << " txs (txhash:" << hexAbbrev(txSet->getContentsHash())
                 << ")";
-            DiamNetValue sv(txSet->getContentsHash(), closeTime, upgrades,
-                            DiamNet_VALUE_BASIC);
+            DiamnetValue sv(txSet->getContentsHash(), closeTime, upgrades,
+                            DIAMNET_VALUE_BASIC);
             lm.closeLedger(LedgerCloseData(ledgerSeq, txSet, sv));
         }
 
@@ -762,9 +912,9 @@ TEST_CASE("Publish catchup alternation with stall",
     // Publish in simulation, catch up in completeApp and minimalApp.
     // CompleteApp will catch up using CATCHUP_COMPLETE, minimalApp will use
     // CATCHUP_MINIMAL.
-    auto checkpoint = 3;
+    int checkpoints = 3;
     auto checkpointLedger =
-        catchupSimulation.getLastCheckpointLedger(checkpoint);
+        catchupSimulation.getLastCheckpointLedger(checkpoints);
     catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
 
     auto completeApp = catchupSimulation.createCatchupApplication(
@@ -779,9 +929,9 @@ TEST_CASE("Publish catchup alternation with stall",
     for (int i = 1; i < 4; ++i)
     {
         // Now alternate between publishing new stuff and catching up to it.
-        checkpoint += i;
+        checkpoints += i;
         checkpointLedger =
-            catchupSimulation.getLastCheckpointLedger(checkpoint);
+            catchupSimulation.getLastCheckpointLedger(checkpoints);
         catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
 
         REQUIRE(
@@ -824,58 +974,76 @@ TEST_CASE("Publish catchup via s3", "[!hide][s3]")
     REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
 }
 
-TEST_CASE("HAS in publish queue is resolved", "[history]")
+TEST_CASE("HAS in publishqueue remains in pristine state until publish",
+          "[history]")
 {
     // In this test we generate some buckets and cause a checkpoint to be
     // published, checking that the (cached) set of buckets referenced by the
-    // publish queue is/was equal to the set we'd expect from a fully-resolved
-    // HAS. This test is unfortunately quite "aware" of the internals of the
-    // subsystems it's touching; they don't really have well-developed testing
-    // interfaces. It's also a bit sensitive to the amount of work done in a
-    // single crank and the fact that we're stopping the crank just before
-    // firing the callback that clears the cached set of buckets referenced by
-    // the publish queue.
+    // publish queue is/was equal to the set we'd expect from a
+    // partially-resolved HAS. This test is unfortunately quite "aware" of the
+    // internals of the subsystems it's touching; they don't really have
+    // well-developed testing interfaces. It's also a bit sensitive to the
+    // amount of work done in a single crank and the fact that we're stopping
+    // the crank just before firing the callback that clears the cached set of
+    // buckets referenced by the publish queue.
 
     Config cfg(getTestConfig(0));
+    cfg.MANUAL_CLOSE = false;
     cfg.MAX_CONCURRENT_SUBPROCESSES = 0;
     TmpDirHistoryConfigurator tcfg;
     cfg = tcfg.configure(cfg, true);
     VirtualClock clock;
-    Application::pointer app = createTestApplication(clock, cfg);
-    app->start();
-    auto& hm = app->getHistoryManager();
-    auto& lm = app->getLedgerManager();
-    auto& bl = app->getBucketManager().getBucketList();
 
-    while (hm.getPublishQueueCount() != 1)
-    {
-        uint32_t ledger = lm.getLastClosedLedgerNum() + 1;
-        bl.addBatch(*app, ledger, cfg.LEDGER_PROTOCOL_VERSION, {},
-                    LedgerTestUtils::generateValidLedgerEntries(8), {});
+    BucketTests::for_versions_with_differing_bucket_logic(
+        cfg, [&](Config const& cfg) {
+            Application::pointer app = createTestApplication(clock, cfg);
+            app->start();
+            auto& hm = app->getHistoryManager();
+            auto& lm = app->getLedgerManager();
+            auto& bl = app->getBucketManager().getBucketList();
 
-        // This serves as a synchronization barrier on the worker threads doing
-        // merges, while _not_ intrusively modifying the BucketList. Without
-        // this barrier there's still a possible race between a merge started
-        // at some ledger and the publsih-capture of the FutureBucket, but this
-        // is only going to be a problem for a short/small merge it's not very
-        // bad to re-run at publish time.
-        HistoryArchiveState has(
-            app->getLedgerManager().getLastClosedLedgerNum(),
-            app->getBucketManager().getBucketList());
-        has.resolveAllFutures();
+            while (hm.getPublishQueueCount() != 1)
+            {
+                uint32_t ledger = lm.getLastClosedLedgerNum() + 1;
+                bl.addBatch(*app, ledger, cfg.LEDGER_PROTOCOL_VERSION, {},
+                            LedgerTestUtils::generateValidLedgerEntries(8), {});
+                clock.crank(true);
+            }
 
-        clock.crank(true);
-    }
-    auto pqb = hm.getBucketsReferencedByPublishQueue();
-    HistoryArchiveState has(app->getLedgerManager().getLastClosedLedgerNum(),
-                            app->getBucketManager().getBucketList());
-    has.resolveAllFutures();
-    REQUIRE(has.allBuckets() == pqb);
+            // Capture publish queue's view of HAS right before taking snapshot
+            auto queuedHAS = hm.getPublishQueueStates()[0];
+
+            // Now take snapshot and schedule publish, this should *not* modify
+            // HAS in any way
+            hm.publishQueuedHistory();
+
+            // First, ensure bucket references are intact
+            auto pqb = hm.getBucketsReferencedByPublishQueue();
+            REQUIRE(queuedHAS.allBuckets() == pqb);
+
+            // Second, ensure `next` is in the exact same state as when it was
+            // queued
+            for (uint32_t i = 0; i < BucketList::kNumLevels; i++)
+            {
+                auto const& currentNext = bl.getLevel(i).getNext();
+                auto const& queuedNext = queuedHAS.currentBuckets[i].next;
+
+                // Verify state against potential race: HAS was queued with a
+                // merge still in-progress, then dequeued and made live
+                // (re-starting any merges in-progress) too early, possibly
+                // handing off already resolved merges to publish work.
+                REQUIRE(currentNext.hasOutputHash() ==
+                        queuedNext.hasOutputHash());
+                REQUIRE(currentNext.isClear() == queuedNext.isClear());
+            }
+        });
 }
 
 TEST_CASE("persist publish queue", "[history][publish][acceptance]")
 {
     Config cfg(getTestConfig(0, Config::TESTDB_ON_DISK_SQLITE));
+
+    cfg.MANUAL_CLOSE = false;
     cfg.MAX_CONCURRENT_SUBPROCESSES = 0;
     cfg.ARTIFICIALLY_ACCELERATE_TIME_FOR_TESTING = true;
     TmpDirHistoryConfigurator tcfg;
@@ -894,12 +1062,6 @@ TEST_CASE("persist publish queue", "[history][publish][acceptance]")
         // checkpoint still queued.
         REQUIRE(hm0.getPublishSuccessCount() == 0);
         REQUIRE(hm0.getMinLedgerQueuedToPublish() == 7);
-        while (clock.cancelAllEvents() ||
-               app0->getProcessManager().getNumRunningProcesses() > 0)
-        {
-            clock.crank(true);
-        }
-        LOG(INFO) << app0->isStopping();
 
         // Trim history after publishing.
         ExternalQueue ps(*app0);
@@ -931,13 +1093,6 @@ TEST_CASE("persist publish queue", "[history][publish][acceptance]")
         LOG(INFO) << "minLedger " << minLedger;
         bool okQueue = minLedger == 0 || minLedger >= 35;
         REQUIRE(okQueue);
-        clock.cancelAllEvents();
-        while (clock.cancelAllEvents() ||
-               app1->getProcessManager().getNumRunningProcesses() > 0)
-        {
-            clock.crank(true);
-        }
-        LOG(INFO) << app1->isStopping();
     }
 }
 
@@ -963,10 +1118,14 @@ TEST_CASE("catchup with a gap", "[history][catchup][acceptance]")
     auto init = app->getLedgerManager().getLastClosedLedgerNum() + 2;
     REQUIRE(init == 73);
 
-    // Now start a catchup on that catchups as far as it can due to gap
+    // Now start a catchup on that catchups as far as it can due to gap. Make
+    // sure gap is past the checkpoint to ensure we buffer the ledger
     LOG(INFO) << "Starting catchup (with gap) from " << init;
-    REQUIRE(!catchupSimulation.catchupOnline(app, init, 5, init + 10));
-    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() == 82);
+    REQUIRE(!catchupSimulation.catchupOnline(app, init, 5, init + 59));
+
+    // 73+59=132 is the missing ledger, so the previous ledger was the last one
+    // to be closed
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() == 131);
 
     // Now generate a little more history
     checkpointLedger = catchupSimulation.getLastCheckpointLedger(3);
@@ -1038,9 +1197,9 @@ TEST_CASE("Catchup manual", "[history][catchup][acceptance]")
     auto dbMode = Config::TESTDB_IN_MEMORY_SQLITE;
 
     // Test every 10th scenario
-    for (auto i = 0; i < DiamNet::gCatchupRangeCases.size(); i += 10)
+    for (auto i = 0; i < diamnet::gCatchupRangeCases.size(); i += 10)
     {
-        auto test = DiamNet::gCatchupRangeCases[i];
+        auto test = diamnet::gCatchupRangeCases[i];
         auto configuration = test.second;
         auto name =
             fmt::format("lcl = {}, to ledger = {}, count = {}", test.first,
@@ -1074,4 +1233,181 @@ TEST_CASE("initialize existing history store fails", "[history]")
         REQUIRE(!app->getHistoryArchiveManager().initializeHistoryArchive(
             tcfg.getArchiveDirName()));
     }
+}
+
+TEST_CASE("Catchup failure recovery with buffered checkpoint",
+          "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
+
+    // Catch up successfully the first time
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app2");
+    REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
+
+    auto init = app->getLedgerManager().getLastClosedLedgerNum() + 2;
+    REQUIRE(init == 73);
+
+    // Now generate a little more history
+    checkpointLedger = catchupSimulation.getLastCheckpointLedger(2);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 63);
+
+    // Now start a catchup on that catchups as far as it can due to gap
+    LOG(INFO) << "Starting catchup (with gap) from " << init;
+    REQUIRE(!catchupSimulation.catchupOnline(app, init, 115, init + 60));
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() == 132);
+
+    // Now generate a little more history
+    checkpointLedger = catchupSimulation.getLastCheckpointLedger(3);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
+
+    // 1. LCL is 132
+    // 2. CatchupManager should still have 192 and 193 buffered after previous
+    //    catchup failed so we don't have to wait for the next checkpoint
+    // 3. Catchup to 191, and then externalize 194 to start catchup
+    CHECK(catchupSimulation.catchupOnline(app, checkpointLedger, 1, 191, 3));
+}
+
+TEST_CASE("Change ordering of buffered ledgers", "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app2");
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 15);
+
+    // we have 3 buffered ledgers after trigger (66, 67, and 68)
+
+    SECTION("Checkpoint and trigger in order")
+    {
+        REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3, 0, 0,
+                                                {63, 64, 65, 67, 68, 66}));
+    }
+
+    SECTION("Checkpoint and trigger with gap in between")
+    {
+        REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3, 0, 0,
+                                                {63, 64, 67, 65, 68, 66}));
+    }
+
+    SECTION("Trigger and checkpoint with gap in between")
+    {
+        REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3, 0, 0,
+                                                {63, 65, 67, 64, 68, 66}));
+    }
+
+    SECTION("Reverse order")
+    {
+        REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 3, 0, 0,
+                                                {68, 67, 66, 65, 64, 63}));
+    }
+}
+
+TEST_CASE("Introduce and fix gap without starting catchup",
+          "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app2");
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 15);
+    REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 5));
+
+    auto& lm = app->getLedgerManager();
+    auto& cm = app->getCatchupManager();
+    auto& herder = static_cast<HerderImpl&>(app->getHerder());
+
+    auto nextLedger = lm.getLastClosedLedgerNum() + 1;
+
+    // introduce 2 gaps (+1 and +4 are missing)
+    catchupSimulation.externalizeLedger(herder, nextLedger);
+    catchupSimulation.externalizeLedger(herder, nextLedger + 2);
+    catchupSimulation.externalizeLedger(herder, nextLedger + 3);
+    catchupSimulation.externalizeLedger(herder, nextLedger + 5);
+    REQUIRE(!lm.isSynced());
+    REQUIRE(cm.hasBufferedLedger());
+
+    // Fill in the first gap. There will still be buffered ledgers left because
+    // of the second gap
+    catchupSimulation.externalizeLedger(herder, nextLedger + 1);
+    REQUIRE(!lm.isSynced());
+    REQUIRE(cm.hasBufferedLedger());
+    REQUIRE(cm.getFirstBufferedLedger().getLedgerSeq() == nextLedger + 5);
+
+    // Fill in the second gap. All buffered ledgers should be applied, but we
+    // wait for another ledger to close to get in sync
+    catchupSimulation.externalizeLedger(herder, nextLedger + 4);
+    REQUIRE(lm.isSynced());
+    REQUIRE(!cm.hasBufferedLedger());
+    REQUIRE(!cm.isCatchupInitialized());
+    REQUIRE(lm.getLastClosedLedgerNum() == nextLedger + 5);
+}
+
+TEST_CASE("Receive trigger and checkpoint ledger out of order",
+          "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app2");
+
+    auto& lm = app->getLedgerManager();
+    auto& cm = app->getCatchupManager();
+    auto& herder = static_cast<HerderImpl&>(app->getHerder());
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 60);
+    REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 60));
+
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() == 126);
+
+    // Now generate a little more history
+    checkpointLedger = catchupSimulation.getLastCheckpointLedger(2);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 5);
+
+    // introduce a gap (checkpoint ledger is missing) and then fill it in
+    catchupSimulation.externalizeLedger(herder, checkpointLedger + 1);
+    catchupSimulation.externalizeLedger(herder, checkpointLedger);
+    catchupSimulation.externalizeLedger(herder, checkpointLedger + 2);
+
+    REQUIRE(lm.isSynced());
+    REQUIRE(!cm.hasBufferedLedger());
+    REQUIRE(!cm.isCatchupInitialized());
+    REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() ==
+            checkpointLedger + 2);
+}
+
+TEST_CASE("Externalize gap while catchup work is running", "[history][catchup]")
+{
+    CatchupSimulation catchupSimulation{};
+
+    auto app = catchupSimulation.createCatchupApplication(
+        std::numeric_limits<uint32_t>::max(), Config::TESTDB_IN_MEMORY_SQLITE,
+        "app2");
+
+    auto checkpointLedger = catchupSimulation.getLastCheckpointLedger(1);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 60);
+    REQUIRE(catchupSimulation.catchupOnline(app, checkpointLedger, 60));
+
+    auto lcl = app->getLedgerManager().getLastClosedLedgerNum();
+    REQUIRE(lcl == 126);
+
+    // Now generate a little more history
+    checkpointLedger = catchupSimulation.getLastCheckpointLedger(2);
+    catchupSimulation.ensureOnlineCatchupPossible(checkpointLedger, 10);
+
+    // lcl is 126, so start catchup by skipping 127. Once catchup starts,
+    // externalize 127. This ledger will be ignored because catchup is running.
+    REQUIRE(catchupSimulation.catchupOnline(app, lcl + 2, 0, 0, 0,
+                                            {128, 129, 127}));
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,12 +9,14 @@
 #include "main/Config.h"
 #include "util/Fs.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 TmpDir::TmpDir(std::string const& prefix)
 {
+    ZoneScoped;
     size_t attempts = 0;
     for (;;)
     {
@@ -44,6 +46,7 @@ TmpDir::getName() const
 
 TmpDir::~TmpDir()
 {
+    ZoneScoped;
     if (!mPath)
     {
         return;
@@ -51,8 +54,11 @@ TmpDir::~TmpDir()
 
     try
     {
-        fs::deltree(*mPath);
-        LOG(DEBUG) << "TmpDir deleted: " << *mPath;
+        if (fs::exists(*mPath))
+        {
+            fs::deltree(*mPath);
+            LOG(DEBUG) << "TmpDir deleted: " << *mPath;
+        }
     }
     catch (std::runtime_error& e)
     {
@@ -77,6 +83,7 @@ TmpDirManager::~TmpDirManager()
 void
 TmpDirManager::clean()
 {
+    ZoneScoped;
     if (fs::exists(mRoot))
     {
         LOG(DEBUG) << "TmpDirManager cleaning: " << mRoot;

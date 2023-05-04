@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,23 +11,25 @@
 #include "ledger/TrustLineWrapper.h"
 #include "main/Config.h"
 #include "transactions/OfferExchange.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Decoder.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
 #include "util/types.h"
+#include <Tracy.hpp>
 #include <cereal/archives/json.hpp>
 #include <cereal/cereal.hpp>
-#include <lib/util/format.h>
+#include <fmt/format.h>
 #include <xdrpp/marshal.h>
 
 namespace cereal
 {
 template <class Archive>
 void
-save(Archive& ar, DiamNet::Upgrades::UpgradeParameters const& p)
+save(Archive& ar, diamnet::Upgrades::UpgradeParameters const& p)
 {
-    ar(make_nvp("time", DiamNet::VirtualClock::to_time_t(p.mUpgradeTime)));
+    ar(make_nvp("time", diamnet::VirtualClock::to_time_t(p.mUpgradeTime)));
     ar(make_nvp("version", p.mProtocolVersion));
     ar(make_nvp("fee", p.mBaseFee));
     ar(make_nvp("maxtxsize", p.mMaxTxSize));
@@ -36,11 +38,11 @@ save(Archive& ar, DiamNet::Upgrades::UpgradeParameters const& p)
 
 template <class Archive>
 void
-load(Archive& ar, DiamNet::Upgrades::UpgradeParameters& o)
+load(Archive& ar, diamnet::Upgrades::UpgradeParameters& o)
 {
     time_t t;
     ar(make_nvp("time", t));
-    o.mUpgradeTime = DiamNet::VirtualClock::from_time_t(t);
+    o.mUpgradeTime = diamnet::VirtualClock::from_time_t(t);
     ar(make_nvp("version", o.mProtocolVersion));
     ar(make_nvp("fee", o.mBaseFee));
     ar(make_nvp("maxtxsize", o.mMaxTxSize));
@@ -48,8 +50,11 @@ load(Archive& ar, DiamNet::Upgrades::UpgradeParameters& o)
 }
 } // namespace cereal
 
-namespace DiamNet
+namespace diamnet
 {
+
+std::chrono::hours const Upgrades::UPDGRADE_EXPIRATION_HOURS(12);
+
 std::string
 Upgrades::UpgradeParameters::toJson() const
 {
@@ -174,17 +179,20 @@ Upgrades::toString(LedgerUpgrade const& upgrade)
 std::string
 Upgrades::toString() const
 {
-    fmt::MemoryWriter r;
+    std::stringstream r;
+    bool first = true;
 
     auto appendInfo = [&](std::string const& s, optional<uint32> const& o) {
         if (o)
         {
-            if (!r.size())
+            if (first)
             {
-                r << "upgradetime="
-                  << VirtualClock::pointToISOString(mParams.mUpgradeTime);
+                r << fmt::format(
+                    "upgradetime={}",
+                    VirtualClock::systemPointToISOString(mParams.mUpgradeTime));
+                first = false;
             }
-            r << ", " << s << "=" << *o;
+            r << fmt::format(", {}={}", s, *o);
         }
     };
     appendInfo("protocolversion", mParams.mProtocolVersion);
@@ -198,10 +206,32 @@ Upgrades::toString() const
 Upgrades::UpgradeParameters
 Upgrades::removeUpgrades(std::vector<UpgradeType>::const_iterator beginUpdates,
                          std::vector<UpgradeType>::const_iterator endUpdates,
-                         bool& updated)
+                         uint64_t closeTime, bool& updated)
 {
     updated = false;
     UpgradeParameters res = mParams;
+
+    // If the upgrade time has been surpassed by more than X hours, then remove
+    // all upgrades.  This is done so nodes that come up with outdated upgrades
+    // don't attempt to change the network
+    if (res.mUpgradeTime + Upgrades::UPDGRADE_EXPIRATION_HOURS <=
+        VirtualClock::from_time_t(closeTime))
+    {
+        auto resetParamIfSet = [&](optional<uint32>& o) {
+            if (o)
+            {
+                o.reset();
+                updated = true;
+            }
+        };
+
+        resetParamIfSet(res.mProtocolVersion);
+        resetParamIfSet(res.mBaseFee);
+        resetParamIfSet(res.mMaxTxSize);
+        resetParamIfSet(res.mBaseReserve);
+
+        return res;
+    }
 
     auto resetParam = [&](optional<uint32>& o, uint32 v) {
         if (o && *o == v)
@@ -275,7 +305,7 @@ Upgrades::isValidForApply(UpgradeType const& opaqueUpgrade,
         res = res && (upgrade.newBaseFee() != 0);
         break;
     case LEDGER_UPGRADE_MAX_TX_SET_SIZE:
-        res = res && (upgrade.newMaxTxSetSize() != 0);
+        // any size is allowed
         break;
     case LEDGER_UPGRADE_BASE_RESERVE:
         res = res && (upgrade.newBaseReserve() != 0);
@@ -362,6 +392,7 @@ Upgrades::storeUpgradeHistory(Database& db, uint32_t ledgerSeq,
                               LedgerUpgrade const& upgrade,
                               LedgerEntryChanges const& changes, int index)
 {
+    ZoneScoped;
     xdr::opaque_vec<> upgradeContent(xdr::xdr_to_opaque(upgrade));
     std::string upgradeContent64 = decoder::encode_b64(upgradeContent);
 
@@ -393,6 +424,7 @@ Upgrades::storeUpgradeHistory(Database& db, uint32_t ledgerSeq,
 void
 Upgrades::deleteOldEntries(Database& db, uint32_t ledgerSeq, uint32_t count)
 {
+    ZoneScoped;
     DatabaseUtils::deleteOldEntriesHelper(db.getSession(), ledgerSeq, count,
                                           "upgradehistory", "ledgerseq");
 }
@@ -410,7 +442,7 @@ addLiabilities(std::map<Asset, std::unique_ptr<int64_t>>& liabilities,
     }
     if (iter->second)
     {
-        if (!DiamNet::addBalance(*iter->second, delta))
+        if (!diamnet::addBalance(*iter->second, delta))
         {
             iter->second.reset();
         }
@@ -434,8 +466,8 @@ getAvailableBalanceExcludingLiabilities(AccountID const& accountID,
     }
     else
     {
-        auto trust = DiamNet::loadTrustLineWithoutRecord(ltx, accountID, asset);
-        if (trust && trust.isAuthorized())
+        auto trust = diamnet::loadTrustLineWithoutRecord(ltx, accountID, asset);
+        if (trust && trust.isAuthorizedToMaintainLiabilities())
         {
             return trust.getBalance();
         }
@@ -466,7 +498,7 @@ getAvailableLimitExcludingLiabilities(AccountID const& accountID,
         key.trustLine().accountID = accountID;
         key.trustLine().asset = asset;
         auto trust = ltx.loadWithoutRecord(key);
-        if (trust && isAuthorized(trust))
+        if (trust && isAuthorizedToMaintainLiabilities(trust))
         {
             auto const& tl = trust.current().data.trustLine();
             return tl.limit - tl.balance;
@@ -499,7 +531,7 @@ enum class UpdateOfferResult
     Unchanged,
     Adjusted,
     AdjustedToZero,
-    Erased
+    Erase
 };
 
 static UpdateOfferResult
@@ -526,7 +558,7 @@ updateOffer(
             shouldDeleteOffer(offer.buying, balance, initialBuyingLiabilities,
                               availableLimitBind);
     UpdateOfferResult res =
-        erase ? UpdateOfferResult::Erased : UpdateOfferResult::Unchanged;
+        erase ? UpdateOfferResult::Erase : UpdateOfferResult::Unchanged;
 
     // If erase == false then we know that the total buying liabilities
     // of the buying asset do not exceed its available limit, and the
@@ -541,11 +573,7 @@ updateOffer(
         res = UpdateOfferResult::AdjustedToZero;
     }
 
-    if (erase)
-    {
-        offerEntry.erase();
-    }
-    else
+    if (!erase)
     {
         // The same logic for adjustOffer discussed above applies here,
         // except that we now actually update the offer to reflect the
@@ -560,7 +588,7 @@ updateOffer(
         if (offer.buying.type() == ASSET_TYPE_NATIVE ||
             !(offer.sellerID == getIssuer(offer.buying)))
         {
-            if (!DiamNet::addBalance(
+            if (!diamnet::addBalance(
                     liabilities[offer.buying].buying,
                     getOfferBuyingLiabilities(header, offerEntry)))
             {
@@ -571,7 +599,7 @@ updateOffer(
         if (offer.selling.type() == ASSET_TYPE_NATIVE ||
             !(offer.sellerID == getIssuer(offer.selling)))
         {
-            if (!DiamNet::addBalance(
+            if (!diamnet::addBalance(
                     liabilities[offer.selling].selling,
                     getOfferSellingLiabilities(header, offerEntry)))
             {
@@ -581,6 +609,60 @@ updateOffer(
         }
     }
     return res;
+}
+
+static std::unordered_map<AccountID, int64_t>
+getOfferAccountMinBalances(
+    AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
+    std::map<AccountID, std::vector<LedgerTxnEntry>> const& offersByAccount)
+{
+    std::unordered_map<AccountID, int64_t> minBalanceMap;
+    for (auto const& accountOffers : offersByAccount)
+    {
+        auto const& accountID = accountOffers.first;
+        auto accountEntry = diamnet::loadAccount(ltx, accountID);
+        if (!accountEntry)
+        {
+            throw std::runtime_error("account does not exist");
+        }
+        auto const& acc = accountEntry.current().data.account();
+        auto minBalance = getMinBalance(header.current(), acc);
+
+        minBalanceMap.emplace(accountID, minBalance);
+    }
+
+    return minBalanceMap;
+}
+
+static void
+eraseOfferWithPossibleSponsorship(
+    AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
+    LedgerTxnEntry& offerEntry, LedgerTxnEntry& accountEntry,
+    std::unordered_set<AccountID>& changedAccounts)
+{
+    LedgerEntry::_ext_t extension = offerEntry.current().ext;
+    bool isSponsored = extension.v() == 1 && extension.v1().sponsoringID;
+    if (isSponsored)
+    {
+        // sponsoring account will change
+        auto const& sponsoringAcc = *extension.v1().sponsoringID;
+        changedAccounts.emplace(sponsoringAcc);
+    }
+
+    // This function can't throw here because -
+    // If offer is sponsored -
+    // 1. ledger version >= 14 is guaranteed
+    // 2. numSponsoring for the sponsoring account will be at
+    //    least 1 because it's sponsoring this offer
+    // 3. The sponsored account will have 1 subEntry and 1
+    //    numSponsored because of this offer
+
+    // If offer is not sponsored -
+    // 1. the offers account will have at least 1 subEntry
+    removeEntryWithPossibleSponsorship(ltx, header, offerEntry.current(),
+                                       accountEntry);
+
+    offerEntry.erase();
 }
 
 // This function is used to bring offers and liabilities into a valid state.
@@ -600,9 +682,16 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
 
     auto offersByAccount = ltx.loadAllOffers();
 
-    uint64_t nChangedAccounts = 0;
+    std::unordered_set<AccountID> changedAccounts;
     uint64_t nChangedTrustLines = 0;
+
     std::map<UpdateOfferResult, uint64_t> nUpdatedOffers;
+
+    // We want to keep track of the original minBalances before they are changed
+    // due to sponsorship changes from deleted offers
+    auto offerAccountMinBalanceMap =
+        getOfferAccountMinBalances(ltx, header, offersByAccount);
+
     for (auto& accountOffers : offersByAccount)
     {
         // The purpose of std::unique_ptr here is to have a special value
@@ -623,7 +712,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
                            getOfferSellingLiabilities(header, offerEntry));
         }
 
-        auto accountEntry = DiamNet::loadAccount(ltx, accountOffers.first);
+        auto accountEntry = diamnet::loadAccount(ltx, accountOffers.first);
         if (!accountEntry)
         {
             throw std::runtime_error("account does not exist");
@@ -634,7 +723,16 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
         // balanceAboveReserve must exclude native selling liabilities, since
         // these are in the process of being recalculated from scratch.
         int64_t balance = acc.balance;
-        int64_t minBalance = getMinBalance(header, acc.numSubEntries);
+
+        auto it = offerAccountMinBalanceMap.find(accountOffers.first);
+        if (it == offerAccountMinBalanceMap.end())
+        {
+            // this shouldn't happen. getOfferAccountMinBalances added all keys
+            // from offersByAccount
+            throw std::runtime_error("min balance missing from map");
+        }
+
+        int64_t minBalance = it->second;
         int64_t balanceAboveReserve = balance - minBalance;
 
         std::map<Asset, Liabilities> liabilities;
@@ -645,9 +743,10 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
                                    liabilities, initialBuyingLiabilities,
                                    initialSellingLiabilities, ltx, header);
             if (res == UpdateOfferResult::AdjustedToZero ||
-                res == UpdateOfferResult::Erased)
+                res == UpdateOfferResult::Erase)
             {
-                DiamNet::addNumEntries(header, accountEntry, -1);
+                eraseOfferWithPossibleSponsorship(
+                    ltx, header, offerEntry, accountEntry, changedAccounts);
             }
 
             ++nUpdatedOffers[res];
@@ -662,7 +761,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
                 case UpdateOfferResult::AdjustedToZero:
                     message = " was adjusted to zero";
                     break;
-                case UpdateOfferResult::Erased:
+                case UpdateOfferResult::Erase:
                     message = " was erased";
                     break;
                 default:
@@ -697,7 +796,7 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
             else
             {
                 auto trustEntry =
-                    DiamNet::loadTrustLine(ltx, accountOffers.first, asset);
+                    diamnet::loadTrustLine(ltx, accountOffers.first, asset);
                 int64_t deltaSelling =
                     liab.selling - trustEntry.getSellingLiabilities(header);
                 int64_t deltaBuying =
@@ -705,6 +804,14 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
                 if (deltaSelling != 0 || deltaBuying != 0)
                 {
                     ++nChangedTrustLines;
+                }
+
+                // the deltas should only be positive when liabilities were
+                // introduced in ledgerVersion 10
+                if (header.current().ledgerVersion > 10 &&
+                    (deltaSelling > 0 || deltaBuying > 0))
+                {
+                    throw std::runtime_error("invalid liabilities delta");
                 }
 
                 if (!trustEntry.addSellingLiabilities(header, deltaSelling))
@@ -722,18 +829,18 @@ prepareLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header)
 
         if (!(acc == accountBefore))
         {
-            ++nChangedAccounts;
+            changedAccounts.emplace(acc.accountID);
         }
     }
 
     CLOG(INFO, "Ledger") << "prepareLiabilities completed with "
-                         << nChangedAccounts << " accounts modified, "
+                         << changedAccounts.size() << " accounts modified, "
                          << nChangedTrustLines << " trustlines modified, "
                          << nUpdatedOffers[UpdateOfferResult::Adjusted]
                          << " offers adjusted, "
                          << nUpdatedOffers[UpdateOfferResult::AdjustedToZero]
                          << " offers adjusted to zero, and "
-                         << nUpdatedOffers[UpdateOfferResult::Erased]
+                         << nUpdatedOffers[UpdateOfferResult::Erase]
                          << " offers erased";
 }
 

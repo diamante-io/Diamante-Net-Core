@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,14 +16,14 @@
 #include "util/Math.h"
 #include "util/types.h"
 
-#include <util/format.h>
+#include <fmt/format.h>
 
 #include "medida/medida.h"
 #include "medida/reporting/console_reporter.h"
 
 #include <thread>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -68,6 +68,16 @@ Simulation::setCurrentVirtualTime(VirtualClock::time_point t)
     }
 }
 
+void
+Simulation::setCurrentVirtualTime(VirtualClock::system_time_point t)
+{
+    mClock.setCurrentVirtualTime(t);
+    for (auto& p : mNodes)
+    {
+        p.second.mClock->setCurrentVirtualTime(t);
+    }
+}
+
 Application::pointer
 Simulation::addNode(SecretKey nodeKey, SCPQuorumSet qSet, Config const* cfg2,
                     bool newDB)
@@ -76,6 +86,7 @@ Simulation::addNode(SecretKey nodeKey, SCPQuorumSet qSet, Config const* cfg2,
                     : std::make_shared<Config>(newConfig());
     cfg->adjust();
     cfg->NODE_SEED = nodeKey;
+    cfg->MANUAL_CLOSE = false;
 
     if (mQuorumSetAdjuster)
     {
@@ -86,7 +97,10 @@ Simulation::addNode(SecretKey nodeKey, SCPQuorumSet qSet, Config const* cfg2,
         cfg->QUORUM_SET = qSet;
     }
 
-    cfg->RUN_STANDALONE = (mMode == OVER_LOOPBACK);
+    if (mMode == OVER_TCP)
+    {
+        cfg->RUN_STANDALONE = false;
+    }
 
     auto clock =
         make_shared<VirtualClock>(mVirtualClockMode ? VirtualClock::VIRTUAL_TIME
@@ -132,13 +146,13 @@ Simulation::removeNode(NodeID const& id)
     {
         auto node = it->second;
         mNodes.erase(it);
+        node.mApp->gracefulStop();
+        while (node.mClock->crank(false) > 0)
+            ;
         if (mMode == OVER_LOOPBACK)
         {
             dropAllConnections(id);
         }
-        node.mApp->gracefulStop();
-        while (node.mClock->crank(false) > 0)
-            ;
     }
 }
 
@@ -147,12 +161,21 @@ Simulation::dropAllConnections(NodeID const& id)
 {
     if (mMode == OVER_LOOPBACK)
     {
+        assert(mPendingConnections.empty());
         mLoopbackConnections.erase(
             std::remove_if(mLoopbackConnections.begin(),
                            mLoopbackConnections.end(),
                            [&](std::shared_ptr<LoopbackPeerConnection> c) {
-                               return c->getAcceptor()->getPeerID() == id ||
-                                      c->getInitiator()->getPeerID() == id;
+                               // use app's IDs here as connections may be
+                               // incomplete
+                               return c->getAcceptor()
+                                              ->getApp()
+                                              .getConfig()
+                                              .NODE_SEED.getPublicKey() == id ||
+                                      c->getInitiator()
+                                              ->getApp()
+                                              .getConfig()
+                                              .NODE_SEED.getPublicKey() == id;
                            }),
             mLoopbackConnections.end());
     }
@@ -594,6 +617,14 @@ Simulation::crankUntil(VirtualClock::time_point timePoint, bool finalCrank)
     {
         stopAllNodes();
     }
+}
+
+void
+Simulation::crankUntil(VirtualClock::system_time_point timePoint,
+                       bool finalCrank)
+{
+    crankUntil(VirtualClock::time_point(timePoint.time_since_epoch()),
+               finalCrank);
 }
 
 Config

@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,8 +9,9 @@
 #include "ledger/TrustLineWrapper.h"
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 PathPaymentStrictReceiveOpFrame::PathPaymentStrictReceiveOpFrame(
@@ -23,19 +24,30 @@ PathPaymentStrictReceiveOpFrame::PathPaymentStrictReceiveOpFrame(
 bool
 PathPaymentStrictReceiveOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "PathPaymentStrictReceiveOp apply", true);
+    std::string pathStr = assetToString(getSourceAsset());
+    for (auto const& asset : mPathPayment.path)
+    {
+        pathStr += "->";
+        pathStr += assetToString(asset);
+    }
+    pathStr += "->";
+    pathStr += assetToString(getDestAsset());
+    ZoneTextV(applyZone, pathStr.c_str(), pathStr.size());
+
     setResultSuccess();
 
     bool doesSourceAccountExist = true;
     if (ltx.loadHeader().current().ledgerVersion < 8)
     {
         doesSourceAccountExist =
-            (bool)DiamNet::loadAccountWithoutRecord(ltx, getSourceID());
+            (bool)diamnet::loadAccountWithoutRecord(ltx, getSourceID());
     }
 
     bool bypassIssuerCheck = shouldBypassIssuerCheck(mPathPayment.path);
     if (!bypassIssuerCheck)
     {
-        if (!DiamNet::loadAccountWithoutRecord(ltx, getDestID()))
+        if (!diamnet::loadAccountWithoutRecord(ltx, getDestID()))
         {
             setResultNoDest();
             return false;
@@ -159,8 +171,8 @@ PathPaymentStrictReceiveOpFrame::getDestAsset() const
     return mPathPayment.destAsset;
 }
 
-AccountID const&
-PathPaymentStrictReceiveOpFrame::getDestID() const
+MuxedAccount const&
+PathPaymentStrictReceiveOpFrame::getDestMuxedAccount() const
 {
     return mPathPayment.destination;
 }

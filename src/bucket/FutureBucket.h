@@ -1,17 +1,17 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include <cereal/cereal.hpp>
 #include <future>
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Bucket;
@@ -59,7 +59,8 @@ class FutureBucket
     std::shared_ptr<Bucket> mInputCurrBucket;
     std::shared_ptr<Bucket> mInputSnapBucket;
     std::vector<std::shared_ptr<Bucket>> mInputShadowBuckets;
-    std::shared_future<std::shared_ptr<Bucket>> mOutputBucket;
+    std::shared_ptr<Bucket> mOutputBucket;
+    std::shared_future<std::shared_ptr<Bucket>> mOutputBucketFuture;
 
     // These strings hold the serializable (or deserialized) bucket hashes of
     // the inputs and outputs of a merge; depending on the state of the

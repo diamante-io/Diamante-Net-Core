@@ -2,7 +2,7 @@
 
 The [HerderSCPDriver](HerderSCPDriver.h) is a concrete implementation of the [SCP
 protocol](../scp), operating in terms of the "transaction sets" and "ledger
-numbers" that constitute the DiamNet vocabulary. It is implemented as a subclass
+numbers" that constitute the Diamnet vocabulary. It is implemented as a subclass
 of the [SCPDriver class](../scp/SCPDriver.h), and so is most easily understood after
 reading that class and understanding where and how a subclass would make the abstract
 SCP protocol concrete.

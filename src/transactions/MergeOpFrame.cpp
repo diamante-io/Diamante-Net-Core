@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,13 +8,15 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Logging.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
 using namespace soci;
 
-namespace DiamNet
+namespace diamnet
 {
 
 MergeOpFrame::MergeOpFrame(Operation const& op, OperationResult& res,
@@ -47,10 +49,11 @@ MergeOpFrame::isSeqnumTooFar(LedgerTxnHeader const& header,
 bool
 MergeOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "MergeOp apply", true);
     auto header = ltx.loadHeader();
 
     auto otherAccount =
-        DiamNet::loadAccount(ltx, mOperation.body.destination());
+        diamnet::loadAccount(ltx, toAccountID(mOperation.body.destination()));
     if (!otherAccount)
     {
         innerResult().code(ACCOUNT_MERGE_NO_ACCOUNT);
@@ -107,6 +110,28 @@ MergeOpFrame::doApply(AbstractLedgerTxn& ltx)
         }
     }
 
+    if (header.current().ledgerVersion >= 14)
+    {
+        if (loadSponsorshipCounter(ltx, getSourceID()))
+        {
+            innerResult().code(ACCOUNT_MERGE_IS_SPONSOR);
+            return false;
+        }
+
+        if (getNumSponsoring(sourceAccountEntry.current()) > 0)
+        {
+            innerResult().code(ACCOUNT_MERGE_IS_SPONSOR);
+            return false;
+        }
+
+        while (!sourceAccount.signers.empty())
+        {
+            removeSignerWithPossibleSponsorship(ltx, header,
+                                                sourceAccount.signers.end() - 1,
+                                                sourceAccountEntry);
+        }
+    }
+
     // "success" path starts
     if (!addBalance(header, otherAccount, sourceBalance))
     {
@@ -114,6 +139,8 @@ MergeOpFrame::doApply(AbstractLedgerTxn& ltx)
         return false;
     }
 
+    removeEntryWithPossibleSponsorship(
+        ltx, header, sourceAccountEntry.current(), sourceAccountEntry);
     sourceAccountEntry.erase();
 
     innerResult().code(ACCOUNT_MERGE_SUCCESS);
@@ -125,7 +152,7 @@ bool
 MergeOpFrame::doCheckValid(uint32_t ledgerVersion)
 {
     // makes sure not merging into self
-    if (getSourceID() == mOperation.body.destination())
+    if (getSourceID() == toAccountID(mOperation.body.destination()))
     {
         innerResult().code(ACCOUNT_MERGE_MALFORMED);
         return false;

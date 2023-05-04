@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -21,11 +21,13 @@
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
-#include "util/format.h"
+#include <fmt/format.h>
 #include <numeric>
 
-using namespace DiamNet;
+using namespace diamnet;
 
+namespace
+{
 bool
 doesNotKnow(Application& knowingApp, Application& knownApp)
 {
@@ -198,8 +200,7 @@ TEST_CASE("accept preferred peer even when strict", "[overlay][connections]")
     Config cfg2 = getTestConfig(1);
 
     cfg2.PREFERRED_PEERS_ONLY = true;
-    cfg2.PREFERRED_PEER_KEYS.push_back(
-        KeyUtils::toStrKey(cfg1.NODE_SEED.getPublicKey()));
+    cfg2.PREFERRED_PEER_KEYS.emplace(cfg1.NODE_SEED.getPublicKey());
 
     auto app1 = createTestApplication(clock, cfg1);
     auto app2 = createTestApplication(clock, cfg2);
@@ -315,8 +316,7 @@ TEST_CASE("reject peers beyond max - preferred peer wins",
         {
             cfg2.MAX_ADDITIONAL_PEER_CONNECTIONS = 1;
             cfg2.TARGET_PEER_CONNECTIONS = 0;
-            cfg2.PREFERRED_PEER_KEYS.push_back(
-                KeyUtils::toStrKey(cfg3.NODE_SEED.getPublicKey()));
+            cfg2.PREFERRED_PEER_KEYS.emplace(cfg3.NODE_SEED.getPublicKey());
 
             auto app1 = createTestApplication(clock, cfg1);
             auto app2 = createTestApplication(clock, cfg2);
@@ -346,8 +346,7 @@ TEST_CASE("reject peers beyond max - preferred peer wins",
         {
             cfg2.MAX_ADDITIONAL_PEER_CONNECTIONS = 0;
             cfg2.TARGET_PEER_CONNECTIONS = 1;
-            cfg2.PREFERRED_PEER_KEYS.push_back(
-                KeyUtils::toStrKey(cfg3.NODE_SEED.getPublicKey()));
+            cfg2.PREFERRED_PEER_KEYS.emplace(cfg3.NODE_SEED.getPublicKey());
 
             auto app1 = createTestApplication(clock, cfg1);
             auto app2 = createTestApplication(clock, cfg2);
@@ -380,8 +379,7 @@ TEST_CASE("reject peers beyond max - preferred peer wins",
         {
             cfg2.MAX_ADDITIONAL_PEER_CONNECTIONS = 1;
             cfg2.TARGET_PEER_CONNECTIONS = 0;
-            cfg2.PREFERRED_PEER_KEYS.push_back(
-                KeyUtils::toStrKey(cfg3.NODE_SEED.getPublicKey()));
+            cfg2.PREFERRED_PEER_KEYS.emplace(cfg3.NODE_SEED.getPublicKey());
 
             auto app1 = createTestApplication(clock, cfg1);
             auto app2 = createTestApplication(clock, cfg2);
@@ -412,8 +410,7 @@ TEST_CASE("reject peers beyond max - preferred peer wins",
         {
             cfg2.MAX_ADDITIONAL_PEER_CONNECTIONS = 0;
             cfg2.TARGET_PEER_CONNECTIONS = 1;
-            cfg2.PREFERRED_PEER_KEYS.push_back(
-                KeyUtils::toStrKey(cfg3.NODE_SEED.getPublicKey()));
+            cfg2.PREFERRED_PEER_KEYS.emplace(cfg3.NODE_SEED.getPublicKey());
 
             auto app1 = createTestApplication(clock, cfg1);
             auto app2 = createTestApplication(clock, cfg2);
@@ -761,41 +758,54 @@ TEST_CASE("reject peers with incompatible overlay versions",
 TEST_CASE("reject peers who dont handshake quickly", "[overlay][connections]")
 {
     auto test = [](unsigned short authenticationTimeout) {
-        VirtualClock clock;
-        Config cfg1 = getTestConfig(0);
-        Config cfg2 = getTestConfig(1);
+        Config cfg1 = getTestConfig(1);
+        Config cfg2 = getTestConfig(2);
 
         cfg1.PEER_AUTHENTICATION_TIMEOUT = authenticationTimeout;
         cfg2.PEER_AUTHENTICATION_TIMEOUT = authenticationTimeout;
 
-        auto app1 = createTestApplication(clock, cfg1);
-        auto app2 = createTestApplication(clock, cfg2);
+        auto networkID = sha256(getTestConfig().NETWORK_PASSPHRASE);
+        auto sim =
+            std::make_shared<Simulation>(Simulation::OVER_LOOPBACK, networkID);
+
+        SIMULATION_CREATE_NODE(Node1);
+        SIMULATION_CREATE_NODE(Node2);
+        sim->addNode(vNode1SecretKey, cfg1.QUORUM_SET, &cfg1);
+        sim->addNode(vNode2SecretKey, cfg2.QUORUM_SET, &cfg2);
         auto waitTime = std::chrono::seconds(authenticationTimeout + 1);
         auto padTime = std::chrono::seconds(2);
 
-        LoopbackPeerConnection conn(*app1, *app2);
-        conn.getInitiator()->setCorked(true);
-        auto start = clock.now();
-        while (clock.now() < (start + waitTime) &&
-               conn.getInitiator()->isConnected() &&
-               conn.getAcceptor()->isConnected())
-        {
-            LOG(INFO) << "clock.now() = "
-                      << clock.now().time_since_epoch().count();
-            clock.crank(false);
-        }
-        REQUIRE(clock.now() < (start + waitTime + padTime));
-        REQUIRE(!conn.getInitiator()->isConnected());
-        REQUIRE(!conn.getAcceptor()->isConnected());
-        REQUIRE(app2->getMetrics()
-                    .NewMeter({"overlay", "timeout", "idle"}, "timeout")
-                    .count() != 0);
+        sim->addPendingConnection(vNode1NodeID, vNode2NodeID);
+
+        sim->startAllNodes();
+
+        auto conn = sim->getLoopbackConnection(vNode1NodeID, vNode2NodeID);
+
+        conn->getInitiator()->setCorked(true);
+
+        sim->crankForAtLeast(waitTime + padTime, false);
+
+        sim->crankUntil(
+            [&]() {
+                return !(conn->getInitiator()->isConnected() ||
+                         conn->getAcceptor()->isConnected());
+            },
+            padTime, true);
+
+        auto app1 = sim->getNode(vNode1NodeID);
+        auto app2 = sim->getNode(vNode2NodeID);
+
+        auto idle1 = app1->getMetrics()
+                         .NewMeter({"overlay", "timeout", "idle"}, "timeout")
+                         .count();
+        auto idle2 = app2->getMetrics()
+                         .NewMeter({"overlay", "timeout", "idle"}, "timeout")
+                         .count();
+
+        REQUIRE((idle1 != 0 || idle2 != 0));
 
         REQUIRE(doesNotKnow(*app1, *app2));
         REQUIRE(doesNotKnow(*app2, *app1));
-
-        testutil::shutdownWorkScheduler(*app2);
-        testutil::shutdownWorkScheduler(*app1);
     };
 
     SECTION("2 seconds timeout")
@@ -845,9 +855,6 @@ TEST_CASE("drop peers who straggle", "[overlay][connections][straggler]")
                (conn.getInitiator()->isConnected() ||
                 conn.getAcceptor()->isConnected()))
         {
-            LOG(INFO) << "clock.now() = "
-                      << clock.now().time_since_epoch().count();
-
             // Straggler keeps asking for peers once per second -- this is
             // easy traffic to fake-generate -- but not accepting response
             // messages in a timely fashion.
@@ -898,65 +905,32 @@ TEST_CASE("drop peers who straggle", "[overlay][connections][straggler]")
 TEST_CASE("reject peers with the same nodeid", "[overlay][connections]")
 {
     VirtualClock clock;
-    Config const& cfg1 = getTestConfig(0);
-    Config const& cfg2 = getTestConfig(1);
-    Config cfg3 = getTestConfig(2);
+    Config const& cfg1 = getTestConfig(1);
+    Config cfg2 = getTestConfig(2);
 
-    cfg3.NODE_SEED = cfg1.NODE_SEED;
+    cfg2.NODE_SEED = cfg1.NODE_SEED;
 
     auto app1 = createTestApplication(clock, cfg1);
     auto app2 = createTestApplication(clock, cfg2);
-    auto app3 = createTestApplication(clock, cfg3);
 
     SECTION("inbound")
     {
         LoopbackPeerConnection conn(*app1, *app2);
-        LoopbackPeerConnection conn2(*app3, *app2);
         testutil::crankSome(clock);
 
-        REQUIRE(conn.getInitiator()->isAuthenticated());
-        REQUIRE(conn.getAcceptor()->isAuthenticated());
-        REQUIRE(!conn2.getInitiator()->isConnected());
-        REQUIRE(!conn2.getAcceptor()->isConnected());
-        REQUIRE(conn2.getAcceptor()->getDropReason() ==
-                fmt::format("already-connected peer: {}",
-                            app1->getConfig().toShortString(
-                                cfg1.NODE_SEED.getPublicKey())));
-
-        REQUIRE(knowsAsOutbound(*app1, *app2));
-        REQUIRE(knowsAsInbound(*app2, *app1));
-        REQUIRE(knowsAsOutbound(*app3, *app2));
-        REQUIRE(knowsAsInbound(*app2, *app3));
-
-        testutil::shutdownWorkScheduler(*app3);
-        testutil::shutdownWorkScheduler(*app2);
-        testutil::shutdownWorkScheduler(*app1);
+        REQUIRE(conn.getInitiator()->getDropReason() == "connecting to self");
     }
 
     SECTION("outbound")
     {
         LoopbackPeerConnection conn(*app2, *app1);
-        LoopbackPeerConnection conn2(*app2, *app3);
         testutil::crankSome(clock);
 
-        REQUIRE(conn.getInitiator()->isAuthenticated());
-        REQUIRE(conn.getAcceptor()->isAuthenticated());
-        REQUIRE(!conn2.getInitiator()->isConnected());
-        REQUIRE(!conn2.getAcceptor()->isConnected());
-        REQUIRE(conn2.getAcceptor()->getDropReason() ==
-                fmt::format("ERR_CONF (already-connected peer: {})",
-                            app1->getConfig().toShortString(
-                                cfg1.NODE_SEED.getPublicKey())));
-
-        REQUIRE(knowsAsInbound(*app1, *app2));
-        REQUIRE(knowsAsOutbound(*app2, *app1));
-        REQUIRE(knowsAsInbound(*app3, *app2));
-        REQUIRE(knowsAsOutbound(*app2, *app3));
-
-        testutil::shutdownWorkScheduler(*app3);
-        testutil::shutdownWorkScheduler(*app2);
-        testutil::shutdownWorkScheduler(*app1);
+        REQUIRE(conn.getInitiator()->getDropReason() == "connecting to self");
     }
+
+    testutil::shutdownWorkScheduler(*app2);
+    testutil::shutdownWorkScheduler(*app1);
 }
 
 TEST_CASE("connecting to saturated nodes", "[overlay][connections][acceptance]")
@@ -1008,9 +982,13 @@ TEST_CASE("connecting to saturated nodes", "[overlay][connections][acceptance]")
 
     simulation->addNode(vNode1SecretKey, qSet, &node1Cfg);
 
+    // large timeout here as nodes may have a few bad attempts
+    // (crossed connections) and we rely on jittered backoffs
+    // to mitigate this
+
     simulation->addPendingConnection(vNode1NodeID, vHeadNodeID);
     simulation->startAllNodes();
-    // 1 connects to h
+    UNSCOPED_INFO("1 connects to h");
     simulation->crankUntil(
         [&]() { return numberOfSimulationConnections() == 2; },
         std::chrono::seconds{3}, false);
@@ -1018,26 +996,26 @@ TEST_CASE("connecting to saturated nodes", "[overlay][connections][acceptance]")
     simulation->addNode(vNode2SecretKey, qSet, &node2Cfg);
     simulation->addPendingConnection(vNode2NodeID, vHeadNodeID);
     simulation->startAllNodes();
-    // 2 connects to 1
+    UNSCOPED_INFO("2 connects to 1");
     simulation->crankUntil(
         [&]() { return numberOfSimulationConnections() == 4; },
-        std::chrono::seconds{10}, false);
+        std::chrono::seconds{20}, false);
 
     simulation->addNode(vNode3SecretKey, qSet, &node3Cfg);
     simulation->addPendingConnection(vNode3NodeID, vHeadNodeID);
     simulation->startAllNodes();
-    // 3 connects to 2
+    UNSCOPED_INFO("3 connects to 2");
     simulation->crankUntil(
         [&]() { return numberOfSimulationConnections() == 6; },
-        std::chrono::seconds{15}, false);
+        std::chrono::seconds{30}, false);
 
     simulation->removeNode(headId);
-    // wait for node to be disconnected
+    UNSCOPED_INFO("wait for node to be disconnected");
     simulation->crankForAtLeast(std::chrono::seconds{2}, false);
-    // wait for 1 to connect to 3
+    UNSCOPED_INFO("wait for 1 to connect to 3");
     simulation->crankUntil(
         [&]() { return numberOfSimulationConnections() == 6; },
-        std::chrono::seconds{15}, true);
+        std::chrono::seconds{30}, true);
 }
 
 TEST_CASE("inbounds nodes can be promoted to ouboundvalid",
@@ -1244,19 +1222,20 @@ TEST_CASE("peer is purged from database after few failures",
     };
 
     SIMULATION_CREATE_NODE(Node1);
-    SIMULATION_CREATE_NODE(Node2);
 
     SCPQuorumSet qSet;
     qSet.threshold = 1;
     qSet.validators.push_back(vNode1NodeID);
 
-    Config const& cfg1 = getTestConfig(1);
+    Config cfg1 = getTestConfig(1);
     Config cfg2 = getTestConfig(2);
+
+    cfg1.PEER_AUTHENTICATION_TIMEOUT = 1;
+
     cfg2.MAX_INBOUND_PENDING_CONNECTIONS = 0;
     cfg2.MAX_OUTBOUND_PENDING_CONNECTIONS = 4; // to prevent changes in adjust()
 
     auto app1 = simulation->addNode(vNode1SecretKey, qSet, &cfg1);
-    auto app2 = simulation->addNode(vNode2SecretKey, qSet, &cfg2);
 
     simulation->startAllNodes();
 
@@ -1265,7 +1244,8 @@ TEST_CASE("peer is purged from database after few failures",
     peerManager.store(localhost(cfg2.PEER_PORT), record(119), false);
     REQUIRE(peerManager.load(localhost(cfg2.PEER_PORT)).second);
 
-    simulation->crankForAtLeast(std::chrono::seconds{4}, true);
+    simulation->crankForAtLeast(std::chrono::seconds{5}, true);
 
     REQUIRE(!peerManager.load(localhost(cfg2.PEER_PORT)).second);
+}
 }

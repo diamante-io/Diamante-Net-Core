@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,7 +16,7 @@
 #include <ctime>
 #include <functional>
 
-namespace DiamNet
+namespace diamnet
 {
 using namespace std::placeholders;
 
@@ -29,7 +29,7 @@ Slot::Slot(uint64 slotIndex, SCP& scp)
 {
 }
 
-Value const&
+ValueWrapperPtr const&
 Slot::getLatestCompositeCandidate()
 {
     return mNominationProtocol.getLatestCompositeCandidate();
@@ -41,7 +41,7 @@ Slot::getLatestMessagesSend() const
     std::vector<SCPEnvelope> res;
     if (mFullyValidated)
     {
-        SCPEnvelope* e;
+        SCPEnvelope const* e;
         e = mNominationProtocol.getLastMessageSend();
         if (e)
         {
@@ -57,18 +57,19 @@ Slot::getLatestMessagesSend() const
 }
 
 void
-Slot::setStateFromEnvelope(SCPEnvelope const& e)
+Slot::setStateFromEnvelope(SCPEnvelopeWrapperPtr env)
 {
+    auto& e = env->getEnvelope();
     if (e.statement.nodeID == getSCP().getLocalNodeID() &&
         e.statement.slotIndex == mSlotIndex)
     {
         if (e.statement.pledges.type() == SCPStatementType::SCP_ST_NOMINATE)
         {
-            mNominationProtocol.setStateFromEnvelope(e);
+            mNominationProtocol.setStateFromEnvelope(env);
         }
         else
         {
-            mBallotProtocol.setStateFromEnvelope(e);
+            mBallotProtocol.setStateFromEnvelope(env);
         }
     }
     else
@@ -80,14 +81,12 @@ Slot::setStateFromEnvelope(SCPEnvelope const& e)
     }
 }
 
-std::vector<SCPEnvelope>
-Slot::getCurrentState() const
+void
+Slot::processCurrentState(std::function<bool(SCPEnvelope const&)> const& f,
+                          bool forceSelf) const
 {
-    std::vector<SCPEnvelope> res;
-    res = mNominationProtocol.getCurrentState();
-    auto r2 = mBallotProtocol.getCurrentState();
-    res.insert(res.end(), r2.begin(), r2.end());
-    return res;
+    mNominationProtocol.processCurrentState(f, forceSelf) &&
+        mBallotProtocol.processCurrentState(f, forceSelf);
 }
 
 SCPEnvelope const*
@@ -119,21 +118,21 @@ Slot::recordStatement(SCPStatement const& st)
 }
 
 SCP::EnvelopeState
-Slot::processEnvelope(SCPEnvelope const& envelope, bool self)
+Slot::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
 {
-    dbgAssert(envelope.statement.slotIndex == mSlotIndex);
+    dbgAssert(envelope->getStatement().slotIndex == mSlotIndex);
 
     if (Logging::logTrace("SCP"))
         CLOG(TRACE, "SCP") << "Slot::processEnvelope"
                            << " i: " << getSlotIndex() << " "
-                           << mSCP.envToStr(envelope);
+                           << mSCP.envToStr(envelope->getEnvelope());
 
     SCP::EnvelopeState res;
 
     try
     {
 
-        if (envelope.statement.pledges.type() ==
+        if (envelope->getStatement().pledges.type() ==
             SCPStatementType::SCP_ST_NOMINATE)
         {
             res = mNominationProtocol.processEnvelope(envelope);
@@ -145,11 +144,14 @@ Slot::processEnvelope(SCPEnvelope const& envelope, bool self)
     }
     catch (...)
     {
-        CLOG(FATAL, "SCP") << "SCP context:";
+        CLOG(FATAL, "SCP") << "SCP context ("
+                           << mSCP.getDriver().toShortString(
+                                  mSCP.getLocalNodeID())
+                           << "): ";
         CLOG(FATAL, "SCP") << getJsonInfo().toStyledString();
         CLOG(FATAL, "SCP") << "Exception processing SCP messages at "
-                           << mSlotIndex
-                           << ", envelope: " << mSCP.envToStr(envelope);
+                           << mSlotIndex << ", envelope: "
+                           << mSCP.envToStr(envelope->getEnvelope());
         CLOG(FATAL, "SCP") << REPORT_INTERNAL_BUG;
 
         throw;
@@ -171,7 +173,7 @@ Slot::bumpState(Value const& value, bool force)
 }
 
 bool
-Slot::nominate(Value const& value, Value const& previousValue, bool timedout)
+Slot::nominate(ValueWrapperPtr value, Value const& previousValue, bool timedout)
 {
     return mNominationProtocol.nominate(value, previousValue, timedout);
 }
@@ -249,7 +251,12 @@ Slot::getStatementValues(SCPStatement const& st)
     }
     else
     {
-        res.emplace_back(BallotProtocol::getWorkingBallot(st).value);
+        auto vals = BallotProtocol::getStatementValues(st);
+        res.reserve(vals.size());
+        for (auto const& v : vals)
+        {
+            res.emplace_back(v);
+        }
     }
     return res;
 }
@@ -337,7 +344,7 @@ Slot::getJsonQuorumInfo(NodeID const& id, bool summary, bool fullKeys)
 
 bool
 Slot::federatedAccept(StatementPredicate voted, StatementPredicate accepted,
-                      std::map<NodeID, SCPEnvelope> const& envs)
+                      std::map<NodeID, SCPEnvelopeWrapperPtr> const& envs)
 {
     // Checks if the nodes that claimed to accept the statement form a
     // v-blocking set
@@ -367,7 +374,7 @@ Slot::federatedAccept(StatementPredicate voted, StatementPredicate accepted,
 
 bool
 Slot::federatedRatify(StatementPredicate voted,
-                      std::map<NodeID, SCPEnvelope> const& envs)
+                      std::map<NodeID, SCPEnvelopeWrapperPtr> const& envs)
 {
     return LocalNode::isQuorum(
         getLocalNode()->getQuorumSet(), envs,
@@ -383,11 +390,13 @@ Slot::getLocalNode()
 std::vector<SCPEnvelope>
 Slot::getEntireCurrentState()
 {
-    bool old = mFullyValidated;
-    // fake fully validated to force returning all envelopes
-    mFullyValidated = true;
-    auto r = getCurrentState();
-    mFullyValidated = old;
-    return r;
+    std::vector<SCPEnvelope> res;
+    processCurrentState(
+        [&](SCPEnvelope const& e) {
+            res.emplace_back(e);
+            return true;
+        },
+        true);
+    return res;
 }
 }

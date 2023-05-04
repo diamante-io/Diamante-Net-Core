@@ -1,10 +1,9 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "util/asio.h"
 #include "lib/catch.hpp"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "process/ProcessManager.h"
@@ -15,10 +14,11 @@
 #include "util/Timer.h"
 #include "xdrpp/autocheck.h"
 #include <chrono>
+#include <fmt/format.h>
 #include <future>
 #include <thread>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 TEST_CASE("subprocess", "[process]")
 {
@@ -100,6 +100,7 @@ TEST_CASE("subprocess redirect to file", "[process]")
 
     std::ifstream in(filename);
     CHECK(in);
+    in.exceptions(std::ios::badbit);
     std::string s;
     in >> s;
     CLOG(DEBUG, "Process") << "opened redirect file, read: " << s;
@@ -128,7 +129,9 @@ TEST_CASE("subprocess storm", "[process]")
         std::string dst(fmt::format("{:s}/dst/{:d}", dir, i));
         CLOG(INFO, "Process") << "making file " << src;
         {
-            std::ofstream out(src);
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            out.open(src);
             out << i;
         }
         auto evt = app.getProcessManager()

@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,7 +24,7 @@
 #include <unordered_set>
 #include <vector>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 namespace BucketListIsConsistentWithDatabaseTests
 {
@@ -61,9 +61,9 @@ struct BucketListGenerator
         auto has = getHistoryArchiveState();
         has.prepareForPublish(*mAppApply);
         auto& wm = mAppApply->getWorkScheduler();
-        wm.executeWork<T>(
-            buckets, has, mAppApply->getConfig().LEDGER_PROTOCOL_VERSION,
-            /* resolveMerges= */ false, std::forward<Args>(args)...);
+        wm.executeWork<T>(buckets, has,
+                          mAppApply->getConfig().LEDGER_PROTOCOL_VERSION,
+                          std::forward<Args>(args)...);
     }
 
     void
@@ -149,7 +149,7 @@ struct BucketListGenerator
     }
 
     HistoryArchiveState
-    getHistoryArchiveState() const
+    getHistoryArchiveState()
     {
         auto& blGenerate = mAppGenerate->getBucketManager().getBucketList();
         auto& bmApply = mAppApply->getBucketManager();
@@ -163,7 +163,8 @@ struct BucketListGenerator
             auto keepDead = BucketList::keepDeadEntries(i);
             {
                 BucketOutputIterator out(bmApply.getTmpDir(), keepDead, meta,
-                                         mergeCounters, /*doFsync=*/true);
+                                         mergeCounters, mClock.getIOContext(),
+                                         /*doFsync=*/true);
                 for (BucketInputIterator in (level.getCurr()); in; ++in)
                 {
                     out.put(*in);
@@ -172,7 +173,8 @@ struct BucketListGenerator
             }
             {
                 BucketOutputIterator out(bmApply.getTmpDir(), keepDead, meta,
-                                         mergeCounters, /*doFsync=*/true);
+                                         mergeCounters, mClock.getIOContext(),
+                                         /*doFsync=*/true);
                 for (BucketInputIterator in (level.getSnap()); in; ++in)
                 {
                     out.put(*in);
@@ -180,7 +182,9 @@ struct BucketListGenerator
                 auto b = out.getBucket(bmApply);
             }
         }
-        return HistoryArchiveState(mLedgerSeq, blGenerate);
+        return HistoryArchiveState(
+            mLedgerSeq, blGenerate,
+            mAppGenerate->getConfig().NETWORK_PASSPHRASE);
     }
 };
 
@@ -278,9 +282,8 @@ class ApplyBucketsWorkAddEntry : public ApplyBucketsWork
         Application& app,
         std::map<std::string, std::shared_ptr<Bucket>> const& buckets,
         HistoryArchiveState const& applyState, uint32_t maxProtocolVersion,
-        bool resolve, LedgerEntry const& entry)
-        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion,
-                           resolve)
+        LedgerEntry const& entry)
+        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion)
         , mEntry(entry)
         , mAdded{false}
     {
@@ -293,13 +296,17 @@ class ApplyBucketsWorkAddEntry : public ApplyBucketsWork
         if (!mAdded)
         {
             uint32_t minLedger = mEntry.lastModifiedLedgerSeq;
-            uint32_t maxLedger = std::numeric_limits<int32_t>::max();
+            uint32_t maxLedger = std::numeric_limits<int32_t>::max() - 1;
             auto& ltxRoot = mApp.getLedgerTxnRoot();
             size_t count =
-                ltxRoot.countObjects(ACCOUNT, {minLedger, maxLedger}) +
-                ltxRoot.countObjects(DATA, {minLedger, maxLedger}) +
-                ltxRoot.countObjects(OFFER, {minLedger, maxLedger}) +
-                ltxRoot.countObjects(TRUSTLINE, {minLedger, maxLedger});
+                ltxRoot.countObjects(
+                    ACCOUNT, LedgerRange::inclusive(minLedger, maxLedger)) +
+                ltxRoot.countObjects(
+                    DATA, LedgerRange::inclusive(minLedger, maxLedger)) +
+                ltxRoot.countObjects(
+                    OFFER, LedgerRange::inclusive(minLedger, maxLedger)) +
+                ltxRoot.countObjects(
+                    TRUSTLINE, LedgerRange::inclusive(minLedger, maxLedger));
 
             if (count > 0)
             {
@@ -330,9 +337,8 @@ class ApplyBucketsWorkDeleteEntry : public ApplyBucketsWork
         Application& app,
         std::map<std::string, std::shared_ptr<Bucket>> const& buckets,
         HistoryArchiveState const& applyState, uint32_t maxProtocolVersion,
-        bool resolve, LedgerEntry const& target)
-        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion,
-                           resolve)
+        LedgerEntry const& target)
+        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion)
         , mKey(LedgerEntryKey(target))
         , mEntry(target)
         , mDeleted{false}
@@ -412,14 +418,24 @@ class ApplyBucketsWorkModifyEntry : public ApplyBucketsWork
         entry.data.data().dataName = data.dataName;
     }
 
+    void
+    modifyClaimableBalanceEntry(LedgerEntry& entry)
+    {
+        ClaimableBalanceEntry const& cb = mEntry.data.claimableBalance();
+        entry.lastModifiedLedgerSeq = mEntry.lastModifiedLedgerSeq;
+        entry.data.claimableBalance() =
+            LedgerTestUtils::generateValidClaimableBalanceEntry(5);
+
+        entry.data.claimableBalance().balanceID = cb.balanceID;
+    }
+
   public:
     ApplyBucketsWorkModifyEntry(
         Application& app,
         std::map<std::string, std::shared_ptr<Bucket>> const& buckets,
         HistoryArchiveState const& applyState, uint32_t maxProtocolVersion,
-        bool resolve, LedgerEntry const& target)
-        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion,
-                           resolve)
+        LedgerEntry const& target)
+        : ApplyBucketsWork(app, buckets, applyState, maxProtocolVersion)
         , mKey(LedgerEntryKey(target))
         , mEntry(target)
         , mModified{false}
@@ -448,6 +464,9 @@ class ApplyBucketsWorkModifyEntry : public ApplyBucketsWork
                     break;
                 case DATA:
                     modifyDataEntry(entry.current());
+                    break;
+                case CLAIMABLE_BALANCE:
+                    modifyClaimableBalanceEntry(entry.current());
                     break;
                 default:
                     REQUIRE(false);
@@ -536,7 +555,7 @@ TEST_CASE("BucketListIsConsistentWithDatabase test root account",
                 auto skey = SecretKey::fromSeed(app->getNetworkID());
                 auto root = skey.getPublicKey();
                 auto le =
-                    DiamNet::loadAccountWithoutRecord(ltx, root).current();
+                    diamnet::loadAccountWithoutRecord(ltx, root).current();
                 le.lastModifiedLedgerSeq = mLedgerSeq;
                 return {le};
             }

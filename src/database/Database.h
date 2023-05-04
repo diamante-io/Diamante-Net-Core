@@ -1,17 +1,20 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "database/DatabaseTypeSpecificOperation.h"
 #include "medida/timer_context.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
+#include "util/Decoder.h"
 #include "util/NonCopyable.h"
 #include "util/Timer.h"
+#include <functional>
 #include <set>
 #include <soci.h>
 #include <string>
+#include <xdrpp/marshal.h>
 
 namespace medida
 {
@@ -19,7 +22,7 @@ class Meter;
 class Counter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 class SQLLogContext;
@@ -103,10 +106,30 @@ class Database : NonMovableOrCopyable
     static void registerDrivers();
     void applySchemaUpgrade(unsigned long vers);
 
+    // Convert the accounts table from using explicit entries for
+    // extension fields into storing the entire extension as opaque XDR.
+    void convertAccountExtensionsToOpaqueXDR();
+    void copyIndividualAccountExtensionFieldsToOpaqueXDR();
+
+    std::string getOldLiabilitySelect(std::string const& table,
+                                      std::string const& fields);
+    void addTextColumn(std::string const& table, std::string const& column);
+    void dropNullableColumn(std::string const& table,
+                            std::string const& column);
+
+    // Convert the trustlines table from using explicit entries for
+    // extension fields into storing the entire extension as opaque XDR.
+    void convertTrustLineExtensionsToOpaqueXDR();
+    void copyIndividualTrustLineExtensionFieldsToOpaqueXDR();
+
   public:
     // Instantiate object and connect to app.getConfig().DATABASE;
     // if there is a connection error, this will throw.
     Database(Application& app);
+
+    virtual ~Database()
+    {
+    }
 
     // Return a crude meter of total queries to the db, for use in
     // overlay/LoadManager.
@@ -159,6 +182,13 @@ class Database : NonMovableOrCopyable
     // Return true if the Database target is SQLite, otherwise false.
     bool isSqlite() const;
 
+    // Return an optional SQL COLLATION clause to use for text-typed columns in
+    // this database, in order to ensure they're compared "simply" using
+    // byte-value comparisons, i.e. in a non-language-sensitive fashion.  For
+    // Postgresql this will be 'COLLATE "C"' and for SQLite, nothing (its
+    // defaults are correct already).
+    std::string getSimpleCollationClause() const;
+
     // Call `op` back with the specific database backend subtype in use.
     template <typename T>
     T doDatabaseTypeSpecificOperation(DatabaseTypeSpecificOperation<T>& op);
@@ -168,7 +198,7 @@ class Database : NonMovableOrCopyable
     bool canUsePool() const;
 
     // Drop and recreate all tables in the database target. This is called
-    // by the new-db command on DiamNet-core.
+    // by the new-db command on diamnet-core.
     void initialize();
 
     // Save `vers` as schema version.
@@ -189,6 +219,16 @@ class Database : NonMovableOrCopyable
     // Access the optional SOCI connection pool available for worker
     // threads. Throws an error if !canUsePool().
     soci::connection_pool& getPool();
+
+  protected:
+    // Give clients the opportunity to perform operations on databases while
+    // they're still using old schemas (prior to the upgrade that occurs either
+    // immediately after database creation or after loading a version of
+    // diamnet-core that introduces a new schema).
+    virtual void
+    actBeforeDBSchemaUpgrade()
+    {
+    }
 };
 
 template <typename T>
@@ -223,4 +263,89 @@ class DBTimeExcluder : NonCopyable
     DBTimeExcluder(Application& mApp);
     ~DBTimeExcluder();
 };
+
+// Select a set of records using a client-defined query string, then map
+// each record into an element of a client-defined datatype by applying a
+// client-defined function (the records are accumulated in the "out"
+// vector).
+template <typename T>
+void
+selectMap(Database& db, std::string const& selectStr,
+          std::function<T(soci::row const&)> makeT, std::vector<T>& out)
+{
+    soci::rowset<soci::row> rs = (db.getSession().prepare << selectStr);
+
+    std::transform(rs.begin(), rs.end(), std::back_inserter(out), makeT);
+}
+
+// Map each element in the given vector of a client-defined datatype into a
+// SQL update command by applying a client-defined function, then send those
+// update strings to the database.
+//
+// The "postUpdate" function receives the number of records affected
+// by the given update, as well as the element of the client-defined
+// datatype which generated that update.
+template <typename T>
+void updateMap(Database& db, std::vector<T> const& in,
+               std::string const& updateStr,
+               std::function<void(soci::statement&, T const&)> prepUpdate,
+               std::function<void(long long const, T const&)> postUpdate);
+template <typename T>
+void
+updateMap(Database& db, std::vector<T> const& in, std::string const& updateStr,
+          std::function<void(soci::statement&, T const&)> prepUpdate,
+          std::function<void(long long const, T const&)> postUpdate)
+{
+    auto st_update = db.getPreparedStatement(updateStr).statement();
+
+    for (auto& recT : in)
+    {
+        prepUpdate(st_update, recT);
+        st_update.define_and_bind();
+        st_update.execute(true);
+        auto affected_rows = st_update.get_affected_rows();
+        st_update.clean_up(false);
+        postUpdate(affected_rows, recT);
+    }
+}
+
+// The composition of updateMap() following selectMap().
+//
+// Returns the number of records selected by selectMap() (all of which were
+// then passed through updateMap() before the selectUpdateMap() call
+// returned).
+template <typename T>
+size_t
+selectUpdateMap(Database& db, std::string const& selectStr,
+                std::function<T(soci::row const&)> makeT,
+                std::string const& updateStr,
+                std::function<void(soci::statement&, T const&)> prepUpdate,
+                std::function<void(long long const, T const&)> postUpdate)
+{
+    std::vector<T> vecT;
+
+    selectMap<T>(db, selectStr, makeT, vecT);
+    updateMap<T>(db, vecT, updateStr, prepUpdate, postUpdate);
+
+    return vecT.size();
+}
+
+template <typename T>
+void
+decodeOpaqueXDR(std::string const& in, T& out)
+{
+    std::vector<uint8_t> opaque;
+    decoder::decode_b64(in, opaque);
+    xdr::xdr_from_opaque(opaque, out);
+}
+
+template <typename T>
+void
+decodeOpaqueXDR(std::string const& in, soci::indicator const& ind, T& out)
+{
+    if (ind == soci::i_ok)
+    {
+        decodeOpaqueXDR(in, out);
+    }
+}
 }

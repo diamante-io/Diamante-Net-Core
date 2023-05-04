@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,9 +10,11 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/TrustLineWrapper.h"
 #include "main/Application.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
@@ -26,6 +28,7 @@ ChangeTrustOpFrame::ChangeTrustOpFrame(Operation const& op,
 bool
 ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "ChangeTrustOp apply", true);
     auto header = ltx.loadHeader();
     auto issuerID = getIssuer(mChangeTrust.line);
 
@@ -49,7 +52,7 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CHANGE_TRUST_INVALID_LIMIT);
             return false;
         }
-        else if (!DiamNet::loadAccountWithoutRecord(ltx, issuerID))
+        else if (!diamnet::loadAccountWithoutRecord(ltx, issuerID))
         {
             innerResult().code(CHANGE_TRUST_NO_ISSUER);
             return false;
@@ -74,13 +77,14 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
         if (mChangeTrust.limit == 0)
         {
             // line gets deleted
-            trustLine.erase();
             auto sourceAccount = loadSourceAccount(ltx, header);
-            addNumEntries(header, sourceAccount, -1);
+            removeEntryWithPossibleSponsorship(ltx, header, trustLine.current(),
+                                               sourceAccount);
+            trustLine.erase();
         }
         else
         {
-            auto issuer = DiamNet::loadAccountWithoutRecord(ltx, issuerID);
+            auto issuer = diamnet::loadAccountWithoutRecord(ltx, issuerID);
             if (!issuer)
             {
                 innerResult().code(CHANGE_TRUST_NO_ISSUER);
@@ -98,27 +102,6 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(CHANGE_TRUST_INVALID_LIMIT);
             return false;
         }
-        auto issuer = DiamNet::loadAccountWithoutRecord(ltx, issuerID);
-        if (!issuer)
-        {
-            innerResult().code(CHANGE_TRUST_NO_ISSUER);
-            return false;
-        }
-
-        auto sourceAccount = loadSourceAccount(ltx, header);
-        switch (addNumEntries(header, sourceAccount, 1))
-        {
-        case AddSubentryResult::SUCCESS:
-            break;
-        case AddSubentryResult::LOW_RESERVE:
-            innerResult().code(CHANGE_TRUST_LOW_RESERVE);
-            return false;
-        case AddSubentryResult::TOO_MANY_SUBENTRIES:
-            mResult.code(opTOO_MANY_SUBENTRIES);
-            return false;
-        default:
-            throw std::runtime_error("Unexpected result from addNumEntries");
-        }
 
         LedgerEntry trustLineEntry;
         trustLineEntry.data.type(TRUSTLINE);
@@ -127,9 +110,41 @@ ChangeTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
         tl.asset = mChangeTrust.line;
         tl.limit = mChangeTrust.limit;
         tl.balance = 0;
-        if (!isAuthRequired(issuer))
+
         {
-            tl.flags = AUTHORIZED_FLAG;
+            auto issuer = diamnet::loadAccountWithoutRecord(ltx, issuerID);
+            if (!issuer)
+            {
+                innerResult().code(CHANGE_TRUST_NO_ISSUER);
+                return false;
+            }
+            if (!isAuthRequired(issuer))
+            {
+                tl.flags = AUTHORIZED_FLAG;
+            }
+        }
+
+        auto sourceAccount = loadSourceAccount(ltx, header);
+        switch (createEntryWithPossibleSponsorship(ltx, header, trustLineEntry,
+                                                   sourceAccount))
+        {
+        case SponsorshipResult::SUCCESS:
+            break;
+        case SponsorshipResult::LOW_RESERVE:
+            innerResult().code(CHANGE_TRUST_LOW_RESERVE);
+            return false;
+        case SponsorshipResult::TOO_MANY_SUBENTRIES:
+            mResult.code(opTOO_MANY_SUBENTRIES);
+            return false;
+        case SponsorshipResult::TOO_MANY_SPONSORING:
+            mResult.code(opTOO_MANY_SPONSORING);
+            return false;
+        case SponsorshipResult::TOO_MANY_SPONSORED:
+            // This is impossible right now because there is a limit on sub
+            // entries, fall through and throw
+        default:
+            throw std::runtime_error("Unexpected result from "
+                                     "createEntryWithPossibleSponsorship");
         }
         ltx.create(trustLineEntry);
 

@@ -1,7 +1,7 @@
 
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,20 +9,20 @@
 #include "main/Application.h"
 #include "main/Config.h"
 #include "medida/medida.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "overlay/test/LoopbackPeer.h"
 #include "simulation/LoadGenerator.h"
 #include "test/TxTests.h"
 #include "util/Timer.h"
 #include "util/XDROperators.h"
-#include "xdr/DiamNet-types.h"
+#include "xdr/Diamnet-types.h"
 
 #define SIMULATION_CREATE_NODE(N) \
     const Hash v##N##VSeed = sha256("NODE_SEED_" #N); \
     const SecretKey v##N##SecretKey = SecretKey::fromSeed(v##N##VSeed); \
     const PublicKey v##N##NodeID = v##N##SecretKey.getPublicKey();
 
-namespace DiamNet
+namespace diamnet
 {
 class Simulation
 {
@@ -43,6 +43,7 @@ class Simulation
 
     // updates all clocks in the simulation to the same time_point
     void setCurrentVirtualTime(VirtualClock::time_point t);
+    void setCurrentVirtualTime(VirtualClock::system_time_point t);
 
     Application::pointer addNode(SecretKey nodeKey, SCPQuorumSet qSet,
                                  Config const* cfg = nullptr,
@@ -70,6 +71,7 @@ class Simulation
     void crankUntil(std::function<bool()> const& fn,
                     VirtualClock::duration timeout, bool finalCrank);
     void crankUntil(VirtualClock::time_point timePoint, bool finalCrank);
+    void crankUntil(VirtualClock::system_time_point timePoint, bool finalCrank);
     std::string metricsSummary(std::string domain = "");
 
     void addConnection(NodeID initiator, NodeID acceptor);

@@ -1,4 +1,4 @@
-// Copyright 2016-2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016-2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,10 +12,11 @@
 #include "util/Logging.h"
 #include "util/Math.h"
 #include "xdrpp/marshal.h"
-#include <lib/util/format.h>
+#include <fmt/format.h>
+#include <lib/json/json.h>
 #include <xdrpp/autocheck.h>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 using QS = SCPQuorumSet;
 using VQ = xdr::xvector<QS>;
@@ -31,13 +32,18 @@ TEST_CASE("quorum intersection basic 4-node", "[herder][quorumintersection]")
     PublicKey pkC = SecretKey::pseudoRandomForTesting().getPublicKey();
     PublicKey pkD = SecretKey::pseudoRandomForTesting().getPublicKey();
 
-    qm[pkA] = make_shared<QS>(2, VK({pkB, pkC, pkD}), VQ{});
-    qm[pkB] = make_shared<QS>(2, VK({pkA, pkC, pkD}), VQ{});
-    qm[pkC] = make_shared<QS>(2, VK({pkA, pkB, pkD}), VQ{});
-    qm[pkD] = make_shared<QS>(2, VK({pkA, pkB, pkC}), VQ{});
+    qm[pkA] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkB, pkC, pkD}), VQ{}), 0};
+    qm[pkB] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkC, pkD}), VQ{}), 0};
+    qm[pkC] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkD}), VQ{}), 0};
+    qm[pkD] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkC}), VQ{}), 0};
 
     Config cfg(getTestConfig());
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -69,15 +75,22 @@ TEST_CASE("quorum intersection 6-node with subquorums",
     SCPQuorumSet qsBDE(2, VK({pkB, pkD, pkE}), VQ{});
     SCPQuorumSet qsCDE(2, VK({pkC, pkD, pkE}), VQ{});
 
-    qm[pkA] = make_shared<QS>(2, VK{}, VQ({qsBDC, qsBDE, qsCDE}));
-    qm[pkB] = make_shared<QS>(2, VK{}, VQ({qsACD, qsACE, qsACF}));
-    qm[pkC] = make_shared<QS>(2, VK{}, VQ({qsABD, qsABE, qsABF}));
-    qm[pkD] = make_shared<QS>(2, VK{}, VQ({qsABC, qsABE, qsABF}));
-    qm[pkE] = make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABF}));
-    qm[pkF] = make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABE}));
+    qm[pkA] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsBDC, qsBDE, qsCDE})), 0};
+    qm[pkB] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsACD, qsACE, qsACF})), 0};
+    qm[pkC] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABD, qsABE, qsABF})), 0};
+    qm[pkD] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABC, qsABE, qsABF})), 0};
+    qm[pkE] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABF})), 0};
+    qm[pkF] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABE})), 0};
 
     Config cfg(getTestConfig());
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -93,15 +106,22 @@ TEST_CASE("quorum non intersection basic 6-node",
     PublicKey pkE = SecretKey::pseudoRandomForTesting().getPublicKey();
     PublicKey pkF = SecretKey::pseudoRandomForTesting().getPublicKey();
 
-    qm[pkA] = make_shared<QS>(2, VK({pkB, pkC, pkD, pkE, pkF}), VQ{});
-    qm[pkB] = make_shared<QS>(2, VK({pkA, pkC, pkD, pkE, pkF}), VQ{});
-    qm[pkC] = make_shared<QS>(2, VK({pkA, pkB, pkD, pkE, pkF}), VQ{});
-    qm[pkD] = make_shared<QS>(2, VK({pkA, pkB, pkC, pkE, pkF}), VQ{});
-    qm[pkE] = make_shared<QS>(2, VK({pkA, pkB, pkC, pkD, pkF}), VQ{});
-    qm[pkF] = make_shared<QS>(2, VK({pkA, pkB, pkC, pkD, pkE}), VQ{});
+    qm[pkA] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkB, pkC, pkD, pkE, pkF}), VQ{}), 0};
+    qm[pkB] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkC, pkD, pkE, pkF}), VQ{}), 0};
+    qm[pkC] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkD, pkE, pkF}), VQ{}), 0};
+    qm[pkD] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkC, pkE, pkF}), VQ{}), 0};
+    qm[pkE] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkC, pkD, pkF}), VQ{}), 0};
+    qm[pkF] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK({pkA, pkB, pkC, pkD, pkE}), VQ{}), 0};
 
     Config cfg(getTestConfig());
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -135,16 +155,23 @@ TEST_CASE("quorum non intersection 6-node with subquorums",
     SCPQuorumSet qsCDE(2, VK({pkC, pkD, pkE}), VQ{});
     SCPQuorumSet qsCDF(2, VK({pkC, pkD, pkF}), VQ{});
 
-    qm[pkA] = make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABE}));
-    qm[pkB] = make_shared<QS>(2, VK{}, VQ({qsBDC, qsABD, qsABF}));
-    qm[pkC] = make_shared<QS>(2, VK{}, VQ({qsACD, qsACD, qsACF}));
+    qm[pkA] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABC, qsABD, qsABE})), 0};
+    qm[pkB] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsBDC, qsABD, qsABF})), 0};
+    qm[pkC] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsACD, qsACD, qsACF})), 0};
 
-    qm[pkD] = make_shared<QS>(2, VK{}, VQ({qsCDE, qsADE, qsBDE}));
-    qm[pkE] = make_shared<QS>(2, VK{}, VQ({qsCDE, qsADE, qsBDE}));
-    qm[pkF] = make_shared<QS>(2, VK{}, VQ({qsABF, qsADF, qsBDF}));
+    qm[pkD] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsCDE, qsADE, qsBDE})), 0};
+    qm[pkE] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsCDE, qsADE, qsBDE})), 0};
+    qm[pkF] = QuorumTracker::NodeInfo{
+        make_shared<QS>(2, VK{}, VQ({qsABF, qsADF, qsBDF})), 0};
 
     Config cfg(getTestConfig());
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -193,33 +220,34 @@ TEST_CASE("quorum plausible non intersection", "[herder][quorumintersection]")
     // All 3 SDF nodes get this:
     auto qsSDF = make_shared<QS>(3, VK({pkSDF1, pkSDF2, pkSDF3}),
                                  VQ({qs1of2LOBSTR, qs2of3SatoshiPay}));
-    qm[pkSDF1] = qsSDF;
-    qm[pkSDF2] = qsSDF;
-    qm[pkSDF3] = qsSDF;
+    qm[pkSDF1] = QuorumTracker::NodeInfo{qsSDF, 0};
+    qm[pkSDF2] = QuorumTracker::NodeInfo{qsSDF, 0};
+    qm[pkSDF3] = QuorumTracker::NodeInfo{qsSDF, 0};
 
     // All SatoshiPay nodes get this:
     auto qsSatoshiPay =
         make_shared<QS>(4, VK({pkSatoshi1, pkSatoshi2, pkSatoshi3}),
                         VQ({qs2of3SDF, qs1of2LOBSTR, qs1of2COINQVEST}));
-    qm[pkSatoshi1] = qsSatoshiPay;
-    qm[pkSatoshi2] = qsSatoshiPay;
-    qm[pkSatoshi3] = qsSatoshiPay;
+    qm[pkSatoshi1] = QuorumTracker::NodeInfo{qsSatoshiPay, 0};
+    qm[pkSatoshi2] = QuorumTracker::NodeInfo{qsSatoshiPay, 0};
+    qm[pkSatoshi3] = QuorumTracker::NodeInfo{qsSatoshiPay, 0};
 
     // All LOBSTR nodes get this:
     auto qsLOBSTR = make_shared<QS>(
         5, VK({pkSDF1, pkSDF2, pkSDF3, pkSatoshi1, pkSatoshi2, pkSatoshi3}),
         VQ{});
-    qm[pkLOBSTR1] = qsLOBSTR;
-    qm[pkLOBSTR2] = qsLOBSTR;
+    qm[pkLOBSTR1] = QuorumTracker::NodeInfo{qsLOBSTR, 0};
+    qm[pkLOBSTR2] = QuorumTracker::NodeInfo{qsLOBSTR, 0};
 
     // All COINQVEST nodes get this:
     auto qsCOINQVEST =
         make_shared<QS>(3, VK({pkCOINQVEST1, pkCOINQVEST2}),
                         VQ({qs2of3SDF, qs2of3SatoshiPay, qs1of2LOBSTR}));
-    qm[pkCOINQVEST1] = qsCOINQVEST;
-    qm[pkCOINQVEST2] = qsCOINQVEST;
+    qm[pkCOINQVEST1] = QuorumTracker::NodeInfo{qsCOINQVEST, 0};
+    qm[pkCOINQVEST2] = QuorumTracker::NodeInfo{qsCOINQVEST, 0};
 
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -280,8 +308,9 @@ interconnectOrgs(xdr::xvector<xdr::xvector<PublicKey>> const& orgs,
         qs->validators = org;
         for (auto const& pk : org)
         {
-            qm[pk] = qs;
+            qm[pk] = QuorumTracker::NodeInfo{qs, 0};
         }
+
         auto& depOrgs = qs->innerSets;
         for (size_t j = 0; j < orgs.size(); ++j)
         {
@@ -291,7 +320,7 @@ interconnectOrgs(xdr::xvector<xdr::xvector<PublicKey>> const& orgs,
             }
             if (shouldDepend(i, j))
             {
-                CLOG(DEBUG, "SCP") << "dep: org#" << i << " => org#" << j;
+                CLOG(DEBUG, "Herder") << "dep: org#" << i << " => org#" << j;
                 auto& otherOrg = orgs.at(j);
                 auto thresh = roundUpPct(otherOrg.size(), innerThreshPct);
                 depOrgs.emplace_back(thresh, otherOrg, emptySet);
@@ -342,7 +371,7 @@ interconnectOrgsBidir(xdr::xvector<xdr::xvector<PublicKey>> const& orgs,
                             ownThreshPct, innerThreshPct);
 }
 
-TEST_CASE("quorum intersection 4-org fully-connected, elide all minquorums",
+TEST_CASE("quorum intersection 4-org fully-connected - elide all minquorums",
           "[herder][quorumintersection]")
 {
     // Generate a typical all-to-all multi-org graph that checks quickly: every
@@ -353,7 +382,8 @@ TEST_CASE("quorum intersection 4-org fully-connected, elide all minquorums",
     auto qm = interconnectOrgs(orgs, [](size_t i, size_t j) { return true; });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -370,7 +400,8 @@ TEST_CASE("quorum intersection 3-org 3-node open line",
     auto qm = interconnectOrgsBidir(orgs, {{0, 1}, {1, 2}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -386,7 +417,8 @@ TEST_CASE("quorum intersection 3-org 2-node open line",
     auto qm = interconnectOrgsBidir(orgs, {{0, 1}, {1, 2}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -405,7 +437,8 @@ TEST_CASE("quorum intersection 3-org 3-node closed ring",
     auto qm = interconnectOrgsBidir(orgs, {{0, 1}, {1, 2}, {0, 2}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -429,7 +462,8 @@ TEST_CASE("quorum intersection 3-org 3-node closed one-way ring",
                                            });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -453,7 +487,8 @@ TEST_CASE("quorum intersection 3-org 2-node closed one-way ring",
                                            });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -482,7 +517,8 @@ TEST_CASE("quorum intersection 3-org 2-node 2-of-3 asymmetric",
                                            });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -528,7 +564,8 @@ TEST_CASE("quorum intersection 8-org core-and-periphery dangling",
          {3, 7}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -580,7 +617,8 @@ TEST_CASE("quorum intersection 8-org core-and-periphery balanced",
          {2, 7}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -627,7 +665,8 @@ TEST_CASE("quorum intersection 8-org core-and-periphery unbalanced",
          {3, 7}});
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(!qic->networkEnjoysQuorumIntersection());
 }
 
@@ -673,13 +712,14 @@ TEST_CASE("quorum intersection 6-org 1-node 4-null qsets",
     {
         for (auto const& node : orgs.at(i))
         {
-            qm[node] = nullptr;
+            qm[node] = QuorumTracker::NodeInfo{nullptr, 0};
         }
     }
 
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
     REQUIRE(qic->getMaxQuorumsFound() == 0);
 }
@@ -718,13 +758,14 @@ TEST_CASE("quorum intersection 4-org 1-node 4-null qsets",
     {
         for (auto const& node : orgs.at(i))
         {
-            qm[node] = nullptr;
+            qm[node] = QuorumTracker::NodeInfo{nullptr, 0};
         }
     }
 
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
     REQUIRE(qic->getMaxQuorumsFound() == 0);
 }
@@ -736,7 +777,8 @@ TEST_CASE("quorum intersection 6-org 3-node fully-connected",
     auto qm = interconnectOrgs(orgs, [](size_t i, size_t j) { return true; });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 }
 
@@ -749,8 +791,36 @@ TEST_CASE("quorum intersection scaling test",
     auto qm = interconnectOrgs(orgs, [](size_t i, size_t j) { return true; });
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
+}
+
+TEST_CASE("quorum intersection interruption", "[herder][quorumintersection]")
+{
+    auto orgs = generateOrgs(16);
+    auto qm = interconnectOrgs(orgs, [](size_t i, size_t j) { return true; });
+    Config cfg(getTestConfig());
+    cfg = configureShortNames(cfg, orgs);
+    std::atomic<bool> interruptFlag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, interruptFlag);
+    std::thread canceller([&interruptFlag]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        interruptFlag = true;
+    });
+    REQUIRE_THROWS_AS(qic->networkEnjoysQuorumIntersection(),
+                      QuorumIntersectionChecker::InterruptedException);
+    canceller.join();
+    interruptFlag = false;
+
+    std::thread canceller2([&interruptFlag]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        interruptFlag = true;
+    });
+    REQUIRE_THROWS_AS(
+        qic->getIntersectionCriticalGroups(qm, cfg, interruptFlag),
+        QuorumIntersectionChecker::InterruptedException);
+    canceller2.join();
 }
 
 static void
@@ -758,18 +828,17 @@ debugQmap(Config const& cfg, QuorumTracker::QuorumMap const& qm)
 {
     for (auto const& pair : qm)
     {
-        if (pair.second)
+        if (pair.second.mQuorumSet)
         {
-            auto str =
-                LocalNode::toJson(*pair.second, [&cfg](PublicKey const& k) {
-                    return cfg.toShortString(k);
-                });
-            CLOG(DEBUG, "SCP")
+            auto str = LocalNode::toJson(
+                *(pair.second.mQuorumSet),
+                [&cfg](PublicKey const& k) { return cfg.toShortString(k); });
+            CLOG(DEBUG, "Herder")
                 << "qmap[" << cfg.toShortString(pair.first) << "] = " << str;
         }
         else
         {
-            CLOG(DEBUG, "SCP")
+            CLOG(DEBUG, "Herder")
                 << "qmap[" << cfg.toShortString(pair.first) << "] = nullptr";
         }
     }
@@ -832,11 +901,71 @@ TEST_CASE("quorum intersection criticality",
     Config cfg(getTestConfig());
     cfg = configureShortNames(cfg, orgs);
     debugQmap(cfg, qm);
-    auto qic = QuorumIntersectionChecker::create(qm, cfg);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
     REQUIRE(qic->networkEnjoysQuorumIntersection());
 
     auto groups =
-        QuorumIntersectionChecker::getIntersectionCriticalGroups(qm, cfg);
+        QuorumIntersectionChecker::getIntersectionCriticalGroups(qm, cfg, flag);
     REQUIRE(groups.size() == 1);
     REQUIRE(groups == std::set<std::set<PublicKey>>{{orgs[3][0]}});
+}
+
+TEST_CASE("quorum intersection finds smaller SCC with quorums",
+          "[herder][quorumintersectionsize]")
+{
+    // This test checks that the SCC examined by the quorum intersection
+    // checker's enumeration phase is "the SCC that actually has quorums", even
+    // if it's not the largest one.
+    //
+    // We test this by manufacturing a large SCC A that contains no quorums and
+    // a smaller SCC B that contains quorums, and checking that we actually
+    // found some quorums (meaning: we scanned SCC B). Previously we picked the
+    // larger SCC no matter what, and this would cause the checker to focus on
+    // A and see "no quorums, vacuously enjoys intersection".
+    //
+    //
+    //     SCC A
+    //
+    //    org0 <--+
+    //      |     |
+    //      v     |
+    //    org1    |
+    //      |     |      SCC B
+    //      v     |
+    //    org2    |     org7 <-+
+    //      |     |      ^     |
+    //      |     |      |     |
+    //      v     |      v     |
+    //    org3    |     org6   |
+    //      |     |      ^     |
+    //      |     |      |     |
+    //      v     |      v     |
+    //    org4 ---+---> org5 <-+
+    //
+
+    auto orgs = generateOrgs(8, {1});
+    auto qm = interconnectOrgsUnidir(orgs,
+                                     {
+                                         {0, 1},
+                                         {1, 2},
+                                         {2, 3},
+                                         {3, 4},
+                                         {4, 0},
+                                         {4, 5},
+                                         {5, 6},
+                                         {6, 5},
+                                         {6, 7},
+                                         {7, 6},
+                                         {7, 5},
+                                         {5, 7},
+                                     },
+                                     /* ownThreshPct=*/100);
+    Config cfg(getTestConfig());
+    cfg = configureShortNames(cfg, orgs);
+    debugQmap(cfg, qm);
+    std::atomic<bool> flag{false};
+    auto qic = QuorumIntersectionChecker::create(qm, cfg, flag);
+    REQUIRE(qic->networkEnjoysQuorumIntersection());
+    REQUIRE(qic->getMaxQuorumsFound() != 0);
 }

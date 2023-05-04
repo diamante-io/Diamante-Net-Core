@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -23,8 +23,8 @@
 #include "util/XDROperators.h"
 #include <functional>
 
-using namespace DiamNet;
-using namespace DiamNet::txtest;
+using namespace diamnet;
+using namespace diamnet::txtest;
 
 static const unsigned maxWinners = 2000u;
 
@@ -53,7 +53,7 @@ createTestAccounts(Application& app, int nbAccounts,
             root.create(to, bal);
 
             LedgerTxn ltx(app.getLedgerTxnRoot());
-            auto account = DiamNet::loadAccount(ltx, to.getPublicKey());
+            auto account = diamnet::loadAccount(ltx, to.getPublicKey());
             auto& ae = account.current().data.account();
             ae.inflationDest.activate() =
                 getTestAccount(getVote(i)).getPublicKey();
@@ -141,7 +141,7 @@ simulateInflation(int ledgerVersion, int nbAccounts, int64& totCoins,
             LedgerTxn ltx(app.getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto winner =
-                DiamNet::loadAccount(ltx, getTestAccount(w).getPublicKey());
+                diamnet::loadAccount(ltx, getTestAccount(w).getPublicKey());
             toDoleToThis =
                 std::min(getMaxAmountReceive(header, winner), toDoleToThis);
         }
@@ -199,7 +199,7 @@ doInflation(Application& app, int ledgerVersion, int nbAccounts,
         {
             LedgerTxn ltx(app.getLedgerTxnRoot());
             auto account =
-                DiamNet::loadAccount(ltx, getTestAccount(i).getPublicKey());
+                diamnet::loadAccount(ltx, getTestAccount(i).getPublicKey());
             auto const& ae = account.current().data.account();
             balances[i] = ae.balance;
             // double check that inflationDest is setup properly
@@ -254,7 +254,7 @@ doInflation(Application& app, int ledgerVersion, int nbAccounts,
         {
             {
                 LedgerTxn ltx(app.getLedgerTxnRoot());
-                auto account = DiamNet::loadAccount(ltx, k.getPublicKey());
+                auto account = diamnet::loadAccount(ltx, k.getPublicKey());
                 auto const& ae = account.current().data.account();
                 REQUIRE(expectedBalances[i] == ae.balance);
             }
@@ -290,7 +290,7 @@ TEST_CASE("inflation", "[tx][inflation]")
     // try to downgrade us from >1 to 1.
     cfg.USE_CONFIG_FOR_GENESIS = false;
 
-    VirtualClock::time_point inflationStart;
+    VirtualClock::system_time_point inflationStart;
     // inflation starts on 1-jul-2014
     time_t start = getTestDate(1, 7, 2014);
     inflationStart = VirtualClock::from_time_t(start);
@@ -371,7 +371,7 @@ TEST_CASE("inflation", "[tx][inflation]")
         auto rootBalance = root.getBalance();
 
         auto voter1tx = root.tx({createAccount(voter1, rootBalance / 6)});
-        voter1tx->getEnvelope().tx.fee = 999999999;
+        voter1tx->getEnvelope().v0().tx.fee = 999999999;
         auto voter2tx = root.tx({createAccount(voter2, rootBalance / 3)});
         auto target1tx = root.tx({createAccount(target1, minBalance)});
         auto target2tx = root.tx({createAccount(target2, minBalance)});

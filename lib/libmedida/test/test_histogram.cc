@@ -46,7 +46,7 @@ TEST(HistogramTest, aHistogramWith1000Elements) {
 
   auto snapshot = histogram.GetSnapshot();
   EXPECT_NEAR(500.5, snapshot.getMedian(), 0.0001);
-  EXPECT_NEAR(750.75, snapshot.get75thPercentile(), 0.0001);
-  EXPECT_NEAR(990.99, snapshot.get99thPercentile(), 0.0001);
+  EXPECT_NEAR(750.25, snapshot.get75thPercentile(), 0.0001);
+  EXPECT_NEAR(990.00999999999999, snapshot.get99thPercentile(), 0.0001);
   EXPECT_EQ(1000, snapshot.size());
 }

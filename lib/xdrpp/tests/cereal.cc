@@ -2,11 +2,20 @@
 #include <cassert>
 #include <iostream>
 #include <sstream>
-#include <xdrpp/cereal.h>
 #include <xdrpp/printer.h>
 #include <cereal/archives/binary.hpp>
 #include <cereal/archives/json.hpp>
 #include "tests/xdrtest.hh"
+
+void
+cereal_override(cereal::JSONOutputArchive &ar,
+                const testns::inner &t,
+                const char* field)
+{
+    xdr::archive(ar, 9999, "bort");
+}
+
+#include <xdrpp/cereal.h>
 
 using namespace std;
 
@@ -44,6 +53,30 @@ main()
   }
 
   cout << xdr::xdr_to_string(n2);
+
+  testns::nested_cereal_adapter_calls nc;
+  nc.strptr.activate() = "hello";
+  nc.strvec.push_back("goodbye");
+  nc.strarr[0] = "friends";
+  {
+    ostringstream obuf2;
+    {
+      cereal::JSONOutputArchive archive(obuf2);
+      archive(nc);
+    }
+    cout << obuf2.str();
+  }
+
+  {
+    testns::outer tu;
+    ostringstream obuf2;
+    {
+      cereal::JSONOutputArchive archive(obuf2);
+      archive(tu);
+    }
+    cout << obuf2.str();
+    assert(obuf2.str().find("\"bort\": 9999") != string::npos);
+  }
 
   return 0;
 }

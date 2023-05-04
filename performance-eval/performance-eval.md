@@ -8,7 +8,7 @@ When submitting changes that may impact the network's performance, we require to
 
 * Execution (real) time
 * CPU utilization at various interval, and/or percentile
-* Disk I/O at the operating system level (ie: unit is typically in blocks/s), both reads and writes of the DiamNet-core process
+* Disk I/O at the operating system level (ie: unit is typically in blocks/s), both reads and writes of the diamnet-core process
 * SQL: rate of operations (read and writes), Disk I/O of the SQL process if available (*PostgreSQL*)
 * Memory utilization
 
@@ -75,7 +75,7 @@ Inject transactions, wait until they are incorporated into a ledger.
 This scenario looks at the overhead of flooding transactions and SCP messages (required for transactions to be included in a ledger).
 
 ### Built-in load generator
-DiamNet-core has a built-in load generator that allows to inject transactions on private networks.
+diamnet-core has a built-in load generator that allows to inject transactions on private networks.
 See the `generateload` [command](docs/software/commands.md) for more detail.
 
 ## Micro-benchmarks
@@ -92,7 +92,7 @@ Calling the `metrics` [command](docs/software/commands.md) allows to gather the 
 
 ### Notable metrics
 
-See [docs/metrics](docs/metrics.md) for information on metrics exposed by DiamNet-core.
+See [docs/metrics](docs/metrics.md) for information on metrics exposed by diamnet-core.
 
 ## System metrics
 Tools used to gather those metrics are O/S specific.
@@ -205,13 +205,13 @@ excluding startup/shutdown.
 Note: on some systems, the quality of symbols differs depending on the tool-chain. If you don't get good stack traces, try switching to gcc/g++.
 
 In order to improve the quality of stack traces:
-* Use your own version of dependencies (sqlite, etc) with the same compile options (done for you by DiamNet-core's configure script) 
+* Use your own version of dependencies (sqlite, etc) with the same compile options (done for you by diamnet-core's configure script) 
 * Use alternate libraries such as google-tcmalloc
 ```
 # you may need to install a package such as libtcmalloc-minimal4 for this to work
 export LDFLAGS=-ltcmalloc_minimal
-# alternatively, you can start "DiamNet-core", with something like
-LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so ./DiamNet-core ...
+# alternatively, you can start "diamnet-core", with something like
+LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so ./diamnet-core ...
 ```
 * use clang/clang++ and a custom `libc++` compiled with the same compilation options that you use.
     * See [building a custom libc++](CONTRIBUTING.md#building-a-custom-libc)
@@ -239,9 +239,9 @@ You can just pull a local copy with
 ### Example perf sessions
 #### Sampling session
 
-This example grabs 60 seconds of data from a running DiamNet-core instance.
+This example grabs 60 seconds of data from a running diamnet-core instance.
 
-    perf record -F 99 -p $(pgrep DiamNet-core) --call-graph dwarf,20000 -o perf-cpu.data -- sleep 60
+    perf record -F 99 -p $(pgrep diamnet-core) --call-graph dwarf,20000 -o perf-cpu.data -- sleep 60
 
 To view the report: `perf report -n  -F +period -i perf-cpu.data`
 
@@ -254,13 +254,13 @@ This generates a report that looks like [this](sample-reports/folded-cpu.svg)
 
 #### "Off CPU" session
 
-Records for 60 seconds events related to when a running DiamNet-core process is waiting on something.
+Records for 60 seconds events related to when a running diamnet-core process is waiting on something.
 
 As most threads "sleep" (waiting for some work), most of the interesting data in this report is in the smaller parts of the report (as the cummulative time of threads waiting for work is dominant).
 
 Note: "counts" in this report represent time in milliseconds.
 
-    perf record -e 'sched:sched_stat_sleep,sched:sched_switch,sched:sched_process_exit' -p $(pgrep DiamNet-core) --call-graph dwarf -o perf-offcpu-raw.data  -- sleep 60
+    perf record -e 'sched:sched_stat_sleep,sched:sched_switch,sched:sched_process_exit' -p $(pgrep diamnet-core) --call-graph dwarf -o perf-offcpu-raw.data  -- sleep 60
     sudo perf inject -f -v -s -i perf-offcpu-raw.data -o perf-offcpu.data
     sudo chown user.user perf-offcpu.data
 
@@ -289,6 +289,31 @@ solution is, as root to run
     sysctl kernel.sched_schedstats=1
 
 ## Windows
+
+### Tracy
+
+Diamnet-core has built-in support for Tracy traces.
+
+To install the visualizer, follow the [build and install instructions](https://github.com/wolfpld/tracy) from the main Tracy site.
+
+At a high level you need to
+
+install the required pre-requesites to build clients, run in a shell:
+
+    vcpkg.exe integrate install
+    vcpkg.exe install --triplet x64-windows-static capstone freetype glfw3
+
+Then build one of the servers.
+
+Solutions for servers compatible with the version of diamnet-core can be found under:
+
+    * lib/tracy/profiler/build/win32 (GUI)
+    * lib/tracy/capture/build/win32
+
+Note: when connecting, use `localhost` instead of `127.0.0.1` as Tracy binds by default to IPV6 addresses.
+
+### General Visual Studio profiler
+
 The main page for the profiler built into Visual Studio Community Edition is located there:  https://docs.microsoft.com/en-us/visualstudio/profiling/index
 
 ## All platforms

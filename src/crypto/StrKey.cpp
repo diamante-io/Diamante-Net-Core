@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,8 +6,9 @@
 #include "util/Decoder.h"
 #include "util/SecretValue.h"
 #include "util/crc16.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 namespace strKey
 {
@@ -15,6 +16,7 @@ namespace strKey
 SecretValue
 toStrKey(uint8_t ver, ByteSlice const& bin)
 {
+    ZoneScoped;
     ver <<= 3; // promote to 8 bits
     std::vector<uint8_t> toEncode;
     toEncode.reserve(1 + bin.size() + 2);
@@ -42,6 +44,7 @@ bool
 fromStrKey(std::string const& strKey, uint8_t& outVersion,
            std::vector<uint8_t>& decoded)
 {
+    ZoneScoped;
     // check that there is no trailing data
     size_t s = strKey.size();
     // base 32 data size is (s * 5)/8 => has to be a multiple of 8

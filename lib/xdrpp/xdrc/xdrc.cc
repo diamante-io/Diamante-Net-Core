@@ -202,6 +202,13 @@ main(int argc, char **argv)
   yyparse ();
   checkliterals ();
 
+  // Subtle but necessary: the 'ids' static above needs to be cleared by
+  // shutdown to ensure its dtor doesn't try taking an uninitialized mutex while
+  // freeing the set nodes and/or strings. When building xdrc against libc++
+  // with -D_LIBCPP_DEBUG=1 on versions before 9.0.1 (specifically before
+  // https://bugs.llvm.org/show_bug.cgi?id=27658) this caused a shutdown crash.
+  ids.clear();
+
   if (pclose(yyin))
     exit(1);
 

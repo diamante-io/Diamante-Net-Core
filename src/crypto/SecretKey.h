@@ -1,18 +1,18 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/KeyUtils.h"
 #include "util/XDROperators.h"
-#include "xdr/DiamNet-types.h"
+#include "xdr/Diamnet-types.h"
 
 #include <array>
 #include <functional>
 #include <ostream>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class ByteSlice;
@@ -90,6 +90,21 @@ class SecretKey
     {
         return (mKeyType == rh.mKeyType) && (mSecretKey == rh.mSecretKey);
     }
+
+    bool
+    operator<(SecretKey const& rh) const
+    {
+        if (mKeyType < rh.mKeyType)
+        {
+            return true;
+        }
+        if (mKeyType > rh.mKeyType)
+        {
+            return false;
+        }
+
+        return mSecretKey < rh.mSecretKey;
+    }
 };
 
 template <> struct KeyFunctions<PublicKey>
@@ -135,8 +150,8 @@ Hash random();
 
 namespace std
 {
-template <> struct hash<DiamNet::PublicKey>
+template <> struct hash<diamnet::PublicKey>
 {
-    size_t operator()(DiamNet::PublicKey const& x) const noexcept;
+    size_t operator()(diamnet::PublicKey const& x) const noexcept;
 };
 }

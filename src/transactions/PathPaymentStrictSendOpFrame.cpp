@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,8 +9,9 @@
 #include "ledger/TrustLineWrapper.h"
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 PathPaymentStrictSendOpFrame::PathPaymentStrictSendOpFrame(
@@ -29,12 +30,23 @@ PathPaymentStrictSendOpFrame::isVersionSupported(uint32_t protocolVersion) const
 bool
 PathPaymentStrictSendOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "PathPaymentStrictSendOp apply", true);
+    std::string pathStr = assetToString(getSourceAsset());
+    for (auto const& asset : mPathPayment.path)
+    {
+        pathStr += "->";
+        pathStr += assetToString(asset);
+    }
+    pathStr += "->";
+    pathStr += assetToString(getDestAsset());
+    ZoneTextV(applyZone, pathStr.c_str(), pathStr.size());
+
     setResultSuccess();
 
     bool bypassIssuerCheck = shouldBypassIssuerCheck(mPathPayment.path);
     if (!bypassIssuerCheck)
     {
-        if (!DiamNet::loadAccountWithoutRecord(ltx, getDestID()))
+        if (!diamnet::loadAccountWithoutRecord(ltx, getDestID()))
         {
             setResultNoDest();
             return false;
@@ -152,8 +164,8 @@ PathPaymentStrictSendOpFrame::getDestAsset() const
     return mPathPayment.destAsset;
 }
 
-AccountID const&
-PathPaymentStrictSendOpFrame::getDestID() const
+MuxedAccount const&
+PathPaymentStrictSendOpFrame::getDestMuxedAccount() const
 {
     return mPathPayment.destination;
 }

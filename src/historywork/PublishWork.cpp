@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,11 +6,12 @@
 #include "history/HistoryArchiveManager.h"
 #include "history/HistoryManager.h"
 #include "history/StateSnapshot.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 PublishWork::PublishWork(Application& app,
@@ -29,6 +30,7 @@ PublishWork::PublishWork(Application& app,
 void
 PublishWork::onFailureRaise()
 {
+    ZoneScoped;
     // use mOriginalBuckets as mSnapshot->mLocalState.allBuckets() could change
     // in meantime
     mApp.getHistoryManager().historyPublished(
@@ -38,6 +40,7 @@ PublishWork::onFailureRaise()
 void
 PublishWork::onSuccess()
 {
+    ZoneScoped;
     // use mOriginalBuckets as mSnapshot->mLocalState.allBuckets() could change
     // in meantime
     mApp.getHistoryManager().historyPublished(

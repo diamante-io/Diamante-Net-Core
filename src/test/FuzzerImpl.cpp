@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -18,7 +18,7 @@
 
 #include <xdrpp/autocheck.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 // creates a generic configuration with settings rigged to maximize
@@ -69,13 +69,13 @@ class FuzzTransactionFrame : public TransactionFrame
     attemptApplication(Application& app, AbstractLedgerTxn& ltx)
     {
         // reset results of operations
-        resetResults(ltx.getHeader(), 0);
+        resetResults(ltx.getHeader(), 0, true);
 
         // attempt application of transaction without accounting for sequence
         // number, processing the fee, or committing the LedgerTxn
         SignatureChecker signatureChecker{
             ltx.loadHeader().current().ledgerVersion, getContentsHash(),
-            mEnvelope.signatures};
+            mEnvelope.v0().signatures};
         // if any ill-formed Operations, do not attempt transaction application
         auto isInvalidOperationXDR = [&](auto const& op) {
             return !op->checkValid(signatureChecker, ltx, false);
@@ -89,8 +89,8 @@ class FuzzTransactionFrame : public TransactionFrame
         // protocols < 8, this triggered buggy caching, and potentially may do
         // so in the future
         loadSourceAccount(ltx, ltx.loadHeader());
-        TransactionMeta tm(1);
-        applyOperations(signatureChecker, app, ltx, tm.v1());
+        TransactionMeta tm(2);
+        applyOperations(signatureChecker, app, ltx, tm);
     }
 };
 
@@ -102,11 +102,11 @@ createFuzzTransactionFrame(PublicKey sourceAccountID,
     // application in the fuzzer, is the exact same, except for the inner
     // operations of course
     auto txEnv = TransactionEnvelope{};
-    txEnv.tx.sourceAccount = sourceAccountID;
-    txEnv.tx.fee = 0;
-    txEnv.tx.seqNum = 1;
+    txEnv.v0().tx.sourceAccountEd25519 = sourceAccountID.ed25519();
+    txEnv.v0().tx.fee = 0;
+    txEnv.v0().tx.seqNum = 1;
     std::copy(std::begin(ops), std::end(ops),
-              std::back_inserter(txEnv.tx.operations));
+              std::back_inserter(txEnv.v0().tx.operations));
 
     std::shared_ptr<FuzzTransactionFrame> res =
         std::make_shared<FuzzTransactionFrame>(networkID, txEnv);
@@ -122,7 +122,7 @@ isBadTransactionFuzzerInput(Operation const& op)
 }
 
 bool
-isBadOverlayFuzzerInput(DiamNetMessage const& m)
+isBadOverlayFuzzerInput(DiamnetMessage const& m)
 {
     // HELLO, AUTH and ERROR_MSG messages cause the connection between
     // the peers to drop. Since peer connections are only established
@@ -237,7 +237,8 @@ TransactionFuzzer::xdrSizeLimit()
 void
 TransactionFuzzer::genFuzz(std::string const& filename)
 {
-    XDROutputFileStream out(/*doFsync=*/false);
+    XDROutputFileStream out(mApp->getClock().getIOContext(),
+                            /*doFsync=*/false);
     out.open(filename);
     autocheck::generator<Operation> gen;
     xdr::xvector<Operation> ops;
@@ -299,7 +300,7 @@ void
 OverlayFuzzer::inject(XDRInputFileStream& in)
 {
     // see note on TransactionFuzzer's tryRead above
-    auto tryRead = [&in](DiamNetMessage& m) {
+    auto tryRead = [&in](DiamnetMessage& m) {
         try
         {
             return in.readOne(m);
@@ -311,7 +312,7 @@ OverlayFuzzer::inject(XDRInputFileStream& in)
         }
     };
 
-    DiamNetMessage msg;
+    DiamnetMessage msg;
     while (tryRead(msg))
     {
         if (isBadOverlayFuzzerInput(msg))
@@ -326,8 +327,9 @@ OverlayFuzzer::inject(XDRInputFileStream& in)
         auto initiator = loopbackPeerConnection->getInitiator();
         auto acceptor = loopbackPeerConnection->getAcceptor();
 
-        initiator->getApp().getClock().postToCurrentCrank(
-            [initiator, msg]() { initiator->Peer::sendMessage(msg); });
+        initiator->getApp().postOnMainThread(
+            [initiator, msg]() { initiator->Peer::sendMessage(msg); },
+            "OverlayFuzzer");
 
         mSimulation->crankForAtMost(std::chrono::milliseconds{500}, false);
 
@@ -352,10 +354,12 @@ OverlayFuzzer::xdrSizeLimit()
 void
 OverlayFuzzer::genFuzz(std::string const& filename)
 {
-    XDROutputFileStream out(/*doFsync=*/false);
+    VirtualClock clock;
+    XDROutputFileStream out(clock.getIOContext(),
+                            /*doFsync=*/false);
     out.open(filename);
-    autocheck::generator<DiamNetMessage> gen;
-    DiamNetMessage m(gen(FUZZER_INITIAL_CORPUS_MESSAGE_GEN_UPPERBOUND));
+    autocheck::generator<DiamnetMessage> gen;
+    DiamnetMessage m(gen(FUZZER_INITIAL_CORPUS_MESSAGE_GEN_UPPERBOUND));
     while (isBadOverlayFuzzerInput(m))
     {
         m = gen(FUZZER_INITIAL_CORPUS_MESSAGE_GEN_UPPERBOUND);
@@ -369,7 +373,7 @@ namespace xdr
 {
 template <>
 void
-generator_t::operator()(DiamNet::PublicKey& t) const
+generator_t::operator()(diamnet::PublicKey& t) const
 {
     // generate public keys such that it is zero'd out except the last byte,
     // hence for ED25519 public keys, an uint256 defined as opaque[32] set the
@@ -382,7 +386,7 @@ generator_t::operator()(DiamNet::PublicKey& t) const
     // some transactions with a source account/destination account that does
     // not exist.
     t.ed25519().at(31) = autocheck::generator<unsigned int>()(
-        DiamNet::FuzzUtils::NUMBER_OF_PREGENERATED_ACCOUNTS);
+        diamnet::FuzzUtils::NUMBER_OF_PREGENERATED_ACCOUNTS);
 }
 } // namespace xdr
 #endif // FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION

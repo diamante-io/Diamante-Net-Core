@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,6 +6,7 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/TrustLineWrapper.h"
+#include "lib/catch.hpp"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "test/TestAccount.h"
@@ -20,8 +21,8 @@
 #include "transactions/TransactionUtils.h"
 #include "xdrpp/autocheck.h"
 
-using namespace DiamNet;
-using namespace DiamNet::txtest;
+using namespace diamnet;
+using namespace diamnet::txtest;
 
 void
 for_current_and_previous_version_from(size_t minVersion, Application& app,
@@ -144,13 +145,49 @@ TEST_CASE("manage buy offer failure modes", "[tx][offers]")
 
         SECTION("check offer valid")
         {
-            SECTION("sell no issuer")
+            uint32_t ledgerVersion;
             {
-                auto a1 = root.create("a1", minBalance1PlusFees);
-                REQUIRE_THROWS_AS(
-                    a1.manageBuyOffer(0, makeAsset(getAccount("fake"), "CUR3"),
-                                      native, Price{1, 1}, 1),
-                    ex_MANAGE_BUY_OFFER_SELL_NO_ISSUER);
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+            }
+
+            SECTION("no issuer")
+            {
+                auto a1 = root.create("a1", minBalance3PlusFees);
+                a1.changeTrust(cur1, INT64_MAX);
+                issuer1.pay(a1, cur1, 1);
+                closeLedgerOn(*app, 2, 1, 1, 2016);
+
+                // remove issuer
+                issuer1.merge(root);
+
+                SECTION("sell no issuer")
+                {
+                    if (ledgerVersion < 13)
+                    {
+                        REQUIRE_THROWS_AS(
+                            a1.manageBuyOffer(0, cur1, native, Price{1, 1}, 1),
+                            ex_MANAGE_BUY_OFFER_SELL_NO_ISSUER);
+                    }
+                    else
+                    {
+                        a1.manageBuyOffer(0, cur1, native, Price{1, 1}, 1);
+                    }
+                }
+
+                SECTION("buy no issuer")
+                {
+                    if (ledgerVersion < 13)
+                    {
+                        REQUIRE_THROWS_AS(
+                            a1.manageBuyOffer(0, native, cur1, Price{1, 1}, 1),
+                            ex_MANAGE_BUY_OFFER_BUY_NO_ISSUER);
+                    }
+                    else
+                    {
+                        a1.manageBuyOffer(0, native, cur1, Price{1, 1}, 1);
+                    }
+                }
             }
 
             SECTION("sell no trust")
@@ -183,16 +220,6 @@ TEST_CASE("manage buy offer failure modes", "[tx][offers]")
                 REQUIRE_THROWS_AS(
                     a1.manageBuyOffer(0, cur1, native, Price{1, 1}, 1),
                     ex_MANAGE_BUY_OFFER_SELL_NOT_AUTHORIZED);
-            }
-
-            SECTION("buy no issuer")
-            {
-                auto a1 = root.create("a1", minBalance1PlusFees);
-                REQUIRE_THROWS_AS(
-                    a1.manageBuyOffer(0, native,
-                                      makeAsset(getAccount("fake"), "CUR3"),
-                                      Price{1, 1}, 1),
-                    ex_MANAGE_BUY_OFFER_BUY_NO_ISSUER);
             }
 
             SECTION("buy no trust")
@@ -307,6 +334,21 @@ TEST_CASE("manage buy offer failure modes", "[tx][offers]")
             }
         }
     });
+
+    SECTION("negative offerID")
+    {
+        for_versions({11, 12, 13, 14}, *app, [&]() {
+            REQUIRE_THROWS_AS(
+                issuer1.manageBuyOffer(-1, cur1, native, Price{1, 1}, 1),
+                ex_MANAGE_BUY_OFFER_NOT_FOUND);
+        });
+
+        for_versions_from(15, *app, [&]() {
+            REQUIRE_THROWS_AS(
+                issuer1.manageBuyOffer(-1, cur1, native, Price{1, 1}, 1),
+                ex_MANAGE_BUY_OFFER_MALFORMED);
+        });
+    }
 }
 
 TEST_CASE("manage buy offer liabilities", "[tx][offers]")
@@ -333,7 +375,7 @@ TEST_CASE("manage buy offer liabilities", "[tx][offers]")
 
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                tx->checkValid(ltx, 0);
+                tx->checkValid(ltx, 0, 0, 0);
             }
 
             auto buyOp = std::static_pointer_cast<ManageBuyOfferOpFrame>(
@@ -426,7 +468,7 @@ TEST_CASE("manage buy offer exactly crosses existing offers", "[tx][offers]")
                               MANAGE_OFFER_DELETED);
 
             LedgerTxn ltx(app->getLedgerTxnRoot());
-            REQUIRE(!DiamNet::loadOffer(ltx, a1.getPublicKey(), offerID));
+            REQUIRE(!diamnet::loadOffer(ltx, a1.getPublicKey(), offerID));
         }
     };
 
@@ -468,7 +510,7 @@ TEST_CASE("manage buy offer matches manage sell offer when not executing",
                           Asset const& selling, Asset const& buying,
                           Price const& price) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto offer = DiamNet::loadOffer(ltx, acc, offerID);
+        auto offer = diamnet::loadOffer(ltx, acc, offerID);
         auto const& oe = offer.current().data.offer();
         REQUIRE(oe.selling == selling);
         REQUIRE(oe.buying == buying);
@@ -585,7 +627,7 @@ TEST_CASE("manage buy offer matches manage sell offer when executing partially",
                           Asset const& selling, Asset const& buying,
                           Price const& price) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto offer = DiamNet::loadOffer(ltx, acc, offerID);
+        auto offer = diamnet::loadOffer(ltx, acc, offerID);
         auto const& oe = offer.current().data.offer();
         REQUIRE(oe.selling == selling);
         REQUIRE(oe.buying == buying);
@@ -595,7 +637,7 @@ TEST_CASE("manage buy offer matches manage sell offer when executing partially",
 
     auto checkTrustLine = [&](AccountID const& acc, Asset const& asset) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto trust = DiamNet::loadTrustLine(ltx, acc, asset);
+        auto trust = diamnet::loadTrustLine(ltx, acc, asset);
         return trust.getBalance();
     };
 
@@ -725,7 +767,7 @@ TEST_CASE("manage buy offer matches manage sell offer when executing entirely",
                           Asset const& selling, Asset const& buying,
                           Price const& price) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto offer = DiamNet::loadOffer(ltx, acc, offerID);
+        auto offer = diamnet::loadOffer(ltx, acc, offerID);
         auto const& oe = offer.current().data.offer();
         REQUIRE(oe.selling == selling);
         REQUIRE(oe.buying == buying);
@@ -735,7 +777,7 @@ TEST_CASE("manage buy offer matches manage sell offer when executing entirely",
 
     auto checkTrustLine = [&](AccountID const& acc, Asset const& asset) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto trust = DiamNet::loadTrustLine(ltx, acc, asset);
+        auto trust = diamnet::loadTrustLine(ltx, acc, asset);
         return trust.getBalance();
     };
 
@@ -864,7 +906,7 @@ TEST_CASE("manage buy offer with zero liabilities", "[tx][offers]")
 
     auto checkTrustLine = [&](AccountID const& acc, Asset const& asset) {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        auto trust = DiamNet::loadTrustLine(ltx, acc, asset);
+        auto trust = diamnet::loadTrustLine(ltx, acc, asset);
         return trust.getBalance();
     };
 

@@ -1,23 +1,23 @@
 #pragma once
 
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "herder/Herder.h"
 #include "herder/TxSetFrame.h"
+#include "medida/timer.h"
 #include "scp/SCPDriver.h"
-#include "xdr/DiamNet-ledger.h"
+#include "xdr/Diamnet-ledger.h"
 
 namespace medida
 {
 class Counter;
 class Meter;
-class Timer;
 class Histogram;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 class HerderImpl;
@@ -26,7 +26,7 @@ class PendingEnvelopes;
 class SCP;
 class Upgrades;
 class VirtualTimer;
-struct DiamNetValue;
+struct DiamnetValue;
 struct SCPEnvelope;
 
 class HerderSCPDriver : public SCPDriver
@@ -35,8 +35,8 @@ class HerderSCPDriver : public SCPDriver
     struct ConsensusData
     {
         uint64_t mConsensusIndex;
-        DiamNetValue mConsensusValue;
-        ConsensusData(uint64_t index, DiamNetValue const& b)
+        DiamnetValue mConsensusValue;
+        ConsensusData(uint64_t index, DiamnetValue const& b)
             : mConsensusIndex(index), mConsensusValue(b)
         {
         }
@@ -63,7 +63,7 @@ class HerderSCPDriver : public SCPDriver
         return mLastTrackingSCP.get();
     }
 
-    void restoreSCPState(uint64_t index, DiamNetValue const& value);
+    void restoreSCPState(uint64_t index, DiamnetValue const& value);
 
     // the ledger index that was last externalized
     uint32
@@ -88,8 +88,11 @@ class HerderSCPDriver : public SCPDriver
 
     void recordSCPExecutionMetrics(uint64_t slotIndex);
     void recordSCPEvent(uint64_t slotIndex, bool isNomination);
+    void recordSCPExternalizeEvent(uint64_t slotIndex, NodeID const& id,
+                                   bool forceUpdateSelf);
 
     // envelope handling
+    SCPEnvelopeWrapperPtr wrapEnvelope(SCPEnvelope const& envelope) override;
     void signEnvelope(SCPEnvelope& envelope) override;
     void emitEnvelope(SCPEnvelope const& envelope) override;
 
@@ -97,7 +100,8 @@ class HerderSCPDriver : public SCPDriver
     SCPDriver::ValidationLevel validateValue(uint64_t slotIndex,
                                              Value const& value,
                                              bool nomination) override;
-    Value extractValidValue(uint64_t slotIndex, Value const& value) override;
+    ValueWrapperPtr extractValidValue(uint64_t slotIndex,
+                                      Value const& value) override;
 
     // value marshaling
     std::string toShortString(PublicKey const& pk) const override;
@@ -108,15 +112,19 @@ class HerderSCPDriver : public SCPDriver
                     std::chrono::milliseconds timeout,
                     std::function<void()> cb) override;
 
+    // hashing support
+    Hash getHashOf(std::vector<xdr::opaque_vec<>> const& vals) const override;
+
     // core SCP
-    Value combineCandidates(uint64_t slotIndex,
-                            std::set<Value> const& candidates) override;
+    ValueWrapperPtr
+    combineCandidates(uint64_t slotIndex,
+                      ValueWrapperPtrSet const& candidates) override;
     void valueExternalized(uint64_t slotIndex, Value const& value) override;
 
     // Submit a value to consider for slotIndex
     // previousValue is the value from slotIndex-1
-    void nominate(uint64_t slotIndex, DiamNetValue const& value,
-                  TxSetFramePtr proposedSet, DiamNetValue const& previousValue);
+    void nominate(uint64_t slotIndex, DiamnetValue const& value,
+                  TxSetFramePtr proposedSet, DiamnetValue const& previousValue);
 
     SCPQuorumSetPtr getQSet(Hash const& qSetHash) override;
 
@@ -135,13 +143,38 @@ class HerderSCPDriver : public SCPDriver
 
     optional<VirtualClock::time_point> getPrepareStart(uint64_t slotIndex);
 
-    // converts a Value into a DiamNetValue
+    // converts a Value into a DiamnetValue
     // returns false on error
-    bool toDiamNetValue(Value const& v, DiamNetValue& sv);
+    bool toDiamnetValue(Value const& v, DiamnetValue& sv);
 
     // validate close time as much as possible
     bool checkCloseTime(uint64_t slotIndex, uint64_t lastCloseTime,
-                        DiamNetValue const& b) const;
+                        DiamnetValue const& b) const;
+
+    // wraps a *valid* DiamnetValue (throws if it can't find txSet/qSet)
+    ValueWrapperPtr wrapDiamnetValue(DiamnetValue const& sv);
+
+    ValueWrapperPtr wrapValue(Value const& sv) override;
+
+    // clean up older slots
+    void purgeSlots(uint64_t maxSlotIndex);
+
+    // Does the nomination protocol output a BASIC or a SIGNED
+    // DiamnetValue?
+    virtual DiamnetValueType compositeValueType() const;
+
+    // Does the current protocol version contain the CAP-0034 closeTime
+    // semantics change?
+    bool curProtocolPreservesTxSetCloseTimeAffinity() const;
+
+    double getExternalizeLag(NodeID const& id) const;
+
+    Json::Value getQsetLagInfo(bool summary, bool fullKeys);
+
+    void reportCostOutliersForSlot(int64_t slotIndex, bool updateMetrics);
+
+    Json::Value getJsonValidatorCost(bool summary, bool fullKeys,
+                                     uint64 index) const;
 
   private:
     Application& mApp;
@@ -150,6 +183,8 @@ class HerderSCPDriver : public SCPDriver
     Upgrades const& mUpgrades;
     PendingEnvelopes& mPendingEnvelopes;
     SCP mSCP;
+
+    static uint32_t const FIRST_PROTOCOL_WITH_TXSET_CLOSETIME_AFFINITY;
 
     struct SCPMetrics
     {
@@ -165,6 +200,13 @@ class HerderSCPDriver : public SCPDriver
         medida::Timer& mNominateToPrepare;
         medida::Timer& mPrepareToExternalize;
 
+        // Timers tracking externalize messages
+        medida::Timer& mExternalizeLag;
+        medida::Timer& mExternalizeDelay;
+
+        // Tracked cost per slot
+        medida::Histogram& mCostPerSlot;
+
         SCPMetrics(Application& app);
     };
 
@@ -175,6 +217,9 @@ class HerderSCPDriver : public SCPDriver
     // Prepare timeouts per ledger
     medida::Histogram& mPrepareTimeout;
 
+    // Externalize lag tracking for nodes in qset
+    std::unordered_map<NodeID, medida::Timer> mQSetLag;
+
     struct SCPTiming
     {
         optional<VirtualClock::time_point> mNominationStart;
@@ -184,6 +229,10 @@ class HerderSCPDriver : public SCPDriver
         int64_t mNominationTimeoutCount{0};
         // Prepare timeouts before externalize
         int64_t mPrepareTimeoutCount{0};
+
+        // externalize timing information
+        optional<VirtualClock::time_point> mFirstExternalize;
+        optional<VirtualClock::time_point> mSelfExternalize;
     };
 
     // Map of time points for each slot to measure key protocol metrics:
@@ -192,7 +241,7 @@ class HerderSCPDriver : public SCPDriver
     std::map<uint64_t, SCPTiming> mSCPExecutionTimes;
 
     uint32_t mLedgerSeqNominating;
-    Value mCurrentValue;
+    ValueWrapperPtr mCurrentValue;
 
     // timers used by SCP
     // indexed by slotIndex, timerID
@@ -213,12 +262,8 @@ class HerderSCPDriver : public SCPDriver
     void stateChanged();
 
     SCPDriver::ValidationLevel validateValueHelper(uint64_t slotIndex,
-                                                   DiamNetValue const& sv,
+                                                   DiamnetValue const& sv,
                                                    bool nomination) const;
-
-    // returns true if the local instance is in a state compatible with
-    // this slot
-    bool isSlotCompatibleWithCurrentState(uint64_t slotIndex) const;
 
     void logQuorumInformation(uint64_t index);
 
@@ -226,5 +271,11 @@ class HerderSCPDriver : public SCPDriver
 
     void timerCallbackWrapper(uint64_t slotIndex, int timerID,
                               std::function<void()> cb);
+
+    void recordLogTiming(VirtualClock::time_point start,
+                         VirtualClock::time_point end, medida::Timer& timer,
+                         std::string const& logStr,
+                         std::chrono::nanoseconds threshold,
+                         uint64_t slotIndex);
 };
 }

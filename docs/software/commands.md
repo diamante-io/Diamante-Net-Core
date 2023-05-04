@@ -1,14 +1,15 @@
 ---
 title: Commands
+replacement: https://developers.diamnet.org/docs/run-core-node/commands/
 ---
 
-DiamNet-core can be controlled via the following commands.
+diamnet-core can be controlled via the following commands.
 
 ## Common options
 Common options can be placed at any place in the command line.
 
-* **--conf <FILE-NAME>**: Specify a config file to use. You can use '-' and
-  provide the config file via STDIN. *default 'DiamNet-core.cfg'*
+* **--conf <FILE-NAME>**: Specify a config file to use. You can use '/dev/stdin' and
+  provide the config file via STDIN. *default 'diamnet-core.cfg'*
 * **--ll <LEVEL>**: Set the log level. It is redundant with `http-command ll`
   but we need this form if you want to change the log level during test runs.
 * **--metric <METRIC-NAME>**: Report metric METRIC on exit. Used for gathering
@@ -24,33 +25,27 @@ Command options can only by placed after command.
   configuration and it will perform bucket application on such a checkpoint
   that at least LEDGER-COUNT entries are present in history table afterwards.
   For instances that already have some history entries, all ledgers since last
-  closed ledger will be replayed.
+  closed ledger will be replayed.<br>
+  Option **--trusted-checkpoint-hashes <FILE-NAME>** checks the destination
+  ledger hash against the provided reference list of trusted hashes. See the
+  command verify-checkpoints for details.
 * **check-quorum**:   Check quorum intersection from history to ensure there is
   closure over all the validators in the network.
 * **convert-id <ID>**: Will output the passed ID in all known forms and then
   exit. Useful for determining the public key that corresponds to a given
   private key. For example:
 
-`$ DiamNet-core convert-id SDQVDISRYN2JXBS7ICL7QJAEKB3HWBJFP2QECXG7GZICAHBK4UNJCWK2`
+`$ diamnet-core convert-id SDQVDISRYN2JXBS7ICL7QJAEKB3HWBJFP2QECXG7GZICAHBK4UNJCWK2`
 
 * **dump-xdr <FILE-NAME>**:  Dumps the given XDR file and then exits.
-* **force-scp**: This command is used to start a network from scratch or when a
-  network has lost quorum because of failed nodes or otherwise. It sets a flag
-  in the database. The next time DiamNet-core is run, DiamNet-core will start
-  emitting SCP messages based on its last known ledger. Without this flag
-  DiamNet-core waits to hear a ledger close from the network before starting
-  SCP.<br> force-scp doesn't change the requirements for quorum so although
-  this node will emit SCP messages SCP won't complete until there are also a
-  quorum of other nodes also emitting SCP messages on this same ledger. Value
-  of force-scp can be reset with --reset flag.
 * **fuzz <FILE-NAME>**: Run a single fuzz input and exit.
 * **gen-fuzz <FILE-NAME>**:  Generate a random fuzzer input file.
 * **gen-seed**: Generate and print a random public/private key and then exit.
 * **help**: Print the available command line options and then exit..
 * **http-command <COMMAND>** Send an [HTTP command](#http-commands) to an
-  already running local instance of DiamNet-core and then exit. For example: 
+  already running local instance of diamnet-core and then exit. For example: 
 
-`$ DiamNet-core http-command info`
+`$ diamnet-core http-command info`
 
 * **infer-quorum**:   Print a potential quorum set inferred from history.
 * **load-xdr <FILE-NAME>**:  Load an XDR bucket file, for testing.
@@ -58,41 +53,49 @@ Command options can only by placed after command.
   you connect to the network after that it will catch up from scratch.
 * **new-hist <HISTORY-LABEL> ...**:  Initialize the named history archives
   HISTORY-LABEL. HISTORY-LABEL should be one of the history archives you have
-  specified in the DiamNet-core.cfg. This will write a
-  `.well-known/DiamNet-history.json` file in the archive root.
+  specified in the diamnet-core.cfg. This will write a
+  `.well-known/diamnet-history.json` file in the archive root.
 * **offline-info**: Returns an output similar to `--c info` for an offline
   instance
 * **print-xdr <FILE-NAME>**:  Pretty-print a binary file containing an XDR
-  object. If FILE-NAME is "-", the XDR object is read from standard input.<br>
-  Option --filetype [auto|ledgerheader|meta|result|resultpair|tx|txfee]**
+  object. If FILE-NAME is "/dev/stdin", the XDR object is read from standard input.<br>
+  Option **--filetype [auto|ledgerheader|meta|result|resultpair|tx|txfee]**
   controls type used for printing (default: auto).<br>
-  Option --base64 alters the behavior to work on base64-encoded XDR rather than
+  Option **--base64** alters the behavior to work on base64-encoded XDR rather than
   raw XDR.
 * **publish**: Execute publish of all items remaining in publish queue without
   connecting to network. May not publish last checkpoint if last closed ledger
   is on checkpoint boundary.
 * **report-last-history-checkpoint**: Download and report last history
   checkpoint from a history archive.
-* **run**: Runs DiamNet-core service.
+* **run**: Runs diamnet-core service.<br>
+  Option **--wait-for-consensus** lets validators wait to hear from the network
+  before participating in consensus.<br>
+  Option **--in-memory** stores the current ledger in memory rather than a
+  database.<br>
+  Option **--start-at-ledger <N>** starts **--in-memory** mode with a catchup to
+  ledger **N** then replays to the current state of the network.<br>
+  Option **--start-at-hash <HASH>** provides a (mandatory) hash for the ledger
+  **N** specified by the **--start-at-ledger** option.
 * **sec-to-pub**:  Reads a secret key on standard input and outputs the
-  corresponding public key.  Both keys are in DiamNet's standard
-  base-32 ASCII format. 
+  corresponding public key.  Both keys are in Diamnet's standard
+  base-32 ASCII format.
 * **sign-transaction <FILE-NAME>**:  Add a digital signature to a transaction
   envelope stored in binary format in <FILE-NAME>, and send the result to
   standard output (which should be redirected to a file or piped through a tool
   such as `base64`).  The private signing key is read from standard input,
-  unless <FILE-NAME> is "-" in which case the transaction envelope is read from
+  unless <FILE-NAME> is "/dev/stdin" in which case the transaction envelope is read from
   standard input and the signing key is read from `/dev/tty`.  In either event,
-  if the signing key appears to be coming from a terminal, DiamNet-core
-  disables echo. Note that if you do not have a DiamNet_NETWORK_ID environment
+  if the signing key appears to be coming from a terminal, diamnet-core
+  disables echo. Note that if you do not have a DIAMNET_NETWORK_ID environment
   variable, then before this argument you must specify the --netid option. For
-  example, the production DiamNet network is "`Public Global DiamNet Network ;
+  example, the production diamnet network is "`Public Global Diamnet Network ;
   September 2015`" while the test network is "`Test SDF Network ; September
   2015`".<br>
   Option --base64 alters the behavior to work on base64-encoded XDR rather than
   raw XDR.
 * **test**: Run all the unit tests.
-  * Suboptions specific to DiamNet-core:
+  * Suboptions specific to diamnet-core:
       * `--all-versions` : run with all possible protocol versions
       * `--version <N>` : run tests for protocol version N, can be specified
       multiple times (default latest)
@@ -102,15 +105,21 @@ Command options can only by placed after command.
     on possible options for test.
   * For example this will run just the tests tagged with `[tx]` using protocol
     versions 9 and 10 and stop after the first failure:
-    `DiamNet-core test -a --version 9 --version 10 "[tx]"`
+    `diamnet-core test -a --version 9 --version 10 "[tx]"`
 * **upgrade-db**: Upgrades local database to current schema version. This is
-  usually done automatically during DiamNet-core run or other command.
+  usually done automatically during diamnet-core run or other command.
+* **verify-checkpoints**: Listens to the network until it observes a consensus
+  hash for a checkpoint ledger, and then verifies the entire earlier history
+  of an archive that ends in that ledger hash, writing the output to a reference
+  list of trusted checkpoint hashes.
+  Option **--output-filename <FILE-NAME>** is mandatory and specifies the file
+  to write the trusted checkpoint hashes to.
 * **version**: Print version info and then exit.
 * **write-quorum**: Print a quorum set graph from history.
 
 ## HTTP Commands
-By default DiamNet-core listens for connections from localhost on port 11626. 
-You can send commands to DiamNet-core via a web browser, curl, or using the --c 
+By default diamnet-core listens for connections from localhost on port 11626. 
+You can send commands to diamnet-core via a web browser, curl, or using the --c 
 command line option (see above). Most commands return their results in JSON
 format.
 
@@ -165,12 +174,12 @@ format.
   Clear metrics for a specified domain. If no domain specified, clear all
   metrics (for testing purposes).
 
-* **peers?[&fullkeys=true]**
+* **peers?[&fullkeys=false]**
   Returns the list of known peers in JSON format.
   If `fullkeys` is set, outputs unshortened public keys.
 
 * **quorum**
-  `quorum?[node=NODE_ID][&compact=true][&fullkeys=true][&transitive=true]`<br>
+  `quorum?[node=NODE_ID][&compact=false][&fullkeys=false][&transitive=false]`<br>
   Returns information about the quorum for `NODE_ID` (local node by default).
   If `transitive` is set, information is for the transitive quorum centered on `NODE_ID`, otherwise only for nodes in the quorum set of `NODE_ID`.
 
@@ -186,7 +195,7 @@ format.
   Sets or creates a cursor identified by `ID` with value `N`. ID is an
   uppercase AlphaNum, N is an uint32 that represents the last ledger sequence
   number that the instance ID processed. Cursors are used by dependent services
-  to tell DiamNet-core which data can be safely deleted by the instance. The
+  to tell diamnet-core which data can be safely deleted by the instance. The
   data is historical data stored in the SQL tables such as txhistory or
   ledgerheaders. When all consumers processed the data for ledger sequence N
   the data can be safely removed by the instance. The actual deletion is
@@ -199,7 +208,7 @@ format.
   will be returned.
 
 * **scp**
-  `scp?[limit=n][&fullkeys=true]`<br>
+  `scp?[limit=n][&fullkeys=false]`<br>
   Returns a JSON object with the internal state of the SCP engine for the last
   n (default 2) ledgers. Outputs unshortened public keys if fullkeys is set.
 
@@ -222,8 +231,9 @@ format.
     Clears any upgrade settings.<br>
   * `upgrades?mode=set&upgradetime=DATETIME&[basefee=NUM]&[basereserve=NUM]&[maxtxsize=NUM]&[protocolversion=NUM]`<br>
     * upgradetime is a required date (UTC) in the form `1970-01-01T00:00:00Z`. 
-        It is the time the upgrade will be scheduled for. If it is in the past,
-        the upgrade will occur immediately.<br>
+        It is the time the upgrade will be scheduled for. If it is in the past
+        by less than 12 hours, the upgrade will occur immediately. If it's more
+        than 12 hours, then the upgrade will be ignored<br>
     * fee (uint32) This is what you would prefer the base fee to be. It is in
         stroops<br>
     * basereserve (uint32) This is what you would prefer the base reserve to
@@ -239,18 +249,43 @@ format.
         by the node and should be greater than ledgerVersion from the current
         ledger<br>
 
+* **surveytopology**
+  `surveytopology?duration=DURATION&node=NODE_ID`<br>
+  Starts a survey that will request peer connectivity information from nodes
+  in the backlog. `DURATION` is the number of seconds this survey will run
+  for, and `NODE_ID` is the public key you will add to the backlog to survey.
+  Running this command while the survey is running will add the node to the
+  backlog and reset the timer to run for `DURATION` seconds. By default, this
+  node will respond to/relay a survey message if the message originated 
+  from a node in it's transitive quorum. This behaviour can be overridden by adding 
+  keys to `SURVEYOR_KEYS` in the config file, which will be the set of keys to check
+  instead of the transitive quorum. If you would like to opt-out of this survey mechanism,
+  just set `SURVEYOR_KEYS` to `$self` or a bogus key
+
+* **stopsurvey**
+  `stopsurvey`<br>
+  Will stop the survey if one is running. Noop if no survey is running
+
+* **getsurveyresult**
+  `getsurveyresult`<br>
+  Returns the current survey results. The results will be reset everytime a new survey
+  is started
+
 ### The following HTTP commands are exposed on test instances
 * **generateload**
-  `generateload[?mode=(create|pay)&accounts=N&offset=K&txs=M&txrate=R&batchsize=L]`<br>
+  `generateload[?mode=(create|pay)&accounts=N&offset=K&txs=M&txrate=R&batchsize=L&spikesize=S&spikeinterval=I]`<br>
   Artificially generate load for testing; must be used with
   `ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING` set to true. Depending on the mode,
   either creates new accounts or generates payments on accounts specified
   (where number of accounts can be offset). Additionally, allows batching up to
   100 account creations per transaction via 'batchsize'.
+  When a nonzero I is given, a spike will occur every I seconds injecting S transactions on top of `txrate`.
 
 * **manualclose**
-  If MANUAL_CLOSE is set to true in the .cfg file. This will cause the current
-  ledger to close.
+  If MANUAL_CLOSE is set to true in the .cfg file, this will cause the current
+  ledger to close. If MANUAL_CLOSE is set to false, allows a validating node
+  that is waiting to hear about consensus from the network to force ledger close,
+  and start a new consensus round.
 
 * **testacc**
   `testacc?name=N`<br>

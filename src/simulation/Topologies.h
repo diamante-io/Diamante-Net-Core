@@ -1,12 +1,12 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "simulation/Simulation.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Topologies
@@ -64,10 +64,20 @@ class Topologies
         int connectionsToCore = 1,
         Simulation::QuorumSetAdjuster qSetAdjust = nullptr);
 
-    // custom-A
+    // custom-A models a network with 7 nodes A, B, C, T, I, E, S where I is a
+    // dead node for resilience tests. The threshold 4 for the qsets of A, B, C
+    // is valid for the resilience tests because the resilience tests do not
+    // simulate Byzantine failures.
     static Simulation::pointer
     customA(Simulation::Mode mode, Hash const& networkID,
             Simulation::ConfigGen confGen = nullptr, int connections = 1,
             Simulation::QuorumSetAdjuster qSetAdjust = nullptr);
+
+    // Assymetric modifies `core` topology by adding extra nodes to one of the
+    // validators in core
+    static Simulation::pointer
+    assymetric(Simulation::Mode mode, Hash const& networkID,
+               Simulation::ConfigGen confGen = nullptr, int connections = 1,
+               Simulation::QuorumSetAdjuster qSetAdjust = nullptr);
 };
 }

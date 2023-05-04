@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "util/XDRStream.h"
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -42,10 +42,13 @@ class BucketApplicator
         uint64_t mOfferDelete;
         uint64_t mDataUpsert;
         uint64_t mDataDelete;
+        uint64_t mClaimableBalanceUpsert;
+        uint64_t mClaimableBalanceDelete;
         void getRates(VirtualClock::time_point now, uint64_t& au_sec,
                       uint64_t& ad_sec, uint64_t& tu_sec, uint64_t& td_sec,
                       uint64_t& ou_sec, uint64_t& od_sec, uint64_t& du_sec,
-                      uint64_t& dd_sec, uint64_t& T_sec, uint64_t& total);
+                      uint64_t& dd_sec, uint64_t& cu_sec, uint64_t& cd_sec,
+                      uint64_t& T_sec, uint64_t& total);
 
       public:
         Counters(VirtualClock::time_point now);

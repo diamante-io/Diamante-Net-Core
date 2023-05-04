@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,6 +10,8 @@
 #include "medida/timer_context.h"
 #include "util/MetricResetter.h"
 #include "util/Timer.h"
+#include "util/optional.h"
+#include "xdr/Diamnet-ledger-entries.h"
 #include <thread>
 
 namespace medida
@@ -18,7 +20,7 @@ class Counter;
 class Timer;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 class TmpDirManager;
 class LedgerManager;
@@ -29,7 +31,9 @@ class HistoryManager;
 class ProcessManager;
 class CommandHandler;
 class Database;
+class LedgerTxn;
 class LedgerTxnRoot;
+class InMemoryLedgerTxnRoot;
 class LoadGenerator;
 
 class ApplicationImpl : public Application
@@ -72,10 +76,8 @@ class ApplicationImpl : public Application
     virtual StatusManager& getStatusManager() override;
 
     virtual asio::io_context& getWorkerIOContext() override;
-    virtual void postOnMainThread(std::function<void()>&& f,
-                                  std::string jobName) override;
-    virtual void postOnMainThreadWithDelay(std::function<void()>&& f,
-                                           std::string jobName) override;
+    virtual void postOnMainThread(std::function<void()>&& f, std::string&& name,
+                                  Scheduler::ActionType type) override;
     virtual void postOnBackgroundThread(std::function<void()>&& f,
                                         std::string jobName) override;
 
@@ -92,12 +94,16 @@ class ApplicationImpl : public Application
     // returns.
     virtual void joinAllThreads() override;
 
-    virtual bool manualClose() override;
+    virtual std::string
+    manualClose(optional<uint32_t> const& manualLedgerSeq,
+                optional<TimePoint> const& manualCloseTime) override;
 
 #ifdef BUILD_TESTS
     virtual void generateLoad(bool isCreate, uint32_t nAccounts,
                               uint32_t offset, uint32_t nTxs, uint32_t txRate,
-                              uint32_t batchSize) override;
+                              uint32_t batchSize,
+                              std::chrono::seconds spikeInterval,
+                              uint32_t spikeSize) override;
 
     virtual LoadGenerator& getLoadGenerator() override;
 #endif
@@ -112,7 +118,7 @@ class ApplicationImpl : public Application
 
     virtual Hash const& getNetworkID() const override;
 
-    virtual LedgerTxnRoot& getLedgerTxnRoot() override;
+    virtual AbstractLedgerTxnParent& getLedgerTxnRoot() override;
 
   protected:
     std::unique_ptr<LedgerManager>
@@ -152,7 +158,20 @@ class ApplicationImpl : public Application
     std::unique_ptr<PersistentState> mPersistentState;
     std::unique_ptr<BanManager> mBanManager;
     std::unique_ptr<StatusManager> mStatusManager;
-    std::unique_ptr<LedgerTxnRoot> mLedgerTxnRoot;
+    std::unique_ptr<AbstractLedgerTxnParent> mLedgerTxnRoot;
+
+    // This exists for use in MODE_USES_IN_MEMORY_LEDGER only: the
+    // mLedgerTxnRoot will be an InMemoryLedgerTxnRoot which is a _stub_
+    // AbstractLedgerTxnParent that refuses all commits and answers null to all
+    // queries; then an inner "never-committing" sub-LedgerTxn is constructed
+    // beneath it that serves as the "effective" in-memory root transaction,
+    // is returned when a client requests the root.
+    //
+    // Note that using this only works when the ledger can fit in RAM -- as it
+    // is held in the never-committing LedgerTxn in its entirety -- so if it
+    // ever grows beyond RAM-size you need to use a mode with some sort of
+    // database on secondary storage.
+    std::unique_ptr<LedgerTxn> mNeverCommittingLedgerTxn;
 
 #ifdef BUILD_TESTS
     std::unique_ptr<LoadGenerator> mLoadGenerator;
@@ -170,9 +189,8 @@ class ApplicationImpl : public Application
     std::unique_ptr<medida::MetricsRegistry> mMetrics;
     medida::Counter& mAppStateCurrent;
     medida::Timer& mPostOnMainThreadDelay;
-    medida::Timer& mPostOnMainThreadWithDelayDelay;
     medida::Timer& mPostOnBackgroundThreadDelay;
-    VirtualClock::time_point mStartedOn;
+    VirtualClock::system_time_point mStartedOn;
 
     Hash mNetworkID;
 
@@ -188,5 +206,15 @@ class ApplicationImpl : public Application
     virtual std::unique_ptr<InvariantManager> createInvariantManager();
     virtual std::unique_ptr<OverlayManager> createOverlayManager();
     virtual std::unique_ptr<LedgerManager> createLedgerManager();
+    virtual std::unique_ptr<Database> createDatabase();
+
+    uint32_t targetManualCloseLedgerSeqNum(
+        optional<uint32_t> const& explicitlyProvidedSeqNum);
+
+    void setManualCloseVirtualTime(
+        optional<TimePoint> const& explicitlyProvidedCloseTime);
+
+    void
+    advanceToLedgerBeforeManualCloseTarget(uint32_t const& targetLedgerSeq);
 };
 }

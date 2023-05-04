@@ -1,18 +1,19 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/Bucket.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/NonCopyable.h"
 #include <future>
 #include <memory>
+#include <set>
 
 #include "medida/timer_context.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -23,7 +24,7 @@ struct MergeKey;
 struct HistoryArchiveState;
 
 // A fine-grained merge-operation-counter structure for tracking various
-// events during merges. These are not medida counters becasue we do not
+// events during merges. These are not medida counters because we do not
 // want or need to publish this level of granularity outside of testing, and
 // we do want merges to run as quickly as possible.
 struct MergeCounters
@@ -100,7 +101,7 @@ class BucketManager : NonMovableOrCopyable
     virtual void dropAll() = 0;
     virtual std::string const& getTmpDir() = 0;
     virtual TmpDirManager& getTmpDirManager() = 0;
-    virtual std::string const& getBucketDir() = 0;
+    virtual std::string const& getBucketDir() const = 0;
     virtual BucketList& getBucketList() = 0;
 
     virtual medida::Timer& getMergeTimer() = 0;
@@ -125,6 +126,14 @@ class BucketManager : NonMovableOrCopyable
     adoptFileAsBucket(std::string const& filename, uint256 const& hash,
                       size_t nObjects, size_t nBytes,
                       MergeKey* mergeKey = nullptr) = 0;
+
+    // Companion method to `adoptFileAsBucket` also called from the
+    // `BucketOutputIterator::getBucket` merge-completion path. This method
+    // however should be called when the output bucket is _empty_ and thereby
+    // doesn't correspond to a file on disk; the method forgets about the
+    // `FutureBucket` associated with the in-progress merge, allowing the merge
+    // inputs to be GC'ed.
+    virtual void noteEmptyMergeOutput(MergeKey const& mergeKey) = 0;
 
     // Return a bucket by hash if we have it, else return nullptr.
     virtual std::shared_ptr<Bucket> getBucketByHash(uint256 const& hash) = 0;
@@ -177,7 +186,16 @@ class BucketManager : NonMovableOrCopyable
     // testing in a specific type of history replay.
     virtual void setNextCloseVersionAndHashForTesting(uint32_t protocolVers,
                                                       uint256 const& hash) = 0;
+
+    // Return the set of buckets in the current `getBucketDir()` directory.
+    // This interface exists only for checking that the BucketDir isn't
+    // leaking buckets, in tests.
+    virtual std::set<Hash> getBucketHashesInBucketDirForTesting() const = 0;
 #endif
+
+    // Return the set of buckets referenced by the BucketList, LCL HAS,
+    // and publish queue.
+    virtual std::set<Hash> getReferencedBuckets() const = 0;
 
     // Check for missing bucket files that would prevent `assumeState` from
     // succeeding
@@ -191,5 +209,7 @@ class BucketManager : NonMovableOrCopyable
 
     // Ensure all needed buckets are retained
     virtual void shutdown() = 0;
+
+    virtual bool isShutdown() const = 0;
 };
 }

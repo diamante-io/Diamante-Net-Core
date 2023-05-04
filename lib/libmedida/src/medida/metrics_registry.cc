@@ -24,6 +24,11 @@ class MetricsRegistry::Impl {
   Timer& NewTimer(const MetricName &name,
       std::chrono::nanoseconds duration_unit = std::chrono::milliseconds(1),
       std::chrono::nanoseconds rate_unit = std::chrono::seconds(1));
+  Buckets& NewBuckets(
+      const MetricName& name, std::set<double> boundaries,
+      std::chrono::nanoseconds duration_unit,
+      std::chrono::nanoseconds rate_unit);
+
   std::map<MetricName, std::shared_ptr<MetricInterface>> GetAllMetrics() const;
   void ProcessAll(MetricProcessor& processor);
  private:
@@ -63,6 +68,14 @@ Timer& MetricsRegistry::NewTimer(const MetricName &name, std::chrono::nanosecond
   return impl_->NewTimer(name, duration_unit, rate_unit);
 }
 
+Buckets&
+MetricsRegistry::NewBuckets(const MetricName& name,
+                                  std::set<double> boundaries,
+                                  std::chrono::nanoseconds duration_unit,
+                                  std::chrono::nanoseconds rate_unit)
+{
+    return impl_->NewBuckets(name, boundaries, duration_unit, rate_unit);
+}
 
 std::map<MetricName, std::shared_ptr<MetricInterface>> MetricsRegistry::GetAllMetrics() const {
   return impl_->GetAllMetrics();
@@ -100,6 +113,14 @@ Meter& MetricsRegistry::Impl::NewMeter(const MetricName &name, std::string event
 Timer& MetricsRegistry::Impl::NewTimer(const MetricName &name, std::chrono::nanoseconds duration_unit,
     std::chrono::nanoseconds rate_unit) {
   return NewMetric<Timer>(name, duration_unit, rate_unit);
+}
+
+Buckets& MetricsRegistry::Impl::NewBuckets(
+    const MetricName& name, std::set<double> boundaries,
+    std::chrono::nanoseconds duration_unit,
+    std::chrono::nanoseconds rate_unit)
+{
+    return NewMetric<Buckets>(name, boundaries, duration_unit, rate_unit);
 }
 
 

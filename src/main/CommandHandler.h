@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,7 +11,7 @@
 handler functions for the http commands this server supports
 */
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 
@@ -31,7 +31,7 @@ class CommandHandler
   public:
     CommandHandler(Application& app);
 
-    void manualCmd(std::string const& cmd);
+    std::string manualCmd(std::string const& cmd);
 
     void fileNotFound(std::string const& params, std::string& retStr);
 
@@ -55,6 +55,9 @@ class CommandHandler
     void tx(std::string const& params, std::string& retStr);
     void unban(std::string const& params, std::string& retStr);
     void upgrades(std::string const& params, std::string& retStr);
+    void surveyTopology(std::string const&, std::string& retStr);
+    void stopSurvey(std::string const&, std::string& retStr);
+    void getSurveyResult(std::string const&, std::string& retStr);
 
 #ifdef BUILD_TESTS
     void generateLoad(std::string const& params, std::string& retStr);

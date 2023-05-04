@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,8 +6,9 @@
 #include "bucket/Bucket.h"
 #include "bucket/BucketManager.h"
 #include "crypto/Random.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace
@@ -15,6 +16,7 @@ namespace
 std::string
 randomBucketName(std::string const& tmpDir)
 {
+    ZoneScoped;
     for (;;)
     {
         std::string name =
@@ -35,15 +37,16 @@ randomBucketName(std::string const& tmpDir)
 BucketOutputIterator::BucketOutputIterator(std::string const& tmpDir,
                                            bool keepDeadEntries,
                                            BucketMetadata const& meta,
-                                           MergeCounters& mc, bool doFsync)
+                                           MergeCounters& mc,
+                                           asio::io_context& ctx, bool doFsync)
     : mFilename(randomBucketName(tmpDir))
-    , mOut(doFsync)
+    , mOut(ctx, doFsync)
     , mBuf(nullptr)
-    , mHasher(SHA256::create())
     , mKeepDeadEntries(keepDeadEntries)
     , mMeta(meta)
     , mMergeCounters(mc)
 {
+    ZoneScoped;
     CLOG(TRACE, "Bucket") << "BucketOutputIterator opening file to write: "
                           << mFilename;
     // Will throw if unable to open the file
@@ -63,6 +66,7 @@ BucketOutputIterator::BucketOutputIterator(std::string const& tmpDir,
 void
 BucketOutputIterator::put(BucketEntry const& e)
 {
+    ZoneScoped;
     Bucket::checkProtocolLegality(e, mMeta.ledgerVersion);
     if (e.type() == METAENTRY)
     {
@@ -91,7 +95,7 @@ BucketOutputIterator::put(BucketEntry const& e)
         if (mCmp(*mBuf, e))
         {
             ++mMergeCounters.mOutputIteratorActualWrites;
-            mOut.writeOne(*mBuf, mHasher.get(), &mBytesPut);
+            mOut.writeOne(*mBuf, &mHasher, &mBytesPut);
             mObjectsPut++;
         }
     }
@@ -109,9 +113,10 @@ std::shared_ptr<Bucket>
 BucketOutputIterator::getBucket(BucketManager& bucketManager,
                                 MergeKey* mergeKey)
 {
+    ZoneScoped;
     if (mBuf)
     {
-        mOut.writeOne(*mBuf, mHasher.get(), &mBytesPut);
+        mOut.writeOne(*mBuf, &mHasher, &mBytesPut);
         mObjectsPut++;
         mBuf.reset();
     }
@@ -123,9 +128,13 @@ BucketOutputIterator::getBucket(BucketManager& bucketManager,
         assert(mBytesPut == 0);
         CLOG(DEBUG, "Bucket") << "Deleting empty bucket file " << mFilename;
         std::remove(mFilename.c_str());
+        if (mergeKey)
+        {
+            bucketManager.noteEmptyMergeOutput(*mergeKey);
+        }
         return std::make_shared<Bucket>();
     }
-    return bucketManager.adoptFileAsBucket(mFilename, mHasher->finish(),
+    return bucketManager.adoptFileAsBucket(mFilename, mHasher.finish(),
                                            mObjectsPut, mBytesPut, mergeKey);
 }
 }

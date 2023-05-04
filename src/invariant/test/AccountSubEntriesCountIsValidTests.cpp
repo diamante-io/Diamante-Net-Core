@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,12 +13,13 @@
 #include "main/Application.h"
 #include "test/TestUtils.h"
 #include "test/test.h"
+#include "transactions/TransactionUtils.h"
 #include "util/Math.h"
 #include <random>
 #include <xdrpp/autocheck.h>
 
-using namespace DiamNet;
-using namespace DiamNet::InvariantTestUtils;
+using namespace diamnet;
+using namespace diamnet::InvariantTestUtils;
 
 static LedgerEntry
 generateRandomAccountWithNoSubEntries(uint32_t ledgerSeq)
@@ -27,9 +28,15 @@ generateRandomAccountWithNoSubEntries(uint32_t ledgerSeq)
     le.lastModifiedLedgerSeq = ledgerSeq;
     le.data.type(ACCOUNT);
     le.data.account() = LedgerTestUtils::generateValidAccountEntry(5);
+    auto& ae = le.data.account();
 
-    le.data.account().signers.clear();
-    le.data.account().numSubEntries = 0;
+    ae.signers.clear();
+    if (hasAccountEntryExtV2(ae))
+    {
+        ae.ext.v1().ext.v2().signerSponsoringIDs.clear();
+    }
+
+    ae.numSubEntries = 0;
     return le;
 }
 
@@ -50,7 +57,7 @@ generateRandomSubEntry(LedgerEntry const& acc)
     do
     {
         le = LedgerTestUtils::generateValidLedgerEntry(5);
-    } while (le.data.type() == ACCOUNT);
+    } while (le.data.type() == ACCOUNT || le.data.type() == CLAIMABLE_BALANCE);
     le.lastModifiedLedgerSeq = acc.lastModifiedLedgerSeq;
 
     switch (le.data.type())
@@ -67,6 +74,7 @@ generateRandomSubEntry(LedgerEntry const& acc)
         le.data.data().accountID = acc.data.account().accountID;
         le.data.data().dataName = validDataNameGenerator(64);
         break;
+    case CLAIMABLE_BALANCE:
     case ACCOUNT:
     default:
         abort();
@@ -86,6 +94,7 @@ generateRandomModifiedSubEntry(LedgerEntry const& acc, LedgerEntry const& se)
     switch (se.data.type())
     {
     case ACCOUNT:
+    case CLAIMABLE_BALANCE:
         break;
     case OFFER:
         res.data.offer().offerID = se.data.offer().offerID;
@@ -156,6 +165,12 @@ addRandomSubEntryToAccount(Application& app, LedgerEntry& le,
     if (addSigner)
     {
         acc.signers.push_back(validSignerGenerator());
+        if (hasAccountEntryExtV2(acc))
+        {
+            acc.ext.v1().ext.v2().signerSponsoringIDs.push_back(
+                autocheck::generator<SponsorshipDescriptor>()(5));
+        }
+
         updateAccountSubEntries(app, le, lePrev, 1, {});
     }
     else
@@ -223,7 +238,15 @@ deleteRandomSubEntryFromAccount(Application& app, LedgerEntry& le,
     {
         std::uniform_int_distribution<uint32_t> dist(
             0, uint32_t(acc.signers.size()) - 1);
-        acc.signers.erase(acc.signers.begin() + dist(gRandomEngine));
+
+        auto pos = dist(gRandomEngine);
+        acc.signers.erase(acc.signers.begin() + pos);
+        if (hasAccountEntryExtV2(acc))
+        {
+            auto& sponsoringIDs = acc.ext.v1().ext.v2().signerSponsoringIDs;
+            sponsoringIDs.erase(sponsoringIDs.begin() + pos);
+        }
+
         updateAccountSubEntries(app, le, lePrev, -1, {});
     }
     else

@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,7 +12,7 @@ namespace medida
 class Meter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class HistoryArchive;
@@ -29,11 +29,13 @@ class GetHistoryArchiveStateWork : public Work
 
     medida::Meter& mGetHistoryArchiveStateSuccess;
 
+    std::string getRemoteName() const;
+
   public:
     GetHistoryArchiveStateWork(
         Application& app, uint32_t seq = 0,
         std::shared_ptr<HistoryArchive> archive = nullptr,
-        size_t maxRetries = BasicWork::RETRY_A_FEW);
+        std::string mode = "", size_t maxRetries = BasicWork::RETRY_A_FEW);
     ~GetHistoryArchiveStateWork() = default;
 
     HistoryArchiveState const&
@@ -52,6 +54,8 @@ class GetHistoryArchiveStateWork : public Work
     {
         return mArchive;
     }
+
+    std::string getStatus() const override;
 
   protected:
     BasicWork::State doWork() override;

@@ -56,10 +56,16 @@ TEST_F(TimerTest, aBlankTimer) {
 
 
 TEST_F(TimerTest, timingASeriesOfEvents) {
+  // Need to sleep between events so sliding window assigns
+  // them to separate timeslices.
   timer.Update(std::chrono::milliseconds(10));
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   timer.Update(std::chrono::milliseconds(20));
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   timer.Update(std::chrono::milliseconds(20));
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   timer.Update(std::chrono::milliseconds(30));
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
   timer.Update(std::chrono::milliseconds(40));
 
   EXPECT_EQ(5, timer.count());
@@ -70,8 +76,8 @@ TEST_F(TimerTest, timingASeriesOfEvents) {
 
   auto snapshot = timer.GetSnapshot();
   EXPECT_NEAR(20.0, snapshot.getMedian(), 0.001);
-  EXPECT_NEAR(35.0, snapshot.get75thPercentile(), 0.001);
-  EXPECT_NEAR(40.0, snapshot.get99thPercentile(), 0.001);
+  EXPECT_NEAR(30.0, snapshot.get75thPercentile(), 0.001);
+  EXPECT_NEAR(39.600000000000001, snapshot.get99thPercentile(), 0.001);
   EXPECT_EQ(5, snapshot.size());
 }
 

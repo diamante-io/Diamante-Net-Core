@@ -1,12 +1,13 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ConditionalWork.h"
 #include "util/Logging.h"
-#include "util/format.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ConditionalWork::ConditionalWork(Application& app, std::string name,
@@ -35,6 +36,7 @@ ConditionalWork::ConditionalWork(Application& app, std::string name,
 BasicWork::State
 ConditionalWork::onRun()
 {
+    ZoneScoped;
     if (mWorkStarted)
     {
         mConditionedWork->crankWork();
@@ -75,6 +77,7 @@ ConditionalWork::onRun()
 void
 ConditionalWork::shutdown()
 {
+    ZoneScoped;
     if (mWorkStarted)
     {
         mConditionedWork->shutdown();
@@ -85,6 +88,7 @@ ConditionalWork::shutdown()
 bool
 ConditionalWork::onAbort()
 {
+    ZoneScoped;
     if (mWorkStarted && !mConditionedWork->isDone())
     {
         mConditionedWork->crankWork();
@@ -97,5 +101,12 @@ void
 ConditionalWork::onReset()
 {
     mWorkStarted = false;
+}
+
+std::string
+ConditionalWork::getStatus() const
+{
+    return fmt::format("{}{}", mWorkStarted ? "" : "Waiting before starting ",
+                       mConditionedWork->getStatus());
 }
 }

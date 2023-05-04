@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -24,8 +24,8 @@
 #include "util/Logging.h"
 #include "util/Timer.h"
 
-using namespace DiamNet;
-using namespace DiamNet::txtest;
+using namespace diamnet;
+using namespace diamnet::txtest;
 
 // *XLM Payment
 // *Credit Payment
@@ -102,85 +102,6 @@ TEST_CASE("payment", "[tx][payment]")
 
     closeLedgerOn(*app, 2, 1, 1, 2016);
 
-    SECTION("Create account")
-    {
-        SECTION("Success")
-        {
-            for_all_versions(*app, [&] {
-                auto b1 = root.create(
-                    "B", app->getLedgerManager().getLastMinBalance(0));
-                SECTION("Account already exists")
-                {
-                    REQUIRE_THROWS_AS(
-                        root.create(
-                            "B", app->getLedgerManager().getLastMinBalance(0)),
-                        ex_CREATE_ACCOUNT_ALREADY_EXIST);
-                }
-            });
-        }
-        SECTION("Not enough funds (source)")
-        {
-            for_all_versions(*app, [&] {
-                REQUIRE_THROWS_AS(gateway.create("B", gatewayPayment),
-                                  ex_CREATE_ACCOUNT_UNDERFUNDED);
-            });
-        }
-        SECTION("Amount too small to create account")
-        {
-            for_all_versions(*app, [&] {
-                REQUIRE_THROWS_AS(
-                    root.create(
-                        "B", app->getLedgerManager().getLastMinBalance(0) - 1),
-                    ex_CREATE_ACCOUNT_LOW_RESERVE);
-            });
-        }
-
-        SECTION("with native selling liabilities")
-        {
-            auto const minBal0 = app->getLedgerManager().getLastMinBalance(0);
-            auto const minBal3 = app->getLedgerManager().getLastMinBalance(3);
-
-            auto const native = makeNativeAsset();
-            auto acc1 = root.create("acc1", minBal3 + 2 * txfee + 500);
-            auto cur1 = acc1.asset("CUR1");
-            auto setup = [&]() {
-                TestMarket market(*app);
-                market.requireChangesWithOffer({}, [&] {
-                    return market.addOffer(acc1,
-                                           {native, cur1, Price{1, 1}, 500});
-                });
-            };
-            for_versions_to(9, *app, [&] {
-                setup();
-                acc1.create("acc2", minBal0 + 1);
-            });
-            for_versions_from(10, *app, [&] {
-                setup();
-                REQUIRE_THROWS_AS(acc1.create("acc2", minBal0 + 1),
-                                  ex_CREATE_ACCOUNT_UNDERFUNDED);
-                root.pay(acc1, txfee);
-                acc1.create("acc2", minBal0);
-            });
-        }
-
-        SECTION("with native buying liabilities")
-        {
-            auto const minBal0 = app->getLedgerManager().getLastMinBalance(0);
-            auto const minBal3 = app->getLedgerManager().getLastMinBalance(3);
-
-            auto const native = makeNativeAsset();
-            auto acc1 = root.create("acc1", minBal3 + 2 * txfee + 500);
-            TestMarket market(*app);
-
-            auto cur1 = acc1.asset("CUR1");
-            market.requireChangesWithOffer({}, [&] {
-                return market.addOffer(acc1, {cur1, native, Price{1, 1}, 500});
-            });
-
-            for_all_versions(*app, [&] { acc1.create("acc2", minBal0 + 500); });
-        }
-    }
-
     SECTION("a pays b, then a merge into b")
     {
         auto paymentAmountMerge = 1000000;
@@ -192,9 +113,9 @@ TEST_CASE("payment", "[tx][payment]")
         int64 b1Balance = b1.getBalance();
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto txFrame = a1.tx({payment(b1, 200), accountMerge(b1)});
-
         for_all_versions(*app, [&] {
+            auto txFrame = a1.tx({payment(b1, 200), accountMerge(b1)});
+
             applyCheck(txFrame, *app);
 
             REQUIRE(!a1.exists());
@@ -218,10 +139,10 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto txFrame = a1.tx({payment(b1, 200), b1.op(accountMerge(a1))});
-        txFrame->addSignature(b1);
-
         for_all_versions(*app, [&] {
+            auto txFrame = a1.tx({payment(b1, 200), b1.op(accountMerge(a1))});
+            txFrame->addSignature(b1);
+
             applyCheck(txFrame, *app);
 
             REQUIRE(a1.exists());
@@ -243,9 +164,9 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto txFrame = a1.tx({accountMerge(b1), payment(b1, 200)});
-
         for_versions_to(7, *app, [&] {
+            auto txFrame = a1.tx({accountMerge(b1), payment(b1, 200)});
+
             applyCheck(txFrame, *app);
 
             REQUIRE(a1.exists());
@@ -257,6 +178,8 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto txFrame = a1.tx({accountMerge(b1), payment(b1, 200)});
+
             applyCheck(txFrame, *app);
 
             REQUIRE(a1.exists());
@@ -275,9 +198,9 @@ TEST_CASE("payment", "[tx][payment]")
 
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto rootAccount2 = DiamNet::loadAccount(ltx, root);
+                auto rootAccount2 = diamnet::loadAccount(ltx, root);
                 auto rootAcc2 = rootAccount2.current().data.account();
-                auto a1Account2 = DiamNet::loadAccount(ltx, a1);
+                auto a1Account2 = diamnet::loadAccount(ltx, a1);
                 auto a1Acc2 = a1Account2.current().data.account();
                 REQUIRE(a1Acc2.balance == a1Acc.balance + morePayment);
 
@@ -298,7 +221,7 @@ TEST_CASE("payment", "[tx][payment]")
 
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                auto rootAccount2 = DiamNet::loadAccount(ltx, root);
+                auto rootAccount2 = diamnet::loadAccount(ltx, root);
                 auto rootAcc2 = rootAccount2.current().data.account();
                 REQUIRE(rootAcc2.balance == (rootAcc.balance - txfee));
             }
@@ -310,7 +233,8 @@ TEST_CASE("payment", "[tx][payment]")
         for_all_versions(*app, [&] {
             auto getMinBalance = [&] {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                return DiamNet::getMinBalance(ltx.loadHeader(), 0);
+                return diamnet::getMinBalance(ltx.loadHeader().current(), 0, 0,
+                                              0);
             };
 
             int64 orgReserve = getMinBalance();
@@ -345,11 +269,12 @@ TEST_CASE("payment", "[tx][payment]")
                                 app->getLedgerManager().getLastMinBalance(0) +
                                 txfee * 2;
         auto b1 = root.create("B", startingBalance);
-        auto tx1 = b1.tx({payment(root, paymentAmount)});
-        auto tx2 = b1.tx({payment(root, 6)});
         auto rootBalance = root.getBalance();
 
         for_versions_to(8, *app, [&] {
+            auto tx1 = b1.tx({payment(root, paymentAmount)});
+            auto tx2 = b1.tx({payment(root, 6)});
+
             auto r = closeLedgerOn(*app, 3, 1, 2, 2016, {tx1, tx2});
             checkTx(0, r, txSUCCESS);
             checkTx(1, r, txINSUFFICIENT_BALANCE);
@@ -362,6 +287,9 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(9, *app, [&] {
+            auto tx1 = b1.tx({payment(root, paymentAmount)});
+            auto tx2 = b1.tx({payment(root, 6)});
+
             auto r = closeLedgerOn(*app, 3, 1, 2, 2016, {tx1, tx2});
             checkTx(0, r, txSUCCESS);
             checkTx(1, r, txFAILED);
@@ -389,12 +317,12 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx =
-            sourceAccount.tx({createAccount(createSourceAccount, createAmount),
-                              accountMerge(createSourceAccount),
-                              payment(sourceAccount, payAmount)});
-
         for_versions_to(7, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {createAccount(createSourceAccount, createAmount),
+                 accountMerge(createSourceAccount),
+                 payment(sourceAccount, payAmount)});
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(!doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, createSourceAccount));
@@ -434,6 +362,11 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {createAccount(createSourceAccount, createAmount),
+                 accountMerge(createSourceAccount),
+                 payment(sourceAccount, payAmount)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(!doesAccountExist(*app, createSourceAccount));
@@ -477,12 +410,12 @@ TEST_CASE("payment", "[tx][payment]")
         auto payAccount = root.create("pay", amount);
         auto sourceSeqNum = sourceAccount.getLastSequenceNumber();
 
-        auto tx =
-            sourceAccount.tx({createAccount(createSourceAccount, createAmount),
-                              accountMerge(createSourceAccount),
-                              payment(payAccount, payAmount)});
-
         for_versions_to(7, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {createAccount(createSourceAccount, createAmount),
+                 accountMerge(createSourceAccount),
+                 payment(payAccount, payAmount)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(!doesAccountExist(*app, createSourceAccount));
@@ -494,6 +427,11 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions(8, 9, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {createAccount(createSourceAccount, createAmount),
+                 accountMerge(createSourceAccount),
+                 payment(payAccount, payAmount)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(!doesAccountExist(*app, createSourceAccount));
@@ -543,17 +481,17 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx =
-            sourceAccount.tx({payAndMergeDestination.op(
-                                  payment(payAndMergeDestination, pay1Amount)),
-                              accountMerge(payAndMergeDestination),
-                              payAndMergeDestination.op(
-                                  createAccount(sourceAccount, createAmount)),
-                              payAndMergeDestination.op(payment(
-                                  payAndMergeDestination, pay2Amount))});
-        tx->addSignature(payAndMergeDestination);
-
         for_versions_to(7, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {payAndMergeDestination.op(
+                     payment(payAndMergeDestination, pay1Amount)),
+                 accountMerge(payAndMergeDestination),
+                 payAndMergeDestination.op(
+                     createAccount(sourceAccount, createAmount)),
+                 payAndMergeDestination.op(
+                     payment(payAndMergeDestination, pay2Amount))});
+            tx->addSignature(payAndMergeDestination);
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, payAndMergeDestination));
@@ -603,6 +541,16 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = sourceAccount.tx(
+                {payAndMergeDestination.op(
+                     payment(payAndMergeDestination, pay1Amount)),
+                 accountMerge(payAndMergeDestination),
+                 payAndMergeDestination.op(
+                     createAccount(sourceAccount, createAmount)),
+                 payAndMergeDestination.op(
+                     payment(payAndMergeDestination, pay2Amount))});
+            tx->addSignature(payAndMergeDestination);
+
             // as the account gets re-created we have to disable seqnum
             // verification
             REQUIRE(applyCheck(tx, *app, false));
@@ -668,15 +616,15 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx =
-            sourceAccount.tx({payment(payAndMergeDestination, pay1Amount),
-                              accountMerge(payAndMergeDestination),
-                              payAndMergeDestination.op(
-                                  createAccount(sourceAccount, createAmount)),
-                              payment(payAndMergeDestination, pay2Amount)});
-        tx->addSignature(payAndMergeDestination);
-
         for_versions_to(7, *app, [&] {
+            auto tx =
+                sourceAccount.tx({payment(payAndMergeDestination, pay1Amount),
+                                  accountMerge(payAndMergeDestination),
+                                  payAndMergeDestination.op(createAccount(
+                                      sourceAccount, createAmount)),
+                                  payment(payAndMergeDestination, pay2Amount)});
+            tx->addSignature(payAndMergeDestination);
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, payAndMergeDestination));
@@ -729,6 +677,14 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx =
+                sourceAccount.tx({payment(payAndMergeDestination, pay1Amount),
+                                  accountMerge(payAndMergeDestination),
+                                  payAndMergeDestination.op(createAccount(
+                                      sourceAccount, createAmount)),
+                                  payment(payAndMergeDestination, pay2Amount)});
+            tx->addSignature(payAndMergeDestination);
+
             // as the account gets re-created we have to disable seqnum
             // verification
             REQUIRE(applyCheck(tx, *app, false));
@@ -798,14 +754,15 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx = sourceAccount.tx(
-            {payment(payAndMergeDestination, pay1Amount),
-             accountMerge(payAndMergeDestination),
-             secondSourceAccount.op(createAccount(sourceAccount, createAmount)),
-             payment(payAndMergeDestination, pay2Amount)});
-        tx->addSignature(secondSourceAccount);
-
         for_versions_to(7, *app, [&] {
+            auto tx =
+                sourceAccount.tx({payment(payAndMergeDestination, pay1Amount),
+                                  accountMerge(payAndMergeDestination),
+                                  secondSourceAccount.op(createAccount(
+                                      sourceAccount, createAmount)),
+                                  payment(payAndMergeDestination, pay2Amount)});
+            tx->addSignature(secondSourceAccount);
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, secondSourceAccount));
@@ -861,6 +818,14 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx =
+                sourceAccount.tx({payment(payAndMergeDestination, pay1Amount),
+                                  accountMerge(payAndMergeDestination),
+                                  secondSourceAccount.op(createAccount(
+                                      sourceAccount, createAmount)),
+                                  payment(payAndMergeDestination, pay2Amount)});
+            tx->addSignature(secondSourceAccount);
+
             // as the account gets re-created we have to disable seqnum
             // verification
             REQUIRE(applyCheck(tx, *app, false));
@@ -933,18 +898,19 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx = sourceAccount.tx({
-            createSource.op(createAccount(createDestination, create1Amount)),
-            createDestination.op(pathPayment(payDestination, xlm, payAmount,
-                                             xlm, payAmount, {})),
-            payDestination.op(accountMerge(createSource)),
-            createSource.op(createAccount(payDestination, create2Amount)),
-        });
-        tx->addSignature(createSource);
-        tx->addSignature(createDestination);
-        tx->addSignature(payDestination);
-
         for_all_versions(*app, [&] {
+            auto tx = sourceAccount.tx({
+                createSource.op(
+                    createAccount(createDestination, create1Amount)),
+                createDestination.op(pathPayment(payDestination, xlm, payAmount,
+                                                 xlm, payAmount, {})),
+                payDestination.op(accountMerge(createSource)),
+                createSource.op(createAccount(payDestination, create2Amount)),
+            });
+            tx->addSignature(createSource);
+            tx->addSignature(createDestination);
+            tx->addSignature(payDestination);
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, createSource));
@@ -1015,12 +981,12 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
-                                    accountMerge(mergeDestination),
-                                    payment(sourceAccount, pay2Amount),
-                                    accountMerge(mergeDestination)});
-
         for_versions_to(4, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(!doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1070,6 +1036,11 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions(5, 7, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1114,6 +1085,11 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1159,18 +1135,18 @@ TEST_CASE("payment", "[tx][payment]")
 
         closeLedgerOn(*app, 3, 1, 2, 2016);
 
-        auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
-                                    payment(sourceAccount, pay1Amount),
-                                    payment(sourceAccount, pay1Amount),
-                                    payment(sourceAccount, pay1Amount),
-                                    payment(sourceAccount, pay1Amount),
-                                    payment(sourceAccount, pay1Amount),
-                                    accountMerge(mergeDestination),
-                                    payment(sourceAccount, pay2Amount),
-                                    payment(sourceAccount, pay2Amount),
-                                    accountMerge(mergeDestination)});
-
         for_versions_to(4, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(applyCheck(tx, *app));
             REQUIRE(!doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1262,6 +1238,17 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions(5, 7, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1348,6 +1335,17 @@ TEST_CASE("payment", "[tx][payment]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = sourceAccount.tx({payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        payment(sourceAccount, pay1Amount),
+                                        accountMerge(mergeDestination),
+                                        payment(sourceAccount, pay2Amount),
+                                        payment(sourceAccount, pay2Amount),
+                                        accountMerge(mergeDestination)});
+
             REQUIRE(!applyCheck(tx, *app));
             REQUIRE(doesAccountExist(*app, sourceAccount));
             REQUIRE(doesAccountExist(*app, mergeDestination));
@@ -1468,11 +1466,30 @@ TEST_CASE("payment", "[tx][payment]")
             {
                 for_all_versions(*app, [&] {
                     gateway.merge(root);
-                    // cannot send to an account that is not the issuer
-                    REQUIRE_THROWS_AS(a1.pay(b1, idr, 40),
-                                      ex_PAYMENT_NO_ISSUER);
-                    // should be able to send back credits to issuer
-                    a1.pay(gateway, idr, 75);
+
+                    uint32_t ledgerVersion;
+                    {
+                        LedgerTxn ltx(app->getLedgerTxnRoot());
+                        ledgerVersion =
+                            ltx.loadHeader().current().ledgerVersion;
+                    }
+                    if (ledgerVersion < 13)
+                    {
+                        // cannot send to an account that is not the issuer
+                        REQUIRE_THROWS_AS(a1.pay(b1, idr, 40),
+                                          ex_PAYMENT_NO_ISSUER);
+                        // should be able to send back credits to issuer
+                        a1.pay(gateway, idr, 75);
+                    }
+                    else
+                    {
+                        // sending to an account that is not the issuer
+                        a1.pay(b1, idr, 40);
+
+                        // should be able to send back credits to issuer
+                        a1.pay(gateway, idr, 35);
+                    }
+
                     // cannot change the limit
                     REQUIRE_THROWS_AS(a1.changeTrust(idr, 25),
                                       ex_CHANGE_TRUST_NO_ISSUER);
@@ -1529,7 +1546,11 @@ TEST_CASE("payment", "[tx][payment]")
     for_all_versions(*app, [&] {
         SECTION("send to self")
         {
-            auto sendToSelf = root.create("send to self", minBalance2);
+            // minimum balance necessary to hold 3 trust lines
+            const int64_t minBalance3 =
+                app->getLedgerManager().getLastMinBalance(3) + 10 * txfee;
+
+            auto sendToSelf = root.create("send to self", minBalance3);
 
             SECTION("native")
             {
@@ -1539,13 +1560,13 @@ TEST_CASE("payment", "[tx][payment]")
                 }
                 SECTION("all")
                 {
-                    sendToSelf.pay(sendToSelf, minBalance2);
+                    sendToSelf.pay(sendToSelf, minBalance3);
                 }
                 SECTION("more than have")
                 {
                     sendToSelf.pay(sendToSelf, INT64_MAX);
                 }
-                REQUIRE(sendToSelf.getBalance() == minBalance2 - txfee);
+                REQUIRE(sendToSelf.getBalance() == minBalance3 - txfee);
             }
 
             auto fakeCur = makeAsset(gateway, "fake");
@@ -1580,24 +1601,40 @@ TEST_CASE("payment", "[tx][payment]")
                                   ex_PAYMENT_NO_ISSUER);
             };
 
-            // in ledger versions 1 and 2 each of these payment succeeds
+            uint32_t ledgerVersion;
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
-                if (ltx.loadHeader().current().ledgerVersion < 3)
-                {
-                    payNoTrust = payOk;
-                    payLineFull = payOk;
-                    payNoIssuer = payOk;
-                }
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+            }
+            // in ledger versions 1 and 2 each of these payment succeeds
+
+            if (ledgerVersion < 3)
+            {
+                payNoTrust = payOk;
+                payLineFull = payOk;
+                payNoIssuer = payOk;
             }
 
             auto withoutTrustLine = std::vector<Data>{
                 Data{"existing asset", idr, payNoTrust, payOk, payLineFull},
                 Data{"non existing asset with existing issuer", fakeCur,
                      payNoTrust, payOk, payLineFull},
-                Data{"non existing asset with non existing issuer",
-                     fakeWithFakeAccountCur, payNoIssuer, payNoIssuer,
-                     payNoIssuer}};
+            };
+
+            // issuer checks were removed starting from v13
+            if (ledgerVersion < 13)
+            {
+                withoutTrustLine.push_back(
+                    Data{"non existing asset with non existing issuer",
+                         fakeWithFakeAccountCur, payNoIssuer, payNoIssuer,
+                         payNoIssuer});
+            }
+            else
+            {
+                withoutTrustLine.push_back(
+                    Data{"non existing asset with non existing issuer",
+                         fakeWithFakeAccountCur, payNoTrust, payOk, payOk});
+            }
 
             for (auto const& data : withoutTrustLine)
             {
@@ -1610,8 +1647,8 @@ TEST_CASE("payment", "[tx][payment]")
                         LedgerTxn ltx(app->getLedgerTxnRoot());
                         auto account = txtest::loadAccount(ltx, sendToSelf);
                         auto const& ae = account.current().data.account();
-                        REQUIRE(ae.balance == minBalance2 - txfee);
-                        REQUIRE(!DiamNet::loadTrustLine(ltx, sendToSelf,
+                        REQUIRE(ae.balance == minBalance3 - txfee);
+                        REQUIRE(!diamnet::loadTrustLine(ltx, sendToSelf,
                                                         data.asset));
                     }
                 }
@@ -1622,6 +1659,7 @@ TEST_CASE("payment", "[tx][payment]")
 
             sendToSelf.changeTrust(idr, 1000);
             sendToSelf.changeTrust(fakeCur, 1000);
+
             REQUIRE_THROWS_AS(
                 sendToSelf.changeTrust(fakeWithFakeAccountCur, 1000),
                 ex_CHANGE_TRUST_NO_ISSUER);
@@ -1648,9 +1686,9 @@ TEST_CASE("payment", "[tx][payment]")
                         LedgerTxn ltx(app->getLedgerTxnRoot());
                         auto account = txtest::loadAccount(ltx, sendToSelf);
                         auto const& ae = account.current().data.account();
-                        REQUIRE(ae.balance == minBalance2 - 4 * txfee);
+                        REQUIRE(ae.balance == minBalance3 - 4 * txfee);
                         auto trust =
-                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            diamnet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 0);
                     }
@@ -1675,9 +1713,9 @@ TEST_CASE("payment", "[tx][payment]")
                         LedgerTxn ltx(app->getLedgerTxnRoot());
                         auto account = txtest::loadAccount(ltx, sendToSelf);
                         auto const& ae = account.current().data.account();
-                        REQUIRE(ae.balance == minBalance2 - 4 * txfee);
+                        REQUIRE(ae.balance == minBalance3 - 4 * txfee);
                         auto trust =
-                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            diamnet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 500);
                     }
@@ -1702,9 +1740,9 @@ TEST_CASE("payment", "[tx][payment]")
                         LedgerTxn ltx(app->getLedgerTxnRoot());
                         auto account = txtest::loadAccount(ltx, sendToSelf);
                         auto const& ae = account.current().data.account();
-                        REQUIRE(ae.balance == minBalance2 - 4 * txfee);
+                        REQUIRE(ae.balance == minBalance3 - 4 * txfee);
                         auto trust =
-                            DiamNet::loadTrustLine(ltx, sendToSelf, data.asset);
+                            diamnet::loadTrustLine(ltx, sendToSelf, data.asset);
                         REQUIRE(trust);
                         REQUIRE(trust.getBalance() == 1000);
                     }

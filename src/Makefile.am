@@ -1,7 +1,7 @@
 ## Process this file with automake to produce Makefile.in
 
 AUTOMAKE_OPTIONS = serial-tests
-bin_PROGRAMS = DiamNet-core
+bin_PROGRAMS = diamnet-core
 
 include $(top_srcdir)/common.mk
 include $(srcdir)/src.mk
@@ -9,24 +9,26 @@ include $(srcdir)/src.mk
 noinst_HEADERS = $(SRC_H_FILES)
 
 if BUILD_TESTS
-DiamNet_core_SOURCES = main/DiamNetCoreVersion.cpp $(SRC_CXX_FILES) $(SRC_TEST_CXX_FILES)
+diamnet_core_SOURCES = main/DiamnetCoreVersion.cpp $(SRC_CXX_FILES) $(SRC_TEST_CXX_FILES)
 else # !BUILD_TESTS
-DiamNet_core_SOURCES = main/DiamNetCoreVersion.cpp $(SRC_CXX_FILES)
+diamnet_core_SOURCES = main/DiamnetCoreVersion.cpp $(SRC_CXX_FILES)
 endif # !BUILD_TESTS
 
-DiamNet_core_LDADD = $(soci_LIBS) $(libmedida_LIBS)		\
+diamnet_core_LDADD = $(soci_LIBS) $(libmedida_LIBS)		\
 	$(top_builddir)/lib/lib3rdparty.a $(sqlite3_LIBS)	\
 	$(libpq_LIBS) $(xdrpp_LIBS) $(libsodium_LIBS)
 
 TESTDATA_DIR = testdata
-TEST_FILES = $(TESTDATA_DIR)/DiamNet-core_example.cfg $(TESTDATA_DIR)/DiamNet-core_standalone.cfg \
-             $(TESTDATA_DIR)/DiamNet-core_testnet.cfg $(TESTDATA_DIR)/DiamNet-core_testnet_legacy.cfg \
-	     $(TESTDATA_DIR)/DiamNet-history.testnet.6714239.json $(TESTDATA_DIR)/DiamNet-history.livenet.15686975.json $(TESTDATA_DIR)/DiamNet-core_example_validators.cfg
+TEST_FILES = $(TESTDATA_DIR)/diamnet-core_example.cfg $(TESTDATA_DIR)/diamnet-core_standalone.cfg \
+             $(TESTDATA_DIR)/diamnet-core_testnet.cfg $(TESTDATA_DIR)/diamnet-core_testnet_legacy.cfg \
+	     $(TESTDATA_DIR)/diamnet-history.testnet.6714239.json $(TESTDATA_DIR)/diamnet-history.livenet.15686975.json $(TESTDATA_DIR)/diamnet-core_example_validators.cfg \
+	     $(TESTDATA_DIR)/diamnet-history.testnet.6714239.networkPassphrase.json
 
-BUILT_SOURCES = $(SRC_X_FILES:.x=.h) main/DiamNetCoreVersion.cpp $(TEST_FILES)
+BUILT_SOURCES = $(SRC_X_FILES:.x=.h) main/DiamnetCoreVersion.cpp $(TEST_FILES)
 
+$(SRC_X_FILES:.x=.h): $(XDRC)
 SUFFIXES = .x .h
-.x.h: $(XDRC)
+.x.h:
 	$(XDRC) -hh -o $@ $<
 
 $(srcdir)/src.mk: $(top_srcdir)/make-mks
@@ -43,12 +45,12 @@ always:
 	@:
 
 # Always rebuild because .git/HEAD is a symbolic ref one can't depend on
-main/DiamNetCoreVersion.cpp: always
+main/DiamnetCoreVersion.cpp: always
 	@vers=$$(cd "$(srcdir)" \
 		&& git describe --always --dirty --tags 2>/dev/null \
 		|| echo "$(PACKAGE) $(VERSION)"); \
 		sed -e "s/%%VERSION%%/$$vers/" \
-			< "$(srcdir)/main/DiamNetCoreVersion.cpp.in" > $@~
+			< "$(srcdir)/main/DiamnetCoreVersion.cpp.in" > $@~
 	@if cmp -s $@~ $@; then rm -f $@~; else \
 	    mv -f $@~ $@ && printf "echo '%s' > $@\n" "$$(cat $@)"; fi
 
@@ -66,19 +68,19 @@ endif # USE_CLANG_FORMAT
 if USE_AFL_FUZZ
 FUZZER_MODE ?= overlay
 
-fuzz-testcases: DiamNet-core
+fuzz-testcases: diamnet-core
 	mkdir -p fuzz-testcases
 	for i in `seq 1 10000`; do \
-	    ./DiamNet-core gen-fuzz fuzz-testcases/fuzz$$i.xdr --mode=${FUZZER_MODE}; \
+	    ./diamnet-core gen-fuzz fuzz-testcases/fuzz$$i.xdr --mode=${FUZZER_MODE}; \
 	done
 	mkdir -p min-testcases
-	afl-cmin -i fuzz-testcases -o min-testcases -m 250 -t 250 ./DiamNet-core fuzz @@ --mode=${FUZZER_MODE}
+	afl-cmin -i fuzz-testcases -o min-testcases -m 250 -t 250 ./diamnet-core fuzz @@ --mode=${FUZZER_MODE}
 	rm -Rf fuzz-testcases
 
-fuzz: fuzz-testcases DiamNet-core
+fuzz: fuzz-testcases diamnet-core
 	mkdir -p fuzz-findings
 	afl-fuzz -m 250 -t 250 -i min-testcases -o fuzz-findings \
-	    ./DiamNet-core fuzz @@ --mode=${FUZZER_MODE}
+	    ./diamnet-core fuzz @@ --mode=${FUZZER_MODE}
 
 fuzz-clean: always
 	rm -Rf fuzz-testcases fuzz-findings
@@ -86,7 +88,7 @@ fuzz-clean: always
 distclean-local: fuzz-clean
 endif # USE_AFL_FUZZ
 
-CLEANFILES = $(BUILT_SOURCES) *~ */*~ DiamNet*.log
+CLEANFILES = $(BUILT_SOURCES) *~ */*~ diamnet*.log
 MAINTAINERCLEANFILES = $(srcdir)/Makefile.in $(srcdir)/*~ $(srcdir)/*/*~
 
 EXTRA_DIST = $(SRC_X_FILES) test/selftest-nopg test/selftest-pg

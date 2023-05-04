@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,8 +6,9 @@
 #include "history/StateSnapshot.h"
 #include "ledger/LedgerManager.h"
 #include "main/Application.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ResolveSnapshotWork::ResolveSnapshotWork(
@@ -25,6 +26,7 @@ ResolveSnapshotWork::ResolveSnapshotWork(
 BasicWork::State
 ResolveSnapshotWork::onRun()
 {
+    ZoneScoped;
     if (mEc)
     {
         return State::WORK_FAILURE;

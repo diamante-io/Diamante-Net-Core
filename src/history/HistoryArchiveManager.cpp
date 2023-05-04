@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 
 #include <vector>
 
-namespace DiamNet
+namespace diamnet
 {
 
 HistoryArchiveManager::HistoryArchiveManager(Application& app) : mApp{app}
@@ -172,7 +172,8 @@ HistoryArchiveManager::initializeHistoryArchive(std::string const& arch) const
     // First check that there's no existing HAS in the archive
     CLOG(INFO, "History") << "Probing history archive '" << arch
                           << "' for existing state";
-    auto getHas = ws.executeWork<GetHistoryArchiveStateWork>(0, archive, 0);
+    auto getHas =
+        ws.executeWork<GetHistoryArchiveStateWork>(0, archive, "hist-init", 0);
     if (getHas->getState() == BasicWork::State::WORK_SUCCESS)
     {
         CLOG(ERROR, "History")
@@ -185,6 +186,7 @@ HistoryArchiveManager::initializeHistoryArchive(std::string const& arch) const
     HistoryArchiveState has;
     CLOG(INFO, "History") << "Initializing history archive '" << arch << "'";
     has.resolveAllFutures();
+    has.networkPassphrase = mApp.getConfig().NETWORK_PASSPHRASE;
 
     auto putHas = ws.executeWork<PutHistoryArchiveStateWork>(has, archive);
     if (putHas->getState() == BasicWork::State::WORK_SUCCESS)

@@ -1,15 +1,14 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "main/CommandLine.h"
 #include "main/Config.h"
-#include "test/TestPrinter.h"
 #include "util/Logging.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;

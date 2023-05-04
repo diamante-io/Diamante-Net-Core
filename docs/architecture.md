@@ -16,8 +16,8 @@ Two slightly-obscurely-named components are:
 	to stay in buckets grouped by how frequently they change.
 	see [`src/bucket/readme.md`](/src/bucket/readme.md)
 
-  - SCP -- "DiamNet Consensus Protocol", the component implementing the
-    [consensus algorithm](https://www.DiamNet.org/papers/DiamNet-consensus-protocol.pdf).
+  - SCP -- "Diamnet Consensus Protocol", the component implementing the
+    [consensus algorithm](https://www.diamnet.org/papers/diamnet-consensus-protocol.pdf).
 
 Other details:
 
@@ -70,7 +70,7 @@ validators should have an "even" and predictable system-load profile. Validators
 are also kept as stateless as possible keeping disk and memory constraints in
 mind.
 
-- Set of core validator nodes. Running DiamNet-core only. Tasked with:
+- Set of core validator nodes. Running diamnet-core only. Tasked with:
   - Reaching consensus on a transaction set
   - Applying the tx set to their last ledger
   - Hashing current/recent/last-snapshot state
@@ -91,7 +91,7 @@ mind.
     housekeeping. Long-term signed, canonical state is stored in bulk form
     in history archives.
 
-- Set of public HTTP nodes. Not running DiamNet-core. Running
+- Set of public HTTP nodes. Not running diamnet-core. Running
   apache/nginx/node/HTTP stack of choice. Flexible. Tasked with:
   - HTTP traffic from the outside world
   - Serving queries about ledger state from one of the SQL DBs
@@ -125,10 +125,10 @@ mind.
   failure mode, they can timeout/poll. Messages are idempotent,
   content-free pings.
 
-- (optional): Set of public validator nodes. Running DiamNet-core only. Tasked
+- (optional): Set of public validator nodes. Running diamnet-core only. Tasked
 with:
   - Listening to core validators and propagating their decisions blindly
     to anyone who asks.
   - Optionally feeding (some?) tx proposals submitted to them into core network.
-  - Basically just a DiamNet-network load balancer / firewall for public access,
+  - Basically just a diamnet-network load balancer / firewall for public access,
     for people who don't want to form trust relationships.

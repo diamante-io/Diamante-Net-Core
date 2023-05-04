@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,8 +12,9 @@
 #include "util/FileSystemException.h"
 #include "util/TmpDir.h"
 #include "util/XDRStream.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 FetchRecentQsetsWork::FetchRecentQsetsWork(Application& app,
@@ -37,6 +38,7 @@ FetchRecentQsetsWork::doReset()
 BasicWork::State
 FetchRecentQsetsWork::doWork()
 {
+    ZoneScoped;
     // Phase 1: fetch remote history archive state
     if (!mGetHistoryArchiveStateWork)
     {
@@ -62,7 +64,7 @@ FetchRecentQsetsWork::doWork()
     {
         CLOG(INFO, "History") << "Downloading historical SCP messages: ["
                               << firstSeq << ", " << lastSeq << "]";
-        auto range = CheckpointRange{firstSeq, lastSeq, step};
+        auto range = CheckpointRange::inclusive(firstSeq, lastSeq, step);
         mDownloadSCPMessagesWork = addWork<BatchDownloadWork>(
             range, HISTORY_FILE_TYPE_SCP, *mDownloadDir);
         return State::WORK_RUNNING;

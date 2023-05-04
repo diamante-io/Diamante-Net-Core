@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,11 +7,13 @@
 #include "Application.h"
 #include "database/Database.h"
 #include "ledger/LedgerManager.h"
+#include "util/GlobalChecks.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 #include <limits>
 #include <regex>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -54,6 +56,7 @@ ExternalQueue::setInitialCursors(std::vector<std::string> const& initialResids)
 void
 ExternalQueue::addCursorForResource(std::string const& resid, uint32 cursor)
 {
+    ZoneScoped;
     if (getCursor(resid).empty())
     {
         setCursorForResource(resid, cursor);
@@ -63,6 +66,7 @@ ExternalQueue::addCursorForResource(std::string const& resid, uint32 cursor)
 void
 ExternalQueue::setCursorForResource(std::string const& resid, uint32 cursor)
 {
+    ZoneScoped;
     checkID(resid);
 
     std::string old(getCursor(resid));
@@ -101,6 +105,7 @@ void
 ExternalQueue::getCursorForResource(std::string const& resid,
                                     std::map<std::string, uint32>& curMap)
 {
+    ZoneScoped;
     // no resid set, get all cursors
     if (resid.empty())
     {
@@ -140,6 +145,7 @@ ExternalQueue::getCursorForResource(std::string const& resid,
 void
 ExternalQueue::deleteCursor(std::string const& resid)
 {
+    ZoneScoped;
     checkID(resid);
 
     auto timer = mApp.getDatabase().getInsertTimer("pubsub");
@@ -154,6 +160,7 @@ ExternalQueue::deleteCursor(std::string const& resid)
 void
 ExternalQueue::deleteOldEntries(uint32 count)
 {
+    ZoneScoped;
     auto& db = mApp.getDatabase();
     int m;
     soci::indicator minIndicator;
@@ -210,6 +217,7 @@ ExternalQueue::checkID(std::string const& resid)
 std::string
 ExternalQueue::getCursor(std::string const& resid)
 {
+    ZoneScoped;
     checkID(resid);
     std::string res;
 

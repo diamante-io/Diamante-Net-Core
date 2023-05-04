@@ -1,12 +1,13 @@
 #pragma once
 
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/BucketList.h"
 #include "catchup/VerifyLedgerChainWork.h"
 #include "crypto/Hex.h"
+#include "herder/HerderImpl.h"
 #include "herder/LedgerCloseData.h"
 #include "history/FileTransferInfo.h"
 #include "history/HistoryArchive.h"
@@ -25,7 +26,7 @@
 #include "lib/catch.hpp"
 #include <random>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class CatchupConfiguration;
@@ -104,7 +105,8 @@ class BucketOutputIteratorForTesting : public BucketOutputIterator
   public:
     explicit BucketOutputIteratorForTesting(std::string const& tmpDir,
                                             uint32_t protocolVersion,
-                                            MergeCounters& mc);
+                                            MergeCounters& mc,
+                                            asio::io_context& ctx);
     std::pair<std::string, uint256> writeTmpTestBucket();
 };
 
@@ -232,8 +234,7 @@ class CatchupSimulation
     CatchupMetrics getCatchupMetrics(Application::pointer app);
     CatchupPerformedWork computeCatchupPerformedWork(
         uint32_t lastClosedLedger,
-        CatchupConfiguration const& catchupConfiguration,
-        HistoryManager const& historyManager);
+        CatchupConfiguration const& catchupConfiguration, Application& app);
     void validateCatchup(Application::pointer app);
 
   public:
@@ -262,12 +263,6 @@ class CatchupSimulation
         return *mHistoryConfigurator.get();
     }
 
-    BucketList
-    getBucketListAtLastPublish() const
-    {
-        return mBucketListAtLastPublish;
-    }
-
     uint32_t getLastCheckpointLedger(uint32_t checkpointIndex) const;
 
     void generateRandomLedger(uint32_t version = 0);
@@ -278,12 +273,22 @@ class CatchupSimulation
     void ensureOnlineCatchupPossible(uint32_t targetLedger,
                                      uint32_t bufferLedgers = 0);
 
+    std::vector<LedgerNumHashPair> getAllPublishedCheckpoints() const;
+    LedgerNumHashPair getLastPublishedCheckpoint() const;
+
     Application::pointer createCatchupApplication(uint32_t count,
                                                   Config::TestDbMode dbMode,
-                                                  std::string const& appName);
-    bool catchupOffline(Application::pointer app, uint32_t toLedger);
+                                                  std::string const& appName,
+                                                  bool publish = false);
+    bool catchupOffline(Application::pointer app, uint32_t toLedger,
+                        bool extraValidation = false);
     bool catchupOnline(Application::pointer app, uint32_t initLedger,
-                       uint32_t bufferLedgers = 0, uint32_t gapLedger = 0);
+                       uint32_t bufferLedgers = 0, uint32_t gapLedger = 0,
+                       int32_t numGapLedgers = 1,
+                       std::vector<uint32_t> const& ledgersToInject = {});
+
+    // this method externalizes through herder
+    void externalizeLedger(HerderImpl& herder, uint32_t ledger);
 
     void crankUntil(Application::pointer app,
                     std::function<bool()> const& predicate,

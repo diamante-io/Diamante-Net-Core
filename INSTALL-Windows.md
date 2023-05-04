@@ -35,7 +35,12 @@ presumably depend on your operating system's setting might cause inconsistencies
 ## Building xdrc
  In order to compile xdrc and run the binary you will need to either
 * Download and install MinGW from http://sourceforge.net/projects/mingw/files/
-    * In the MinGW Installation Manager in `MSYS/MinGW Developer Toolkit` choose `Flex` and `Bison` packages for installation
+    * In the MinGW Installation Manager in `MSYS/MinGW Developer Toolkit` select the following packages:
+      * `Flex`
+      * `Bison`
+      * `gcc`
+      * `sed`
+      * `curl`
     * Add `C:\MinGW\msys\1.0\bin;C:\MinGW\bin` to the end of `%PATH%`
 * Download and install cygwin 64 bit build from https://cygwin.com/install.html
     * Get cygwin setup to install
@@ -43,6 +48,7 @@ presumably depend on your operating system's setting might cause inconsistencies
         * `Bison`
         * `curl` (command line)
         * `gcc-core`
+        * `sed`
     * Add `c:\cygwin64\bin` to the end of `%PATH%` (at least for Visual Studio)
 
     > Note: if you're going to use 'cp'and 'mkdir' from cygwin (tests do),
@@ -74,14 +80,14 @@ To setup the subsystem, go to https://msdn.microsoft.com/en-us/commandline/wsl/i
 
 Then, you can simply follow the [Linux instructions](./README.md)
 
-Note that you can (and should) install the Windows version of postgres even when running DiamNet-core from within WSL.
+Note that you can (and should) install the Windows version of postgres even when running diamnet-core from within WSL.
 
 
 # Basic Installation
 
-- `git clone PATH_TO_DiamNet_CORE`
+- `git clone PATH_TO_DIAMNET_CORE`
 - `git submodule init`
 - `git submodule update`
-- Open the solution `Builds\VisualStudio\DiamNet-core.sln`
+- Open the solution `Builds\VisualStudio\diamnet-core.sln`
 - Pick the target architecture and flavor (e.g. x64, Release)
 - Hit "Build Solution (F7)"

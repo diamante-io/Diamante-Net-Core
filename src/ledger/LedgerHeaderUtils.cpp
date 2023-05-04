@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,14 +9,15 @@
 #include "database/DatabaseUtils.h"
 #include "util/Decoder.h"
 #include "util/XDRStream.h"
-#include "util/format.h"
 #include "util/types.h"
 #include "xdrpp/marshal.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 #include <util/basen.h>
 
 #include "util/Logging.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace LedgerHeaderUtils
@@ -36,6 +37,7 @@ isValid(LedgerHeader const& lh)
 void
 storeInDatabase(Database& db, LedgerHeader const& header)
 {
+    ZoneScoped;
     if (!isValid(header))
     {
         throw std::runtime_error("invalid ledger header (insert)");
@@ -76,6 +78,7 @@ storeInDatabase(Database& db, LedgerHeader const& header)
 LedgerHeader
 decodeFromData(std::string const& data)
 {
+    ZoneScoped;
     LedgerHeader lh;
     std::vector<uint8_t> decoded;
     decoder::decode_b64(data, decoded);
@@ -94,6 +97,7 @@ decodeFromData(std::string const& data)
 std::shared_ptr<LedgerHeader>
 loadByHash(Database& db, Hash const& hash)
 {
+    ZoneScoped;
     std::shared_ptr<LedgerHeader> lhPtr;
 
     std::string hash_s(binToHex(hash));
@@ -129,6 +133,7 @@ loadByHash(Database& db, Hash const& hash)
 std::shared_ptr<LedgerHeader>
 loadBySequence(Database& db, soci::session& sess, uint32_t seq)
 {
+    ZoneScoped;
     std::shared_ptr<LedgerHeader> lhPtr;
 
     std::string headerEncoded;
@@ -158,6 +163,7 @@ loadBySequence(Database& db, soci::session& sess, uint32_t seq)
 void
 deleteOldEntries(Database& db, uint32_t ledgerSeq, uint32_t count)
 {
+    ZoneScoped;
     DatabaseUtils::deleteOldEntriesHelper(db.getSession(), ledgerSeq, count,
                                           "ledgerheaders", "ledgerseq");
 }
@@ -166,6 +172,7 @@ size_t
 copyToStream(Database& db, soci::session& sess, uint32_t ledgerSeq,
              uint32_t ledgerCount, XDROutputFileStream& headersOut)
 {
+    ZoneScoped;
     uint32_t begin = ledgerSeq, end = ledgerSeq + ledgerCount;
     assert(begin <= end);
 
@@ -197,10 +204,13 @@ copyToStream(Database& db, soci::session& sess, uint32_t ledgerSeq,
 void
 dropAll(Database& db)
 {
+    std::string coll = db.getSimpleCollationClause();
+
     db.getSession() << "DROP TABLE IF EXISTS ledgerheaders;";
     db.getSession() << "CREATE TABLE ledgerheaders ("
-                       "ledgerhash      CHARACTER(64) PRIMARY KEY,"
-                       "prevhash        CHARACTER(64) NOT NULL,"
+                    << "ledgerhash      CHARACTER(64) " << coll
+                    << " PRIMARY KEY,"
+                    << "prevhash        CHARACTER(64) NOT NULL,"
                        "bucketlisthash  CHARACTER(64) NOT NULL,"
                        "ledgerseq       INT UNIQUE CHECK (ledgerseq >= 0),"
                        "closetime       BIGINT NOT NULL CHECK (closetime >= 0),"

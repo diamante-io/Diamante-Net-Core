@@ -1,11 +1,11 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 #pragma once
 
 #include "work/BasicWork.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Any function used as a ConditionFn should be monotonic: return false for the
@@ -68,6 +68,8 @@ class ConditionalWork : public BasicWork
         std::shared_ptr<BasicWork> conditionedWork,
         std::chrono::milliseconds sleepTime = std::chrono::milliseconds(100));
     void shutdown() override;
+
+    std::string getStatus() const override;
 
   protected:
     BasicWork::State onRun() override;

@@ -2,4 +2,4 @@
 
 #include <string>
 
-extern const std::string DiamNet_CORE_VERSION;
+extern const std::string DIAMNET_CORE_VERSION;

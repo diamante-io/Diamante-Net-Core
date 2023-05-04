@@ -1,10 +1,10 @@
 #pragma once
 
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#include "xdr/DiamNet-ledger.h"
+#include "xdr/Diamnet-ledger.h"
 
 #include "main/Config.h"
 #include "util/Timer.h"
@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include <vector>
 
-namespace DiamNet
+namespace diamnet
 {
 class AbstractLedgerTxn;
 class Config;
@@ -23,6 +23,10 @@ struct LedgerUpgrade;
 class Upgrades
 {
   public:
+    // # of hours after the scheduled upgrade time before we remove pending
+    // upgrades
+    static std::chrono::hours const UPDGRADE_EXPIRATION_HOURS;
+
     struct UpgradeParameters
     {
         UpgradeParameters()
@@ -38,7 +42,7 @@ class Upgrades
                 make_optional<uint32>(cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE);
             mBaseReserve = make_optional<uint32>(cfg.TESTING_UPGRADE_RESERVE);
         }
-        VirtualClock::time_point mUpgradeTime;
+        VirtualClock::system_time_point mUpgradeTime;
         optional<uint32> mProtocolVersion;
         optional<uint32> mBaseFee;
         optional<uint32> mMaxTxSize;
@@ -98,7 +102,7 @@ class Upgrades
     UpgradeParameters
     removeUpgrades(std::vector<UpgradeType>::const_iterator beginUpdates,
                    std::vector<UpgradeType>::const_iterator endUpdates,
-                   bool& updated);
+                   uint64_t time, bool& updated);
 
     static void dropAll(Database& db);
 

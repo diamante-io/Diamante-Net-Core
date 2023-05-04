@@ -1,4 +1,4 @@
-// Copyright 2014-2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014-2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -22,24 +22,26 @@
 #include "historywork/ResolveSnapshotWork.h"
 #include "historywork/WriteSnapshotWork.h"
 #include "ledger/LedgerManager.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "process/ProcessManager.h"
+#include "util/GlobalChecks.h"
 #include "util/Logging.h"
 #include "util/Math.h"
 #include "util/StatusManager.h"
 #include "util/TmpDir.h"
 #include "work/WorkScheduler.h"
 #include "xdrpp/marshal.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
 #include <fstream>
 #include <system_error>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -93,28 +95,6 @@ HistoryManagerImpl::getCheckpointFrequency() const
     }
 }
 
-uint32_t
-HistoryManagerImpl::checkpointContainingLedger(uint32_t ledger) const
-{
-    return nextCheckpointLedger(ledger + 1) - 1;
-}
-
-uint32_t
-HistoryManagerImpl::prevCheckpointLedger(uint32_t ledger) const
-{
-    uint32_t freq = getCheckpointFrequency();
-    return (ledger / freq) * freq;
-}
-
-uint32_t
-HistoryManagerImpl::nextCheckpointLedger(uint32_t ledger) const
-{
-    uint32_t freq = getCheckpointFrequency();
-    if (ledger == 0)
-        return freq;
-    return (((ledger + freq - 1) / freq) * freq);
-}
-
 void
 HistoryManagerImpl::logAndUpdatePublishStatus()
 {
@@ -147,6 +127,7 @@ HistoryManagerImpl::logAndUpdatePublishStatus()
 size_t
 HistoryManagerImpl::publishQueueLength() const
 {
+    ZoneScoped;
     uint32_t count;
     auto prep = mApp.getDatabase().getPreparedStatement(
         "SELECT count(ledger) FROM publishqueue;");
@@ -160,6 +141,7 @@ HistoryManagerImpl::publishQueueLength() const
 string const&
 HistoryManagerImpl::getTmpDir()
 {
+    ZoneScoped;
     if (!mWorkDir)
     {
         TmpDir t = mApp.getTmpDirManager().tmpDir("history");
@@ -186,6 +168,7 @@ HistoryManagerImpl::inferQuorum(uint32_t ledgerNum)
 uint32_t
 HistoryManagerImpl::getMinLedgerQueuedToPublish()
 {
+    ZoneScoped;
     uint32_t seq;
     soci::indicator minIndicator;
     auto prep = mApp.getDatabase().getPreparedStatement(
@@ -204,6 +187,7 @@ HistoryManagerImpl::getMinLedgerQueuedToPublish()
 uint32_t
 HistoryManagerImpl::getMaxLedgerQueuedToPublish()
 {
+    ZoneScoped;
     uint32_t seq;
     soci::indicator maxIndicator;
     auto prep = mApp.getDatabase().getPreparedStatement(
@@ -222,8 +206,8 @@ HistoryManagerImpl::getMaxLedgerQueuedToPublish()
 bool
 HistoryManagerImpl::maybeQueueHistoryCheckpoint()
 {
-    uint32_t seq = mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
-    if (seq != nextCheckpointLedger(seq))
+    uint32_t lcl = mApp.getLedgerManager().getLastClosedLedgerNum();
+    if (!publishCheckpointOnLedgerClose(lcl))
     {
         return false;
     }
@@ -242,8 +226,10 @@ HistoryManagerImpl::maybeQueueHistoryCheckpoint()
 void
 HistoryManagerImpl::queueCurrentHistory()
 {
+    ZoneScoped;
     auto ledger = mApp.getLedgerManager().getLastClosedLedgerNum();
-    HistoryArchiveState has(ledger, mApp.getBucketManager().getBucketList());
+    HistoryArchiveState has(ledger, mApp.getBucketManager().getBucketList(),
+                            mApp.getConfig().NETWORK_PASSPHRASE);
 
     CLOG(DEBUG, "History") << "Queueing publish state for ledger " << ledger;
     mEnqueueTimes.emplace(ledger, std::chrono::steady_clock::now());
@@ -273,6 +259,7 @@ HistoryManagerImpl::queueCurrentHistory()
 void
 HistoryManagerImpl::takeSnapshotAndPublish(HistoryArchiveState const& has)
 {
+    ZoneScoped;
     if (mPublishWork)
     {
         return;
@@ -301,6 +288,9 @@ HistoryManagerImpl::takeSnapshotAndPublish(HistoryArchiveState const& has)
     // Pass in all bucket hashes from HAS. We cannot rely on StateSnapshot
     // buckets here, because its buckets might have some futures resolved by
     // now, differing from the state of the bucketlist during queueing.
+    //
+    // NB: if WorkScheduler is aborting this returns nullptr, but that
+    // which means we don't "really" start publishing.
     mPublishWork = mApp.getWorkScheduler().scheduleWork<PublishWork>(
         snap, seq, allBucketsFromHAS);
 }
@@ -317,6 +307,7 @@ HistoryManagerImpl::publishQueuedHistory()
     }
 #endif
 
+    ZoneScoped;
     std::string state;
 
     auto prep = mApp.getDatabase().getPreparedStatement(
@@ -340,7 +331,9 @@ HistoryManagerImpl::publishQueuedHistory()
 std::vector<HistoryArchiveState>
 HistoryManagerImpl::getPublishQueueStates()
 {
+    ZoneScoped;
     std::vector<HistoryArchiveState> states;
+
     std::string state;
     auto prep = mApp.getDatabase().getPreparedStatement(
         "SELECT state FROM publishqueue;");
@@ -360,6 +353,7 @@ HistoryManagerImpl::getPublishQueueStates()
 PublishQueueBuckets::BucketCount
 HistoryManagerImpl::loadBucketsReferencedByPublishQueue()
 {
+    ZoneScoped;
     auto states = getPublishQueueStates();
     PublishQueueBuckets::BucketCount result{};
     for (auto const& s : states)
@@ -376,6 +370,7 @@ HistoryManagerImpl::loadBucketsReferencedByPublishQueue()
 std::vector<std::string>
 HistoryManagerImpl::getBucketsReferencedByPublishQueue()
 {
+    ZoneScoped;
     if (!mPublishQueueBucketsFilled)
     {
         mPublishQueueBuckets.setBuckets(loadBucketsReferencedByPublishQueue());
@@ -394,6 +389,7 @@ HistoryManagerImpl::getBucketsReferencedByPublishQueue()
 std::vector<std::string>
 HistoryManagerImpl::getMissingBucketsReferencedByPublishQueue()
 {
+    ZoneScoped;
     auto states = getPublishQueueStates();
     std::set<std::string> buckets;
     for (auto const& s : states)
@@ -409,6 +405,7 @@ HistoryManagerImpl::historyPublished(
     uint32_t ledgerSeq, std::vector<std::string> const& originalBuckets,
     bool success)
 {
+    ZoneScoped;
     if (success)
     {
         auto iter = mEnqueueTimes.find(ledgerSeq);
@@ -444,19 +441,19 @@ HistoryManagerImpl::historyPublished(
 }
 
 uint64_t
-HistoryManagerImpl::getPublishQueueCount()
+HistoryManagerImpl::getPublishQueueCount() const
 {
     return mPublishQueued;
 }
 
 uint64_t
-HistoryManagerImpl::getPublishSuccessCount()
+HistoryManagerImpl::getPublishSuccessCount() const
 {
     return mPublishSuccess.count();
 }
 
 uint64_t
-HistoryManagerImpl::getPublishFailureCount()
+HistoryManagerImpl::getPublishFailureCount() const
 {
     return mPublishFailure.count();
 }

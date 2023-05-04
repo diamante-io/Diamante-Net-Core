@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@
 #include "test/TestUtils.h"
 #include "test/test.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace
@@ -61,16 +61,17 @@ TEST_CASE("Tracker works", "[overlay][Tracker]")
         REQUIRE(t.getLastSeenSlotIndex() == 0);
     }
 
-    SECTION("can listen twice on the same envelope")
+    SECTION("listen twice on the same envelope")
     {
         Tracker t{*app, hash, nullAskPeer};
         auto env1 = makeEnvelope(1);
         t.listen(env1);
+        // this should no-op (idempotent)
         t.listen(env1);
         REQUIRE(t.getLastSeenSlotIndex() == 1);
 
         REQUIRE(env1 == t.pop());
-        REQUIRE(env1 == t.pop());
+        REQUIRE(t.empty());
     }
 
     SECTION("can listen on different envelopes")

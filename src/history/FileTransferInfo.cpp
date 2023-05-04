@@ -1,10 +1,11 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "FileTransferInfo.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 char const* HISTORY_FILE_TYPE_BUCKET = "bucket";
 char const* HISTORY_FILE_TYPE_LEDGER = "ledger";
@@ -15,6 +16,7 @@ char const* HISTORY_FILE_TYPE_SCP = "scp";
 std::string
 FileTransferInfo::getLocalDir(TmpDir const& localRoot) const
 {
+    ZoneScoped;
     auto localDir = localRoot.getName();
     localDir += "/" + fs::remoteDir(mType, mHexDigits);
     int retries = 5;

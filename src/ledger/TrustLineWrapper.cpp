@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,7 +9,7 @@
 #include "util/XDROperators.h"
 #include "util/types.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Declarations of TrustLineWrapper implementations ---------------------------
@@ -37,6 +37,7 @@ class TrustLineWrapper::NonIssuerImpl : public TrustLineWrapper::AbstractImpl
                                   int64_t delta) override;
 
     bool isAuthorized() const override;
+    bool isAuthorizedToMaintainLiabilities() const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -68,6 +69,7 @@ class TrustLineWrapper::IssuerImpl : public TrustLineWrapper::AbstractImpl
                                   int64_t delta) override;
 
     bool isAuthorized() const override;
+    bool isAuthorizedToMaintainLiabilities() const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -174,6 +176,12 @@ TrustLineWrapper::isAuthorized() const
     return getImpl()->isAuthorized();
 }
 
+bool
+TrustLineWrapper::isAuthorizedToMaintainLiabilities() const
+{
+    return getImpl()->isAuthorizedToMaintainLiabilities();
+}
+
 int64_t
 TrustLineWrapper::getAvailableBalance(LedgerTxnHeader const& header) const
 {
@@ -235,55 +243,61 @@ bool
 TrustLineWrapper::NonIssuerImpl::addBalance(LedgerTxnHeader const& header,
                                             int64_t delta)
 {
-    return DiamNet::addBalance(header, mEntry, delta);
+    return diamnet::addBalance(header, mEntry, delta);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getBuyingLiabilities(
     LedgerTxnHeader const& header)
 {
-    return DiamNet::getBuyingLiabilities(header, mEntry);
+    return diamnet::getBuyingLiabilities(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getSellingLiabilities(
     LedgerTxnHeader const& header)
 {
-    return DiamNet::getSellingLiabilities(header, mEntry);
+    return diamnet::getSellingLiabilities(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::addBuyingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return DiamNet::addBuyingLiabilities(header, mEntry, delta);
+    return diamnet::addBuyingLiabilities(header, mEntry, delta);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::addSellingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return DiamNet::addSellingLiabilities(header, mEntry, delta);
+    return diamnet::addSellingLiabilities(header, mEntry, delta);
 }
 
 bool
 TrustLineWrapper::NonIssuerImpl::isAuthorized() const
 {
-    return DiamNet::isAuthorized(mEntry);
+    return diamnet::isAuthorized(mEntry);
+}
+
+bool
+TrustLineWrapper::NonIssuerImpl::isAuthorizedToMaintainLiabilities() const
+{
+    return diamnet::isAuthorizedToMaintainLiabilities(mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
 {
-    return DiamNet::getAvailableBalance(header, mEntry);
+    return diamnet::getAvailableBalance(header, mEntry);
 }
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getMaxAmountReceive(
     LedgerTxnHeader const& header) const
 {
-    return DiamNet::getMaxAmountReceive(header, mEntry);
+    return diamnet::getMaxAmountReceive(header, mEntry);
 }
 
 // Implementation of TrustLineWrapper::IssuerImpl -----------------------------
@@ -357,6 +371,12 @@ TrustLineWrapper::IssuerImpl::isAuthorized() const
     return true;
 }
 
+bool
+TrustLineWrapper::IssuerImpl::isAuthorizedToMaintainLiabilities() const
+{
+    return true;
+}
+
 int64_t
 TrustLineWrapper::IssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
@@ -385,6 +405,7 @@ class ConstTrustLineWrapper::NonIssuerImpl
     int64_t getBalance() const override;
 
     bool isAuthorized() const override;
+    bool isAuthorizedToMaintainLiabilities() const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -400,6 +421,7 @@ class ConstTrustLineWrapper::IssuerImpl
     int64_t getBalance() const override;
 
     bool isAuthorized() const override;
+    bool isAuthorizedToMaintainLiabilities() const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -457,6 +479,12 @@ ConstTrustLineWrapper::isAuthorized() const
     return getImpl()->isAuthorized();
 }
 
+bool
+ConstTrustLineWrapper::isAuthorizedToMaintainLiabilities() const
+{
+    return getImpl()->isAuthorizedToMaintainLiabilities();
+}
+
 int64_t
 ConstTrustLineWrapper::getAvailableBalance(LedgerTxnHeader const& header) const
 {
@@ -499,21 +527,27 @@ ConstTrustLineWrapper::NonIssuerImpl::getBalance() const
 bool
 ConstTrustLineWrapper::NonIssuerImpl::isAuthorized() const
 {
-    return DiamNet::isAuthorized(mEntry);
+    return diamnet::isAuthorized(mEntry);
+}
+
+bool
+ConstTrustLineWrapper::NonIssuerImpl::isAuthorizedToMaintainLiabilities() const
+{
+    return diamnet::isAuthorizedToMaintainLiabilities(mEntry);
 }
 
 int64_t
 ConstTrustLineWrapper::NonIssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
 {
-    return DiamNet::getAvailableBalance(header, mEntry);
+    return diamnet::getAvailableBalance(header, mEntry);
 }
 
 int64_t
 ConstTrustLineWrapper::NonIssuerImpl::getMaxAmountReceive(
     LedgerTxnHeader const& header) const
 {
-    return DiamNet::getMaxAmountReceive(header, mEntry);
+    return diamnet::getMaxAmountReceive(header, mEntry);
 }
 
 // Implementation of ConstTrustLineWrapper::IssuerImpl ------------------------
@@ -530,6 +564,12 @@ ConstTrustLineWrapper::IssuerImpl::getBalance() const
 
 bool
 ConstTrustLineWrapper::IssuerImpl::isAuthorized() const
+{
+    return true;
+}
+
+bool
+ConstTrustLineWrapper::IssuerImpl::isAuthorizedToMaintainLiabilities() const
 {
     return true;
 }

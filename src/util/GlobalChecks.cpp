@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,9 +9,11 @@
 #endif
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
+#include <stdexcept>
 #include <thread>
 
-namespace DiamNet
+namespace diamnet
 {
 static std::thread::id mainThread = std::this_thread::get_id();
 
@@ -47,5 +49,22 @@ printErrorAndAbort(const char* s1, const char* s2)
     std::fflush(stderr);
     dbgAbort();
     std::abort();
+}
+
+void
+printAssertFailureAndAbort(const char* s1, const char* file, int line)
+{
+    std::fprintf(stderr, "%s at %s:%d\n", s1, file, line);
+    std::fflush(stderr);
+    dbgAbort();
+    std::abort();
+}
+
+void
+printAssertFailureAndThrow(const char* s1, const char* file, int line)
+{
+    std::fprintf(stderr, "%s at %s:%d\n", s1, file, line);
+    std::fflush(stderr);
+    throw std::runtime_error(s1);
 }
 }

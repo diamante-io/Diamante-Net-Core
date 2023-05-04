@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 #pragma once
@@ -10,21 +10,25 @@
 #include "util/TmpDir.h"
 #include "work/BatchWork.h"
 
-namespace DiamNet
+namespace diamnet
 {
+
+class HistoryArchive;
 
 class DownloadBucketsWork : public BatchWork
 {
-    std::map<std::string, std::shared_ptr<Bucket>> mBuckets;
+    std::map<std::string, std::shared_ptr<Bucket>>& mBuckets;
     std::vector<std::string> mHashes;
     std::vector<std::string>::const_iterator mNextBucketIter;
     TmpDir const& mDownloadDir;
+    std::shared_ptr<HistoryArchive> mArchive;
 
   public:
     DownloadBucketsWork(Application& app,
                         std::map<std::string, std::shared_ptr<Bucket>>& buckets,
                         std::vector<std::string> hashes,
-                        TmpDir const& downloadDir);
+                        TmpDir const& downloadDir,
+                        std::shared_ptr<HistoryArchive> archive = nullptr);
     ~DownloadBucketsWork() = default;
     std::string getStatus() const override;
 

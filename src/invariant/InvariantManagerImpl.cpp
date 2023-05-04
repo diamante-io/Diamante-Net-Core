@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,11 +10,11 @@
 #include "invariant/InvariantDoesNotHold.h"
 #include "invariant/InvariantManagerImpl.h"
 #include "ledger/LedgerTxn.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/ErrorMessages.h"
 #include "util/Logging.h"
-#include "xdrpp/printer.h"
+#include "util/XDRCereal.h"
+#include <fmt/format.h>
 
 #include "medida/counter.h"
 #include "medida/metrics_registry.h"
@@ -23,7 +23,7 @@
 #include <numeric>
 #include <regex>
 
-namespace DiamNet
+namespace diamnet
 {
 
 std::unique_ptr<InvariantManager>
@@ -117,7 +117,7 @@ InvariantManagerImpl::checkOnOperationApply(Operation const& operation,
 
         auto message = fmt::format(
             R"(Invariant "{}" does not hold on operation: {}{}{})",
-            invariant->getName(), result, "\n", xdr::xdr_to_string(operation));
+            invariant->getName(), result, "\n", xdr_to_string(operation));
         onInvariantFailure(invariant, message,
                            ltxDelta.header.current.ledgerSeq);
     }

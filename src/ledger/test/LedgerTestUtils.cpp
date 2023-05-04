@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 #include <xdrpp/autocheck.h>
 #include <xdrpp/xdrpp/marshal.h>
 
-namespace DiamNet
+namespace diamnet
 {
 namespace LedgerTestUtils
 {
@@ -90,6 +90,10 @@ randomlyModifyEntry(LedgerEntry& e)
         e.data.data().dataValue = autocheck::generator<DataValue>{}(8);
         makeValid(e.data.data());
         break;
+    case CLAIMABLE_BALANCE:
+        e.data.claimableBalance().amount = autocheck::generator<int64>{}();
+        makeValid(e.data.claimableBalance());
+        break;
     }
 }
 
@@ -134,6 +138,35 @@ makeValid(AccountEntry& a)
         a.ext.v1().liabilities.buying = std::abs(a.ext.v1().liabilities.buying);
         a.ext.v1().liabilities.selling =
             std::abs(a.ext.v1().liabilities.selling);
+
+        if (a.ext.v1().ext.v() == 2)
+        {
+            auto& extV2 = a.ext.v1().ext.v2();
+
+            int64_t effEntries = 2LL;
+            effEntries += a.numSubEntries;
+            effEntries += extV2.numSponsoring;
+            effEntries -= extV2.numSponsored;
+            if (effEntries < 0)
+            {
+                // This condition implies (in arbitrary precision)
+                //      2 + numSubentries + numSponsoring - numSponsored < 0
+                // which can be rearranged as
+                //      numSponsored > 2 + numSubentries + numSponsoring .
+                // Substituting this inequality yields
+                //      2 + numSubentries + numSponsored
+                //          > 4 + 2 * numSubentries + numSponsoring
+                //          > numSponsoring
+                // which can be rearranged as
+                //      2 + numSubentries + numSponsored - numSponsoring > 0 .
+                // In summary, swapping numSponsored and numSponsoring fixes the
+                // account state.
+                std::swap(extV2.numSponsored, extV2.numSponsoring);
+            }
+
+            extV2.signerSponsoringIDs.resize(
+                static_cast<uint32_t>(a.signers.size()));
+        }
     }
 }
 
@@ -184,6 +217,24 @@ void
 makeValid(DataEntry& d)
 {
     replaceControlCharacters(d.dataName, 1);
+}
+
+void
+makeValid(ClaimableBalanceEntry& c)
+{
+    c.amount = std::abs(c.amount);
+    clampLow<int64>(1, c.amount);
+
+    // It is not valid for claimants to be empty, so if this occurs we default
+    // to a single claimant for the zero account with
+    // CLAIM_PREDICATE_UNCONDITIONAL.
+    if (c.claimants.empty())
+    {
+        c.claimants.resize(1);
+    }
+
+    c.asset.type(ASSET_TYPE_CREDIT_ALPHANUM4);
+    strToAssetCode(c.asset.alphaNum4().assetCode, "CAD");
 }
 
 void
@@ -251,19 +302,20 @@ static auto validLedgerEntryGenerator = autocheck::map(
         le.lastModifiedLedgerSeq = le.lastModifiedLedgerSeq & INT32_MAX;
         switch (led.type())
         {
-        case TRUSTLINE:
-            makeValid(led.trustLine());
-            break;
-
-        case OFFER:
-            makeValid(led.offer());
-            break;
-
         case ACCOUNT:
             makeValid(led.account());
             break;
+        case TRUSTLINE:
+            makeValid(led.trustLine());
+            break;
+        case OFFER:
+            makeValid(led.offer());
+            break;
         case DATA:
             makeValid(led.data());
+            break;
+        case CLAIMABLE_BALANCE:
+            makeValid(led.claimableBalance());
             break;
         }
 
@@ -298,6 +350,13 @@ static auto validDataEntryGenerator = autocheck::map(
         return d;
     },
     autocheck::generator<DataEntry>());
+
+static auto validClaimableBalanceEntryGenerator = autocheck::map(
+    [](ClaimableBalanceEntry&& c, size_t s) {
+        makeValid(c);
+        return c;
+    },
+    autocheck::generator<ClaimableBalanceEntry>());
 
 LedgerEntry
 generateValidLedgerEntry(size_t b)
@@ -364,14 +423,28 @@ generateValidDataEntries(size_t n)
     return vecgen(n);
 }
 
+ClaimableBalanceEntry
+generateValidClaimableBalanceEntry(size_t b)
+{
+    return validClaimableBalanceEntryGenerator(b);
+}
+
+std::vector<ClaimableBalanceEntry>
+generateValidClaimableBalanceEntries(size_t n)
+{
+    static auto vecgen =
+        autocheck::list_of(validClaimableBalanceEntryGenerator);
+    return vecgen(n);
+}
+
 std::vector<LedgerHeaderHistoryEntry>
 generateLedgerHeadersForCheckpoint(
-    LedgerHeaderHistoryEntry firstLedger, uint32_t freq,
+    LedgerHeaderHistoryEntry firstLedger, uint32_t size,
     HistoryManager::LedgerVerificationStatus state)
 {
     static auto vecgen =
         autocheck::list_of(autocheck::generator<LedgerHeaderHistoryEntry>());
-    auto res = vecgen(freq);
+    auto res = vecgen(size);
     makeValid(res, firstLedger, state);
     return res;
 }

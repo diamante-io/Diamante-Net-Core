@@ -27,6 +27,7 @@ class JsonReporter::Impl {
   void Process(Meter& meter);
   void Process(Histogram& histogram);
   void Process(Timer& timer);
+  void Process(Buckets &buckets);
   std::string Report();
  private:
   JsonReporter& self_;
@@ -68,6 +69,12 @@ void JsonReporter::Process(Histogram& histogram) {
 
 void JsonReporter::Process(Timer& timer) {
   impl_->Process(timer);
+}
+
+void
+JsonReporter::Process(Buckets& buckets)
+{
+    impl_->Process(buckets);
 }
 
 
@@ -207,6 +214,28 @@ void JsonReporter::Impl::Process(Timer& timer) {
        << "\"99.9%\":" << snapshot.get999thPercentile() << std::endl;
 }
 
+void
+JsonReporter::Impl::Process(Buckets& buckets)
+{
+    auto& bucketData = buckets.getBuckets();
+    auto boundary_unit = FormatRateUnit(buckets.boundary_unit());
+
+    out_ << "\"type\":\"buckets\"," << std::endl
+         << "\"boundary_unit\":\"" << boundary_unit << "\"," << std::endl
+         << "\"buckets\": [" << std::endl;
+    for (auto it =bucketData.begin(); it != bucketData.end(); ++it)
+    {
+        auto&b = *it;
+        if (it != bucketData.begin())
+        {
+            out_ << ",";
+        }
+        out_ << "{\n\"boundary\": " << b.first << "," << std::endl;
+        b.second->Process(self_);
+        out_ << "}" << std::endl;
+    }
+    out_ << "]" << std::endl;
+}
 
 } // namespace reporting
 } // namespace medida

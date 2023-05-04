@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "transactions/OfferExchange.h"
 #include "transactions/OperationFrame.h"
 
-namespace DiamNet
+namespace diamnet
 {
 class AbstractLedgerTxn;
 
@@ -42,7 +42,8 @@ class PathPaymentOpFrameBase : public OperationFrame
 
     virtual Asset const& getSourceAsset() const = 0;
     virtual Asset const& getDestAsset() const = 0;
-    virtual AccountID const& getDestID() const = 0;
+    AccountID getDestID() const;
+    virtual MuxedAccount const& getDestMuxedAccount() const = 0;
     virtual xdr::xvector<Asset, 5> const& getPath() const = 0;
 
     virtual void setResultSuccess() = 0;

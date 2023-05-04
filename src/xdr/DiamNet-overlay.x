@@ -1,10 +1,10 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-%#include "xdr/DiamNet-ledger.h"
+%#include "xdr/Diamnet-ledger.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 enum ErrorCode
@@ -90,7 +90,10 @@ enum MessageType
     GET_SCP_STATE = 12,
 
     // new messages
-    HELLO = 13
+    HELLO = 13,
+
+    SURVEY_REQUEST = 14,
+    SURVEY_RESPONSE = 15
 };
 
 struct DontHave
@@ -99,7 +102,81 @@ struct DontHave
     uint256 reqHash;
 };
 
-union DiamNetMessage switch (MessageType type)
+enum SurveyMessageCommandType
+{
+    SURVEY_TOPOLOGY = 0
+};
+
+struct SurveyRequestMessage
+{
+    NodeID surveyorPeerID;
+    NodeID surveyedPeerID;
+    uint32 ledgerNum;
+    Curve25519Public encryptionKey;
+    SurveyMessageCommandType commandType;
+};
+
+struct SignedSurveyRequestMessage
+{
+    Signature requestSignature;
+    SurveyRequestMessage request;
+};
+
+typedef opaque EncryptedBody<64000>;
+struct SurveyResponseMessage
+{
+    NodeID surveyorPeerID;
+    NodeID surveyedPeerID;
+    uint32 ledgerNum;
+    SurveyMessageCommandType commandType;
+    EncryptedBody encryptedBody;
+};
+
+struct SignedSurveyResponseMessage
+{
+    Signature responseSignature;
+    SurveyResponseMessage response;
+};
+
+struct PeerStats
+{
+    NodeID id;
+    string versionStr<100>;
+    uint64 messagesRead;
+    uint64 messagesWritten;
+    uint64 bytesRead;
+    uint64 bytesWritten;
+    uint64 secondsConnected;
+
+    uint64 uniqueFloodBytesRecv;
+    uint64 duplicateFloodBytesRecv;
+    uint64 uniqueFetchBytesRecv;
+    uint64 duplicateFetchBytesRecv;
+
+    uint64 uniqueFloodMessageRecv;
+    uint64 duplicateFloodMessageRecv;
+    uint64 uniqueFetchMessageRecv;
+    uint64 duplicateFetchMessageRecv;
+};
+
+typedef PeerStats PeerStatList<25>;
+
+struct TopologyResponseBody
+{
+    PeerStatList inboundPeers;
+    PeerStatList outboundPeers;
+
+    uint32 totalInboundPeerCount;
+    uint32 totalOutboundPeerCount;
+};
+
+union SurveyResponseBody switch (SurveyMessageCommandType type)
+{
+case SURVEY_TOPOLOGY:
+    TopologyResponseBody topologyResponseBody;
+};
+
+union DiamnetMessage switch (MessageType type)
 {
 case ERROR_MSG:
     Error error;
@@ -122,6 +199,12 @@ case TX_SET:
 case TRANSACTION:
     TransactionEnvelope transaction;
 
+case SURVEY_REQUEST:
+    SignedSurveyRequestMessage signedSurveyRequestMessage;
+
+case SURVEY_RESPONSE:
+    SignedSurveyResponseMessage signedSurveyResponseMessage;
+
 // SCP
 case GET_SCP_QUORUMSET:
     uint256 qSetHash;
@@ -137,10 +220,10 @@ union AuthenticatedMessage switch (uint32 v)
 {
 case 0:
     struct
-{
-   uint64 sequence;
-   DiamNetMessage message;
-   HmacSha256Mac mac;
+    {
+        uint64 sequence;
+        DiamnetMessage message;
+        HmacSha256Mac mac;
     } v0;
 };
 }

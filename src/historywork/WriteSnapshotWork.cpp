@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,8 +8,9 @@
 #include "historywork/Progress.h"
 #include "main/Application.h"
 #include "util/XDRStream.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Note, WriteSnapshotWork does not have any special retry clean-up logic:
@@ -39,6 +40,7 @@ WriteSnapshotWork::onRun()
         {
             return;
         }
+        ZoneScoped;
 
         auto snap = self->mSnapshot;
         bool success = true;
@@ -65,15 +67,15 @@ WriteSnapshotWork::onRun()
 
     // Throw the work over to a worker thread if we can use DB pools,
     // otherwise run on main thread.
+    // NB: we post in both cases as to share the logic
     if (mApp.getDatabase().canUsePool())
     {
-        mApp.postOnBackgroundThread(work, "WriteSnapshotWork: start");
-        return State::WORK_WAITING;
+        mApp.postOnBackgroundThread(work, "WriteSnapshotWork: bgstart");
     }
     else
     {
-        work();
-        return State::WORK_RUNNING;
+        mApp.postOnMainThread(work, "WriteSnapshotWork: start");
     }
+    return State::WORK_WAITING;
 }
 }

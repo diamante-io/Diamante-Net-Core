@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,13 +10,14 @@
 #include "ledger/LedgerManager.h"
 #include "main/Application.h"
 #include "main/Config.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/Fs.h"
+#include "util/GlobalChecks.h"
 #include "util/LogSlowExecution.h"
 #include "util/Logging.h"
 #include "util/TmpDir.h"
-#include "util/format.h"
 #include "util/types.h"
+#include <fmt/format.h>
 #include <fstream>
 #include <map>
 #include <regex>
@@ -26,8 +27,9 @@
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 std::unique_ptr<BucketManager>
@@ -41,6 +43,7 @@ BucketManager::create(Application& app)
 void
 BucketManagerImpl::initialize()
 {
+    ZoneScoped;
     std::string d = mApp.getConfig().BUCKET_DIR_PATH;
 
     if (!fs::exists(d))
@@ -65,26 +68,24 @@ BucketManagerImpl::initialize()
     {
         throw std::runtime_error(
             fmt::format("{}. This can be caused by access rights issues or "
-                        "another DiamNet-core process already running",
+                        "another diamnet-core process already running",
                         e.what()));
     }
 
     mLockedBucketDir = std::make_unique<std::string>(d);
     mTmpDirManager = std::make_unique<TmpDirManager>(d + "/tmp");
+
+    if (mApp.getConfig().MODE_ENABLES_BUCKETLIST)
+    {
+        mBucketList = std::make_unique<BucketList>();
+    }
 }
 
 void
 BucketManagerImpl::dropAll()
 {
-    std::string d = mApp.getConfig().BUCKET_DIR_PATH;
-
-    if (fs::exists(d))
-    {
-        CLOG(DEBUG, "Bucket") << "Deleting bucket directory: " << d;
-        cleanDir();
-        fs::deltree(d);
-    }
-
+    ZoneScoped;
+    deleteEntireBucketDir();
     initialize();
 }
 
@@ -96,6 +97,7 @@ BucketManagerImpl::getTmpDirManager()
 
 BucketManagerImpl::BucketManagerImpl(Application& app)
     : mApp(app)
+    , mBucketList(nullptr)
     , mTmpDirManager(nullptr)
     , mWorkDir(nullptr)
     , mLockedBucketDir(nullptr)
@@ -105,11 +107,11 @@ BucketManagerImpl::BucketManagerImpl(Application& app)
     , mBucketSnapMerge(app.getMetrics().NewTimer({"bucket", "snap", "merge"}))
     , mSharedBucketsSize(
           app.getMetrics().NewCounter({"bucket", "memory", "shared"}))
-
+    , mDeleteEntireBucketDirInDtor(app.getConfig().MODE_USES_IN_MEMORY_LEDGER)
 {
 }
 
-const std::string BucketManagerImpl::kLockFilename = "DiamNet-core.lock";
+const std::string BucketManagerImpl::kLockFilename = "diamnet-core.lock";
 
 namespace
 {
@@ -149,6 +151,7 @@ BucketManagerImpl::bucketFilename(Hash const& hash)
 std::string const&
 BucketManagerImpl::getTmpDir()
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
     if (!mWorkDir)
     {
@@ -159,19 +162,59 @@ BucketManagerImpl::getTmpDir()
 }
 
 std::string const&
-BucketManagerImpl::getBucketDir()
+BucketManagerImpl::getBucketDir() const
 {
     return *(mLockedBucketDir);
 }
 
 BucketManagerImpl::~BucketManagerImpl()
 {
-    cleanDir();
+    ZoneScoped;
+    if (mDeleteEntireBucketDirInDtor)
+    {
+        deleteEntireBucketDir();
+    }
+    else
+    {
+        deleteTmpDirAndUnlockBucketDir();
+    }
 }
 
 void
-BucketManagerImpl::cleanDir()
+BucketManagerImpl::deleteEntireBucketDir()
 {
+    ZoneScoped;
+    std::string d = mApp.getConfig().BUCKET_DIR_PATH;
+    if (fs::exists(d))
+    {
+        // First clean out the contents of the tmpdir, as usual.
+        deleteTmpDirAndUnlockBucketDir();
+
+        // Then more seriously delete _all the buckets_, even live
+        // ones that represent the canonical state of the ledger.
+        //
+        // Should only happen on new-db or in-memory-replay shutdown.
+        CLOG(DEBUG, "Bucket") << "Deleting bucket directory: " << d;
+        fs::deltree(d);
+    }
+}
+
+void
+BucketManagerImpl::deleteTmpDirAndUnlockBucketDir()
+{
+    ZoneScoped;
+
+    // First do fs::deltree on $BUCKET_DIR_PATH/tmp/bucket
+    //
+    // (which should just be bucket merges-in-progress and such)
+    mWorkDir.reset();
+
+    // Then do fs::deltree on $BUCKET_DIR_PATH/tmp
+    //
+    // (which also contains files from other subsystems, like history)
+    mTmpDirManager.reset();
+
+    // Then delete the lockfile $BUCKET_DIR_PATH/diamnet-core.lock
     if (mLockedBucketDir)
     {
         std::string d = mApp.getConfig().BUCKET_DIR_PATH;
@@ -180,14 +223,13 @@ BucketManagerImpl::cleanDir()
         fs::unlockFile(lock);
         mLockedBucketDir.reset();
     }
-    mWorkDir.reset();
-    mTmpDirManager.reset();
 }
 
 BucketList&
 BucketManagerImpl::getBucketList()
 {
-    return mBucketList;
+    releaseAssertOrThrow(mApp.getConfig().MODE_ENABLES_BUCKETLIST);
+    return *mBucketList;
 }
 
 medida::Timer&
@@ -296,6 +338,7 @@ BucketManagerImpl::incrMergeCounters(MergeCounters const& delta)
 bool
 BucketManagerImpl::renameBucket(std::string const& src, std::string const& dst)
 {
+    ZoneScoped;
     if (mApp.getConfig().DISABLE_XDR_FSYNC)
     {
         return rename(src.c_str(), dst.c_str()) == 0;
@@ -311,6 +354,8 @@ BucketManagerImpl::adoptFileAsBucket(std::string const& filename,
                                      uint256 const& hash, size_t nObjects,
                                      size_t nBytes, MergeKey* mergeKey)
 {
+    ZoneScoped;
+    releaseAssertOrThrow(mApp.getConfig().MODE_ENABLES_BUCKETLIST);
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
 
     if (mergeKey)
@@ -374,9 +419,30 @@ BucketManagerImpl::adoptFileAsBucket(std::string const& filename,
     return b;
 }
 
+void
+BucketManagerImpl::noteEmptyMergeOutput(MergeKey const& mergeKey)
+{
+    releaseAssertOrThrow(mApp.getConfig().MODE_ENABLES_BUCKETLIST);
+
+    // We _do_ want to remove the mergeKey from mLiveFutures, both so that that
+    // map does not grow without bound and more importantly so that we drop the
+    // refcount on the input buckets so they get GC'ed from the bucket dir.
+    //
+    // But: we do _not_ want to store the empty merge in mFinishedMerges,
+    // despite it being a theoretically meaningful place to record empty merges,
+    // because it'd over-identify multiple individual inputs with the empty
+    // output, potentially retaining far too many inputs, as lots of different
+    // mergeKeys result in an empty output.
+    std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
+    CLOG(TRACE, "Bucket") << "BucketManager::noteEmptyMergeOutput(" << mergeKey
+                          << ")";
+    mLiveFutures.erase(mergeKey);
+}
+
 std::shared_ptr<Bucket>
 BucketManagerImpl::getBucketByHash(uint256 const& hash)
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
     if (isZero(hash))
     {
@@ -407,6 +473,7 @@ BucketManagerImpl::getBucketByHash(uint256 const& hash)
 std::shared_future<std::shared_ptr<Bucket>>
 BucketManagerImpl::getMergeFuture(MergeKey const& key)
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
     MergeCounters mc;
     auto i = mLiveFutures.find(key);
@@ -449,6 +516,8 @@ void
 BucketManagerImpl::putMergeFuture(
     MergeKey const& key, std::shared_future<std::shared_ptr<Bucket>> wp)
 {
+    ZoneScoped;
+    releaseAssertOrThrow(mApp.getConfig().MODE_ENABLES_BUCKETLIST);
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
     CLOG(TRACE, "Bucket") << "BucketManager::putMergeFuture storing future "
                           << "for running merge " << key;
@@ -467,11 +536,17 @@ BucketManagerImpl::clearMergeFuturesForTesting()
 std::set<Hash>
 BucketManagerImpl::getReferencedBuckets() const
 {
+    ZoneScoped;
     std::set<Hash> referenced;
+    if (!mApp.getConfig().MODE_ENABLES_BUCKETLIST)
+    {
+        return referenced;
+    }
+
     // retain current bucket list
     for (uint32_t i = 0; i < BucketList::kNumLevels; ++i)
     {
-        auto const& level = mBucketList.getLevel(i);
+        auto const& level = mBucketList->getLevel(i);
         auto rit = referenced.emplace(level.getCurr()->getHash());
         if (rit.second)
         {
@@ -532,6 +607,7 @@ BucketManagerImpl::getReferencedBuckets() const
 void
 BucketManagerImpl::cleanupStaleFiles()
 {
+    ZoneScoped;
     if (mApp.getConfig().DISABLE_BUCKET_GC)
     {
         return;
@@ -562,6 +638,7 @@ BucketManagerImpl::cleanupStaleFiles()
 void
 BucketManagerImpl::forgetUnreferencedBuckets()
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> lock(mBucketMutex);
     auto referenced = getReferencedBuckets();
 
@@ -636,6 +713,8 @@ BucketManagerImpl::addBatch(Application& app, uint32_t currLedger,
                             std::vector<LedgerEntry> const& liveEntries,
                             std::vector<LedgerKey> const& deadEntries)
 {
+    ZoneScoped;
+    releaseAssertOrThrow(app.getConfig().MODE_ENABLES_BUCKETLIST);
 #ifdef BUILD_TESTS
     if (mUseFakeTestValuesForNextClose)
     {
@@ -645,8 +724,8 @@ BucketManagerImpl::addBatch(Application& app, uint32_t currLedger,
     auto timer = mBucketAddBatch.TimeScope();
     mBucketObjectInsertBatch.Mark(initEntries.size() + liveEntries.size() +
                                   deadEntries.size());
-    mBucketList.addBatch(app, currLedger, currLedgerProtocol, initEntries,
-                         liveEntries, deadEntries);
+    mBucketList->addBatch(app, currLedger, currLedgerProtocol, initEntries,
+                          liveEntries, deadEntries);
 }
 
 #ifdef BUILD_TESTS
@@ -658,6 +737,17 @@ BucketManagerImpl::setNextCloseVersionAndHashForTesting(uint32_t protocolVers,
     mFakeTestProtocolVersion = protocolVers;
     mFakeTestBucketListHash = hash;
 }
+
+std::set<Hash>
+BucketManagerImpl::getBucketHashesInBucketDirForTesting() const
+{
+    std::set<Hash> hashes;
+    for (auto f : fs::findfiles(getBucketDir(), isBucketFile))
+    {
+        hashes.emplace(extractFromFilename(f));
+    }
+    return hashes;
+}
 #endif
 
 // updates the given LedgerHeader to reflect the current state of the bucket
@@ -665,7 +755,14 @@ BucketManagerImpl::setNextCloseVersionAndHashForTesting(uint32_t protocolVers,
 void
 BucketManagerImpl::snapshotLedger(LedgerHeader& currentHeader)
 {
-    currentHeader.bucketListHash = mBucketList.getHash();
+    ZoneScoped;
+    Hash hash;
+    if (mApp.getConfig().MODE_ENABLES_BUCKETLIST)
+    {
+        hash = mBucketList->getHash();
+    }
+
+    currentHeader.bucketListHash = hash;
 #ifdef BUILD_TESTS
     if (mUseFakeTestValuesForNextClose)
     {
@@ -706,6 +803,7 @@ BucketManagerImpl::calculateSkipValues(LedgerHeader& currentHeader)
 std::vector<std::string>
 BucketManagerImpl::checkForMissingBucketsFiles(HistoryArchiveState const& has)
 {
+    ZoneScoped;
     std::vector<std::string> buckets = has.allBuckets();
     std::vector<std::string> result;
     std::copy_if(buckets.begin(), buckets.end(), std::back_inserter(result),
@@ -721,6 +819,8 @@ void
 BucketManagerImpl::assumeState(HistoryArchiveState const& has,
                                uint32_t maxProtocolVersion)
 {
+    ZoneScoped;
+    releaseAssertOrThrow(mApp.getConfig().MODE_ENABLES_BUCKETLIST);
     for (uint32_t i = 0; i < BucketList::kNumLevels; ++i)
     {
         auto curr = getBucketByHash(hexToBin256(has.currentBuckets.at(i).curr));
@@ -730,19 +830,34 @@ BucketManagerImpl::assumeState(HistoryArchiveState const& has,
             throw std::runtime_error(
                 "Missing bucket files while assuming saved BucketList state");
         }
-        mBucketList.getLevel(i).setCurr(curr);
-        mBucketList.getLevel(i).setSnap(snap);
-        mBucketList.getLevel(i).setNext(has.currentBuckets.at(i).next);
+        mBucketList->getLevel(i).setCurr(curr);
+        mBucketList->getLevel(i).setSnap(snap);
+        mBucketList->getLevel(i).setNext(has.currentBuckets.at(i).next);
     }
 
-    mBucketList.restartMerges(mApp, maxProtocolVersion, has.currentLedger);
+    mBucketList->restartMerges(mApp, maxProtocolVersion, has.currentLedger);
     cleanupStaleFiles();
 }
 
 void
 BucketManagerImpl::shutdown()
 {
-    // forgetUnreferencedBuckets does what we want - it retains needed buckets
-    forgetUnreferencedBuckets();
+    ZoneScoped;
+
+    if (!mIsShutdown)
+    {
+        mIsShutdown = true;
+
+        // This call happens in shutdown -- before destruction -- so that we
+        // can be sure other subsystems (ledger etc.) are still alive and we
+        // can call into them to figure out which buckets _are_ referenced.
+        forgetUnreferencedBuckets();
+    }
+}
+
+bool
+BucketManagerImpl::isShutdown() const
+{
+    return mIsShutdown;
 }
 }

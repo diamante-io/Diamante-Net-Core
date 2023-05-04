@@ -120,7 +120,7 @@ void ExpDecaySample::Impl::Update(std::int64_t value, Clock::time_point timestam
       Rescale(timestamp);
     }
     std::lock_guard<std::mutex> lock {mutex_};
-    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp - startTime_);
+    auto dur = std::chrono::duration_cast<std::chrono::seconds>(timestamp - startTime_);
     auto priority = std::exp(alpha_ * dur.count()) / dist_(rng_);
     auto count = ++count_;
 
@@ -157,7 +157,7 @@ void ExpDecaySample::Impl::Rescale(const Clock::time_point& when) {
   values_.clear();
 
   for (size_t i = 0; i < size; i++) {
-    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(when - oldStartTime);
+    auto dur = std::chrono::duration_cast<std::chrono::seconds>(when - oldStartTime);
     auto key = keys[i] * std::exp(-alpha_ * dur.count());
     values_[key] = values[i];
   }

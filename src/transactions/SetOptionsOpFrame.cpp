@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,10 +9,12 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 static const uint32 allAccountFlags =
@@ -41,8 +43,88 @@ SetOptionsOpFrame::getThresholdLevel() const
 }
 
 bool
+SetOptionsOpFrame::addOrChangeSigner(AbstractLedgerTxn& ltx)
+{
+    auto header = ltx.loadHeader();
+    auto sourceAccount = loadSourceAccount(ltx, header);
+
+    auto& account = sourceAccount.current().data.account();
+    auto& signers = account.signers;
+
+    // Change signer
+    auto findRes = findSignerByKey(signers.begin(), signers.end(),
+                                   mSetOptions.signer->key);
+    if (findRes.second)
+    {
+        findRes.first->weight = mSetOptions.signer->weight;
+        return true;
+    }
+
+    // Add signer
+    if (signers.size() == signers.max_size())
+    {
+        innerResult().code(SET_OPTIONS_TOO_MANY_SIGNERS);
+        return false;
+    }
+
+    auto it = signers.insert(findRes.first, *mSetOptions.signer);
+
+    if (hasAccountEntryExtV2(account))
+    {
+        size_t n = it - account.signers.begin();
+        auto& extV2 = account.ext.v1().ext.v2();
+        // There must always be an element in signerSponsoringIDs corresponding
+        // to each element in signers. Because the signer is not sponsored, the
+        // relevant signerSponsoringID must be null.
+        extV2.signerSponsoringIDs.insert(extV2.signerSponsoringIDs.begin() + n,
+                                         SponsorshipDescriptor{});
+    }
+
+    switch (createSignerWithPossibleSponsorship(ltx, header, it, sourceAccount))
+    {
+    case SponsorshipResult::SUCCESS:
+        break;
+    case SponsorshipResult::LOW_RESERVE:
+        innerResult().code(SET_OPTIONS_LOW_RESERVE);
+        return false;
+    case SponsorshipResult::TOO_MANY_SUBENTRIES:
+        mResult.code(opTOO_MANY_SUBENTRIES);
+        return false;
+    case SponsorshipResult::TOO_MANY_SPONSORING:
+        mResult.code(opTOO_MANY_SPONSORING);
+        return false;
+    case SponsorshipResult::TOO_MANY_SPONSORED:
+        // This is impossible right now because there is a limit on sub
+        // entries, fall through and throw
+    default:
+        throw std::runtime_error(
+            "Unexpected result from createSignerWithPossibleSponsorship");
+    }
+    return true;
+}
+
+void
+SetOptionsOpFrame::deleteSigner(AbstractLedgerTxn& ltx,
+                                LedgerTxnHeader const& header,
+                                LedgerTxnEntry& sourceAccount)
+{
+    auto& account = sourceAccount.current().data.account();
+    auto& signers = account.signers;
+
+    auto findRes = findSignerByKey(signers.begin(), signers.end(),
+                                   mSetOptions.signer->key);
+    if (findRes.second)
+    {
+        removeSignerWithPossibleSponsorship(ltx, header, findRes.first,
+                                            sourceAccount);
+    }
+}
+
+bool
 SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "SetOptionsOp apply", true);
+
     auto header = ltx.loadHeader();
     auto sourceAccount = loadSourceAccount(ltx, header);
     auto& account = sourceAccount.current().data.account();
@@ -51,7 +133,7 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
         AccountID inflationID = *mSetOptions.inflationDest;
         if (!(inflationID == getSourceID()))
         {
-            if (!DiamNet::loadAccountWithoutRecord(ltx, inflationID))
+            if (!diamnet::loadAccountWithoutRecord(ltx, inflationID))
             {
                 innerResult().code(SET_OPTIONS_INVALID_INFLATION);
                 return false;
@@ -113,61 +195,19 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
 
     if (mSetOptions.signer)
     {
-        auto& signers = account.signers;
         if (mSetOptions.signer->weight)
-        { // add or change signer
-            bool found = false;
-            for (auto& oldSigner : signers)
+        {
+            LedgerTxn ltxInner(ltx);
+            if (!addOrChangeSigner(ltxInner))
             {
-                if (oldSigner.key == mSetOptions.signer->key)
-                {
-                    oldSigner.weight = mSetOptions.signer->weight;
-                    found = true;
-                }
+                return false;
             }
-            if (!found)
-            {
-                if (signers.size() == signers.max_size())
-                {
-                    innerResult().code(SET_OPTIONS_TOO_MANY_SIGNERS);
-                    return false;
-                }
-                switch (addNumEntries(header, sourceAccount, 1))
-                {
-                case AddSubentryResult::SUCCESS:
-                    break;
-                case AddSubentryResult::LOW_RESERVE:
-                    innerResult().code(SET_OPTIONS_LOW_RESERVE);
-                    return false;
-                case AddSubentryResult::TOO_MANY_SUBENTRIES:
-                    mResult.code(opTOO_MANY_SUBENTRIES);
-                    return false;
-                default:
-                    throw std::runtime_error(
-                        "Unexpected result from addNumEntries");
-                }
-
-                signers.push_back(*mSetOptions.signer);
-            }
+            ltxInner.commit();
         }
         else
-        { // delete signer
-            auto it = signers.begin();
-            while (it != signers.end())
-            {
-                Signer& oldSigner = *it;
-                if (oldSigner.key == mSetOptions.signer->key)
-                {
-                    it = signers.erase(it);
-                    addNumEntries(header, sourceAccount, -1);
-                }
-                else
-                {
-                    it++;
-                }
-            }
+        {
+            deleteSigner(ltx, header, sourceAccount);
         }
-        normalizeSigners(sourceAccount);
     }
 
     innerResult().code(SET_OPTIONS_SUCCESS);

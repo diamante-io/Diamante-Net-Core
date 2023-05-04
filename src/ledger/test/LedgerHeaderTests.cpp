@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,7 +19,7 @@
 
 #include "main/Config.h"
 
-using namespace DiamNet;
+using namespace diamnet;
 using namespace std;
 
 TEST_CASE("genesisledger", "[ledger]")
@@ -72,8 +72,8 @@ TEST_CASE("ledgerheader", "[ledger]")
         TxSetFramePtr txSet = make_shared<TxSetFrame>(lastHash);
 
         // close this ledger
-        DiamNetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
-                        DiamNet_VALUE_BASIC);
+        DiamnetValue sv(txSet->getContentsHash(), 1, emptyUpgradeSteps,
+                        DIAMNET_VALUE_BASIC);
         LedgerCloseData ledgerData(lcl.header.ledgerSeq + 1, txSet, sv);
         app->getLedgerManager().closeLedger(ledgerData);
 
@@ -109,10 +109,12 @@ TEST_CASE("base reserve", "[ledger]")
 
     for_versions_to(8, *app, [&]() {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        REQUIRE(getMinBalance(ltx.loadHeader(), n) < expectedReserve);
+        REQUIRE(getMinBalance(ltx.loadHeader().current(), n, 0, 0) <
+                expectedReserve);
     });
     for_versions_from(9, *app, [&]() {
         LedgerTxn ltx(app->getLedgerTxnRoot());
-        REQUIRE(getMinBalance(ltx.loadHeader(), n) == expectedReserve);
+        REQUIRE(getMinBalance(ltx.loadHeader().current(), n, 0, 0) ==
+                expectedReserve);
     });
 }

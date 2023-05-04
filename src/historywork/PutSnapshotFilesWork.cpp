@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,9 +12,10 @@
 #include "historywork/PutHistoryArchiveStateWork.h"
 #include "main/Application.h"
 #include "work/WorkSequence.h"
-#include <util/format.h>
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 PutSnapshotFilesWork::PutSnapshotFilesWork(
@@ -31,6 +32,7 @@ PutSnapshotFilesWork::PutSnapshotFilesWork(
 BasicWork::State
 PutSnapshotFilesWork::doWork()
 {
+    ZoneScoped;
     if (!mUploadSeqs.empty())
     {
         return WorkUtils::getWorkStatus(mUploadSeqs);
@@ -87,8 +89,8 @@ PutSnapshotFilesWork::doWork()
     for (auto const& archive :
          mApp.getHistoryArchiveManager().getWritableHistoryArchives())
     {
-        mGetStateWorks.emplace_back(
-            addWork<GetHistoryArchiveStateWork>(0, archive));
+        mGetStateWorks.emplace_back(addWork<GetHistoryArchiveStateWork>(
+            0, archive, "publish", BasicWork::RETRY_A_FEW));
     }
 
     return State::WORK_RUNNING;
@@ -123,5 +125,26 @@ PutSnapshotFilesWork::getFilesToZip()
     }
 
     return filesToZip;
+}
+
+std::string
+PutSnapshotFilesWork::getStatus() const
+{
+    if (!mUploadSeqs.empty())
+    {
+        return fmt::format("{}:uploading files", getName());
+    }
+
+    if (!mGzipFilesWorks.empty())
+    {
+        return fmt::format("{}:zipping files", getName());
+    }
+
+    if (!mGetStateWorks.empty())
+    {
+        return fmt::format("{}:getting archives", getName());
+    }
+
+    return BasicWork::getStatus();
 }
 }

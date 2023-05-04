@@ -1,10 +1,10 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "test/TestExceptions.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace txtest
@@ -295,6 +295,8 @@ throwIf(AccountMergeResult const& result)
         throw ex_ACCOUNT_MERGE_SEQNUM_TOO_FAR{};
     case ACCOUNT_MERGE_DEST_FULL:
         throw ex_ACCOUNT_MERGE_DEST_FULL{};
+    case ACCOUNT_MERGE_IS_SPONSOR:
+        throw ex_ACCOUNT_MERGE_IS_SPONSOR{};
     case ACCOUNT_MERGE_SUCCESS:
         break;
     default:
@@ -345,6 +347,50 @@ throwIf(BumpSequenceResult const& result)
         break;
     case BUMP_SEQUENCE_BAD_SEQ:
         throw ex_BUMP_SEQUENCE_BAD_SEQ{};
+    default:
+        throw ex_UNKNOWN{};
+    }
+}
+
+void
+throwIf(CreateClaimableBalanceResult const& result)
+{
+    switch (result.code())
+    {
+    case CREATE_CLAIMABLE_BALANCE_MALFORMED:
+        throw ex_CREATE_CLAIMABLE_BALANCE_MALFORMED{};
+    case CREATE_CLAIMABLE_BALANCE_LOW_RESERVE:
+        throw ex_CREATE_CLAIMABLE_BALANCE_LOW_RESERVE{};
+    case CREATE_CLAIMABLE_BALANCE_NO_TRUST:
+        throw ex_CREATE_CLAIMABLE_BALANCE_NO_TRUST{};
+    case CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED:
+        throw ex_CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED{};
+    case CREATE_CLAIMABLE_BALANCE_UNDERFUNDED:
+        throw ex_CREATE_CLAIMABLE_BALANCE_UNDERFUNDED{};
+    case CREATE_CLAIMABLE_BALANCE_SUCCESS:
+        break;
+    default:
+        throw ex_UNKNOWN{};
+    }
+}
+
+void
+throwIf(ClaimClaimableBalanceResult const& result)
+{
+    switch (result.code())
+    {
+    case CLAIM_CLAIMABLE_BALANCE_DOES_NOT_EXIST:
+        throw ex_CLAIM_CLAIMABLE_BALANCE_DOES_NOT_EXIST{};
+    case CLAIM_CLAIMABLE_BALANCE_CANNOT_CLAIM:
+        throw ex_CLAIM_CLAIMABLE_BALANCE_CANNOT_CLAIM{};
+    case CLAIM_CLAIMABLE_BALANCE_LINE_FULL:
+        throw ex_CLAIM_CLAIMABLE_BALANCE_LINE_FULL{};
+    case CLAIM_CLAIMABLE_BALANCE_NOT_AUTHORIZED:
+        throw ex_CLAIM_CLAIMABLE_BALANCE_NOT_AUTHORIZED{};
+    case CLAIM_CLAIMABLE_BALANCE_NO_TRUST:
+        throw ex_CLAIM_CLAIMABLE_BALANCE_NO_TRUST{};
+    case CLAIM_CLAIMABLE_BALANCE_SUCCESS:
+        break;
     default:
         throw ex_UNKNOWN{};
     }
@@ -433,6 +479,12 @@ throwIf(TransactionResult const& result)
         break;
     case PATH_PAYMENT_STRICT_SEND:
         throwIf(opResult.tr().pathPaymentStrictSendResult());
+        break;
+    case CREATE_CLAIMABLE_BALANCE:
+        throwIf(opResult.tr().createClaimableBalanceResult());
+        break;
+    case CLAIM_CLAIMABLE_BALANCE:
+        throwIf(opResult.tr().claimClaimableBalanceResult());
         break;
     }
 }

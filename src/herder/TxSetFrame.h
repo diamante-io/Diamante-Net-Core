@@ -1,22 +1,24 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/LedgerHashUtils.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "transactions/TransactionFrame.h"
+#include "util/optional.h"
 #include <deque>
 #include <functional>
 #include <unordered_map>
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 
 class TxSetFrame;
 typedef std::shared_ptr<TxSetFrame> TxSetFramePtr;
+typedef std::shared_ptr<TxSetFrame const> TxSetFrameConstPtr;
 
 class AbstractTxSetFrameForApply
 {
@@ -33,30 +35,33 @@ class AbstractTxSetFrameForApply
 
     virtual size_t sizeOp() const = 0;
 
-    virtual std::vector<TransactionFramePtr> sortForApply() = 0;
+    virtual std::vector<TransactionFrameBasePtr> sortForApply() = 0;
+    virtual void toXDR(TransactionSet& set) = 0;
 };
 
 class TxSetFrame : public AbstractTxSetFrameForApply
 {
-    bool mHashIsValid;
-    Hash mHash;
+    optional<Hash> mHash{nullptr};
+
+    // mValid caches both the last app LCL that we checked
+    // vaidity for, and the result of that validity check.
+    optional<std::pair<Hash, bool>> mValid{nullptr};
 
     Hash mPreviousLedgerHash;
 
-    using AccountTransactionQueue = std::deque<TransactionFramePtr>;
+    using AccountTransactionQueue = std::deque<TransactionFrameBasePtr>;
 
     bool checkOrTrim(Application& app,
-                     std::function<bool(TransactionFramePtr, SequenceNumber)>
-                         processInvalidTxLambda,
-                     std::function<bool(std::deque<TransactionFramePtr> const&)>
-                         processLastInvalidTxLambda);
+                     std::vector<TransactionFrameBasePtr>& trimmed,
+                     bool justCheck, uint64_t lowerBoundCloseTimeOffset,
+                     uint64_t upperBoundCloseTimeOffset);
 
     std::unordered_map<AccountID, AccountTransactionQueue>
     buildAccountTxQueues();
     friend struct SurgeCompare;
 
   public:
-    std::vector<TransactionFramePtr> mTransactions;
+    std::vector<TransactionFrameBasePtr> mTransactions;
 
     TxSetFrame(Hash const& previousLedgerHash);
 
@@ -75,22 +80,26 @@ class TxSetFrame : public AbstractTxSetFrameForApply
 
     void sortForHash();
 
-    std::vector<TransactionFramePtr> sortForApply() override;
+    std::vector<TransactionFrameBasePtr> sortForApply() override;
 
-    bool checkValid(Application& app);
+    bool checkValid(Application& app, uint64_t lowerBoundCloseTimeOffset,
+                    uint64_t upperBoundCloseTimeOffset);
 
     // remove invalid transaction from this set and return those removed
     // transactions
-    std::vector<TransactionFramePtr> trimInvalid(Application& app);
+    std::vector<TransactionFrameBasePtr>
+    trimInvalid(Application& app, uint64_t lowerBoundCloseTimeOffset,
+                uint64_t upperBoundCloseTimeOffset);
     void surgePricingFilter(Application& app);
 
-    void removeTx(TransactionFramePtr tx);
+    void removeTx(TransactionFrameBasePtr tx);
 
     void
-    add(TransactionFramePtr tx)
+    add(TransactionFrameBasePtr tx)
     {
         mTransactions.push_back(tx);
-        mHashIsValid = false;
+        mHash.reset();
+        mValid.reset();
     }
 
     size_t size(LedgerHeader const& lh) const;
@@ -108,6 +117,6 @@ class TxSetFrame : public AbstractTxSetFrameForApply
 
     // return the sum of all fees that this transaction set would take
     int64_t getTotalFees(LedgerHeader const& lh) const;
-    void toXDR(TransactionSet& set);
+    void toXDR(TransactionSet& set) override;
 };
-} // namespace DiamNet
+} // namespace diamnet

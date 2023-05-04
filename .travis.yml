@@ -27,11 +27,18 @@ addons:
     - llvm-5.0
     - pkg-config
     - clang-format-5.0
-    - pandoc
     - perl
     - parallel
+    - gdb
+
+before_script:
+  - ulimit -c unlimited -S
 
 script: ./travis-build.sh
+
+after_failure:
+  - COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
+  - if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" ./src/diamnet-core -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
 
 cache:
   directories:

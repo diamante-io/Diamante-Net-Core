@@ -1,8 +1,10 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "test/TestAccount.h"
+#include "crypto/SHA.h"
+#include "ledger/LedgerManager.h"
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
@@ -13,7 +15,7 @@
 
 #include <lib/catch.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace txtest;
@@ -31,7 +33,7 @@ TestAccount::updateSequenceNumber()
     if (mSn == 0)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto entry = DiamNet::loadAccount(ltx, getPublicKey());
+        auto entry = diamnet::loadAccount(ltx, getPublicKey());
         if (entry)
         {
             mSn = entry.current().data.account().seqNum;
@@ -43,8 +45,18 @@ int64_t
 TestAccount::getBalance() const
 {
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    auto entry = DiamNet::loadAccount(ltx, getPublicKey());
+    auto entry = diamnet::loadAccount(ltx, getPublicKey());
     return entry.current().data.account().balance;
+}
+
+int64_t
+TestAccount::getAvailableBalance() const
+{
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
+    auto entry = diamnet::loadAccount(ltx, getPublicKey());
+    auto header = ltx.loadHeader();
+
+    return diamnet::getAvailableBalance(header, entry);
 }
 
 bool
@@ -67,7 +79,7 @@ TestAccount::tx(std::vector<Operation> const& ops, SequenceNumber sn)
 Operation
 TestAccount::op(Operation operation)
 {
-    operation.sourceAccount.activate() = getPublicKey();
+    operation.sourceAccount.activate() = toMuxedAccount(getPublicKey());
     return operation;
 }
 
@@ -86,7 +98,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
     std::unique_ptr<LedgerEntry> destBefore;
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto entry = DiamNet::loadAccount(ltx, publicKey);
+        auto entry = diamnet::loadAccount(ltx, publicKey);
         if (entry)
         {
             destBefore = std::make_unique<LedgerEntry>(entry.current());
@@ -100,7 +112,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
     catch (...)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto destAfter = DiamNet::loadAccount(ltx, publicKey);
+        auto destAfter = diamnet::loadAccount(ltx, publicKey);
         // check that the target account didn't change
         REQUIRE(!!destBefore == !!destAfter);
         if (destBefore && destAfter)
@@ -112,7 +124,7 @@ TestAccount::create(SecretKey const& secretKey, uint64_t initialBalance)
 
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        REQUIRE(DiamNet::loadAccount(ltx, publicKey));
+        REQUIRE(diamnet::loadAccount(ltx, publicKey));
     }
     return TestAccount{mApp, secretKey};
 }
@@ -129,8 +141,8 @@ TestAccount::merge(PublicKey const& into)
     applyTx(tx({accountMerge(into)}), mApp);
 
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    REQUIRE(DiamNet::loadAccount(ltx, into));
-    REQUIRE(!DiamNet::loadAccount(ltx, getPublicKey()));
+    REQUIRE(diamnet::loadAccount(ltx, into));
+    REQUIRE(!diamnet::loadAccount(ltx, getPublicKey()));
 }
 
 void
@@ -152,15 +164,31 @@ TestAccount::changeTrust(Asset const& asset, int64_t limit)
 }
 
 void
+TestAccount::allowTrust(Asset const& asset, PublicKey const& trustor,
+                        uint32_t flag)
+{
+    applyTx(tx({txtest::allowTrust(trustor, asset, flag)}), mApp);
+}
+
+void
 TestAccount::allowTrust(Asset const& asset, PublicKey const& trustor)
 {
-    applyTx(tx({txtest::allowTrust(trustor, asset, true)}), mApp);
+    applyTx(tx({txtest::allowTrust(trustor, asset, AUTHORIZED_FLAG)}), mApp);
 }
 
 void
 TestAccount::denyTrust(Asset const& asset, PublicKey const& trustor)
 {
-    applyTx(tx({txtest::allowTrust(trustor, asset, false)}), mApp);
+    applyTx(tx({txtest::allowTrust(trustor, asset, 0)}), mApp);
+}
+
+void
+TestAccount::allowMaintainLiabilities(Asset const& asset,
+                                      PublicKey const& trustor)
+{
+    applyTx(tx({txtest::allowTrust(trustor, asset,
+                                   AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG)}),
+            mApp);
 }
 
 TrustLineEntry
@@ -195,7 +223,7 @@ TestAccount::manageData(std::string const& name, DataValue* value)
     applyTx(tx({txtest::manageData(name, value)}), mApp);
 
     LedgerTxn ls(mApp.getLedgerTxnRoot());
-    auto data = DiamNet::loadData(ls, getPublicKey(), name);
+    auto data = diamnet::loadData(ls, getPublicKey(), name);
     if (value)
     {
         REQUIRE(data);
@@ -211,6 +239,67 @@ void
 TestAccount::bumpSequence(SequenceNumber to)
 {
     applyTx(tx({txtest::bumpSequence(to)}), mApp, false);
+}
+
+ClaimableBalanceID
+TestAccount::createClaimableBalance(Asset const& asset, int64_t amount,
+                                    xdr::xvector<Claimant, 10> const& claimants)
+{
+    auto transaction =
+        tx({txtest::createClaimableBalance(asset, amount, claimants)});
+    applyTx(transaction, mApp);
+
+    auto returnedBalanceID = transaction->getResult()
+                                 .result.results()[0]
+                                 .tr()
+                                 .createClaimableBalanceResult()
+                                 .balanceID();
+
+    // validate balanceID returned is what we expect
+    REQUIRE(returnedBalanceID == getBalanceID(0));
+
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
+    auto entry = diamnet::loadClaimableBalance(ltx, returnedBalanceID);
+    REQUIRE(entry);
+
+    auto const& claimableBalance = entry.current().data.claimableBalance();
+    REQUIRE(claimableBalance.asset == asset);
+    REQUIRE(claimableBalance.amount == amount);
+    REQUIRE(claimableBalance.balanceID == returnedBalanceID);
+    REQUIRE((entry.current().ext.v() == 1 &&
+             entry.current().ext.v1().sponsoringID));
+    REQUIRE(*entry.current().ext.v1().sponsoringID == getPublicKey());
+
+    return returnedBalanceID;
+}
+
+void
+TestAccount::claimClaimableBalance(ClaimableBalanceID const& balanceID)
+{
+    applyTx(tx({txtest::claimClaimableBalance(balanceID)}), mApp);
+
+    LedgerTxn ltx(mApp.getLedgerTxnRoot());
+    REQUIRE(!diamnet::loadClaimableBalance(ltx, balanceID));
+}
+
+ClaimableBalanceID
+TestAccount::getBalanceID(uint32_t opIndex, SequenceNumber sn)
+{
+    if (sn == 0)
+    {
+        sn = getLastSequenceNumber();
+    }
+
+    OperationID operationID;
+    operationID.type(ENVELOPE_TYPE_OP_ID);
+    operationID.id().sourceAccount = toMuxedAccount(getPublicKey());
+    operationID.id().seqNum = sn;
+    operationID.id().opNum = opIndex;
+
+    ClaimableBalanceID balanceID;
+    balanceID.v0() = sha256(xdr::xdr_to_opaque(operationID));
+
+    return balanceID;
 }
 
 int64_t
@@ -249,7 +338,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     std::unique_ptr<LedgerEntry> toAccount;
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto toAccountEntry = DiamNet::loadAccount(ltx, destination);
+        auto toAccountEntry = diamnet::loadAccount(ltx, destination);
         toAccount =
             toAccountEntry
                 ? std::make_unique<LedgerEntry>(toAccountEntry.current())
@@ -260,7 +349,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
         }
         else
         {
-            REQUIRE(DiamNet::loadAccount(ltx, getPublicKey()));
+            REQUIRE(diamnet::loadAccount(ltx, getPublicKey()));
         }
     }
 
@@ -273,7 +362,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     catch (...)
     {
         LedgerTxn ltx(mApp.getLedgerTxnRoot());
-        auto toAccountAfter = DiamNet::loadAccount(ltx, destination);
+        auto toAccountAfter = diamnet::loadAccount(ltx, destination);
         // check that the target account didn't change
         REQUIRE(!!toAccount == !!toAccountAfter);
         if (toAccount && toAccountAfter &&
@@ -286,7 +375,7 @@ TestAccount::pay(PublicKey const& destination, int64_t amount)
     }
 
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
-    auto toAccountAfter = DiamNet::loadAccount(ltx, destination);
+    auto toAccountAfter = diamnet::loadAccount(ltx, destination);
     REQUIRE(toAccount);
     REQUIRE(toAccountAfter);
 }

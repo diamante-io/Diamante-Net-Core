@@ -1,13 +1,13 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "util/asio.h"
 #include "database/Database.h"
 #include "overlay/PeerBareAddress.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/NonCopyable.h"
 #include "util/Timer.h"
 #include "xdrpp/message.h"
@@ -18,7 +18,7 @@ class Timer;
 class Meter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 typedef std::shared_ptr<SCPQuorumSet> SCPQuorumSetPtr;
@@ -27,9 +27,27 @@ class Application;
 class LoopbackPeer;
 struct OverlayMetrics;
 
-/*
- * Another peer out there that we are connected to
- */
+// Peer class represents a connected peer (either inbound or outbound)
+//
+// Connection steps:
+//   A initiates a TCP connection to B
+//   Once the connection is established, A sends HELLO(CertA,NonceA)
+//     HELLO message includes A's listening port and ledger information
+//   B now has IP and listening port of A, sends HELLO(CertB,NonceB) back
+//   A sends AUTH(signed([seq=0], keyAB))
+//     Peers use `seq` counter to prevent message replays
+//   B verifies A's AUTH message and does the following:
+//     sends AUTH(signed([seq=0], keyBA)) back
+//     sends a list of other peers to try
+//     maybe disconnects (if no connection slots are available)
+//
+// keyAB and keyBA are per-connection HMAC keys derived from non-interactive
+// ECDH on random curve25519 keys conveyed in CertA and CertB (certs signed by
+// Node Ed25519 keys) the result of which is then fed through HKDF with the
+// per-connection nonces. See PeerAuth.h.
+//
+// If any verify step fails, the peer disconnects immediately.
+
 class Peer : public std::enable_shared_from_this<Peer>,
              public NonMovableOrCopyable
 {
@@ -64,6 +82,36 @@ class Peer : public std::enable_shared_from_this<Peer>,
         WE_DROPPED_REMOTE
     };
 
+    struct PeerMetrics
+    {
+        PeerMetrics(VirtualClock::time_point connectedTime);
+        uint64_t mMessageRead;
+        uint64_t mMessageWrite;
+        uint64_t mByteRead;
+        uint64_t mByteWrite;
+
+        uint64_t mUniqueFloodBytesRecv;
+        uint64_t mDuplicateFloodBytesRecv;
+        uint64_t mUniqueFetchBytesRecv;
+        uint64_t mDuplicateFetchBytesRecv;
+
+        uint64_t mUniqueFloodMessageRecv;
+        uint64_t mDuplicateFloodMessageRecv;
+        uint64_t mUniqueFetchMessageRecv;
+        uint64_t mDuplicateFetchMessageRecv;
+
+        VirtualClock::time_point mConnectedTime;
+    };
+
+    struct TimestampedMessage
+    {
+        VirtualClock::time_point mEnqueuedTime;
+        VirtualClock::time_point mIssuedTime;
+        VirtualClock::time_point mCompletedTime;
+        void recordWriteTiming(OverlayMetrics& metrics);
+        xdr::msg_ptr mMessage;
+    };
+
   protected:
     Application& mApp;
 
@@ -85,34 +133,45 @@ class Peer : public std::enable_shared_from_this<Peer>,
 
     VirtualClock::time_point mCreationTime;
 
-    VirtualTimer mIdleTimer;
+    VirtualTimer mRecurringTimer;
     VirtualClock::time_point mLastRead;
     VirtualClock::time_point mLastWrite;
-    VirtualClock::time_point mLastEmpty;
+    VirtualClock::time_point mEnqueueTimeOfLastWrite;
+
+    static Hash pingIDfromTimePoint(VirtualClock::time_point const& tp);
+    void pingPeer();
+    void maybeProcessPingResponse(Hash const& id);
+    VirtualClock::time_point mPingSentTime;
+    std::chrono::milliseconds mLastPing;
+
+    PeerMetrics mPeerMetrics;
 
     OverlayMetrics& getOverlayMetrics();
 
     bool shouldAbort() const;
-    void recvMessage(DiamNetMessage const& msg);
+    void recvRawMessage(DiamnetMessage const& msg);
+    void recvMessage(DiamnetMessage const& msg);
     void recvMessage(AuthenticatedMessage const& msg);
     void recvMessage(xdr::msg_ptr const& xdrBytes);
 
-    virtual void recvError(DiamNetMessage const& msg);
+    virtual void recvError(DiamnetMessage const& msg);
     void updatePeerRecordAfterEcho();
     void updatePeerRecordAfterAuthentication();
-    void recvAuth(DiamNetMessage const& msg);
-    void recvDontHave(DiamNetMessage const& msg);
-    void recvGetPeers(DiamNetMessage const& msg);
+    void recvAuth(DiamnetMessage const& msg);
+    void recvDontHave(DiamnetMessage const& msg);
+    void recvGetPeers(DiamnetMessage const& msg);
     void recvHello(Hello const& elo);
-    void recvPeers(DiamNetMessage const& msg);
+    void recvPeers(DiamnetMessage const& msg);
+    void recvSurveyRequestMessage(DiamnetMessage const& msg);
+    void recvSurveyResponseMessage(DiamnetMessage const& msg);
 
-    void recvGetTxSet(DiamNetMessage const& msg);
-    void recvTxSet(DiamNetMessage const& msg);
-    void recvTransaction(DiamNetMessage const& msg);
-    void recvGetSCPQuorumSet(DiamNetMessage const& msg);
-    void recvSCPQuorumSet(DiamNetMessage const& msg);
-    void recvSCPMessage(DiamNetMessage const& msg);
-    void recvGetSCPState(DiamNetMessage const& msg);
+    void recvGetTxSet(DiamnetMessage const& msg);
+    void recvTxSet(DiamnetMessage const& msg);
+    void recvTransaction(DiamnetMessage const& msg);
+    void recvGetSCPQuorumSet(DiamnetMessage const& msg);
+    void recvSCPQuorumSet(DiamnetMessage const& msg);
+    void recvSCPMessage(DiamnetMessage const& msg);
+    void recvGetSCPState(DiamnetMessage const& msg);
 
     void sendHello();
     void sendAuth();
@@ -136,8 +195,8 @@ class Peer : public std::enable_shared_from_this<Peer>,
 
     virtual AuthCert getAuthCert();
 
-    void startIdleTimer();
-    void idleTimerExpired(asio::error_code const& error);
+    void startRecurrentTimer();
+    void recurrentTimerExpired(asio::error_code const& error);
     std::chrono::seconds getIOTimeout() const;
 
     // helper method to acknownledge that some bytes were received
@@ -152,6 +211,7 @@ class Peer : public std::enable_shared_from_this<Peer>,
         return mApp;
     }
 
+    std::string msgSummary(DiamnetMessage const& diamnetMsg);
     void sendGetTxSet(uint256 const& setID);
     void sendGetQuorumSet(uint256 const& setID);
     void sendGetPeers();
@@ -159,7 +219,7 @@ class Peer : public std::enable_shared_from_this<Peer>,
     void sendErrorAndDrop(ErrorCode error, std::string const& message,
                           DropMode dropMode);
 
-    void sendMessage(DiamNetMessage const& msg);
+    void sendMessage(DiamnetMessage const& msg, bool log = true);
 
     PeerRole
     getRole() const
@@ -176,6 +236,7 @@ class Peer : public std::enable_shared_from_this<Peer>,
         return mCreationTime;
     }
     std::chrono::seconds getLifeTime() const;
+    std::chrono::milliseconds getPing() const;
 
     PeerState
     getState() const
@@ -213,6 +274,12 @@ class Peer : public std::enable_shared_from_this<Peer>,
         return mPeerID;
     }
 
+    PeerMetrics&
+    getPeerMetrics()
+    {
+        return mPeerMetrics;
+    }
+
     std::string toString();
     virtual std::string getIP() const = 0;
 
@@ -221,7 +288,8 @@ class Peer : public std::enable_shared_from_this<Peer>,
     virtual void connectHandler(asio::error_code const& ec);
 
     virtual void
-    writeHandler(asio::error_code const& error, size_t bytes_transferred)
+    writeHandler(asio::error_code const& error, size_t bytes_transferred,
+                 size_t messages_transferred)
     {
     }
 
@@ -231,7 +299,8 @@ class Peer : public std::enable_shared_from_this<Peer>,
     }
 
     virtual void
-    readBodyHandler(asio::error_code const& error, size_t bytes_transferred)
+    readBodyHandler(asio::error_code const& error, size_t bytes_transferred,
+                    size_t expected_length)
     {
     }
 

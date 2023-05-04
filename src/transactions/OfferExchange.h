@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -14,7 +14,7 @@
 // skip this, nothing to see here!
 //
 // For background and diagram context on what the orderbook even _means_, take
-// a look at https://www.DiamNet.org/developers/guides/concepts/exchange.html
+// a look at https://www.diamnet.org/developers/guides/concepts/exchange.html
 //
 // We'll use an ASCII-art reproduction of the diagram in that document to
 // explain some aspects of the code. Here's a schematic of the order book
@@ -195,7 +195,7 @@
 // sheep-seller perspective and trying to extend an offer that crosses into the
 // wheat-seller offers)
 
-namespace DiamNet
+namespace diamnet
 {
 
 size_t const MAX_OFFERS_TO_CROSS = 1000;

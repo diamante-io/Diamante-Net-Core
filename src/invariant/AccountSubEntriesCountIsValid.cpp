@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,15 +7,14 @@
 #include "ledger/LedgerTxn.h"
 #include "main/Application.h"
 #include "util/Logging.h"
-#include "util/format.h"
+#include <fmt/format.h>
 #include <unordered_map>
 
-namespace DiamNet
+namespace diamnet
 {
 
 static int32_t
-calculateDelta(std::shared_ptr<LedgerEntry const> const& current,
-               std::shared_ptr<LedgerEntry const> const& previous)
+calculateDelta(LedgerEntry const* current, LedgerEntry const* previous)
 {
     int32_t delta = 0;
     if (current)
@@ -32,8 +31,7 @@ calculateDelta(std::shared_ptr<LedgerEntry const> const& current,
 static void
 updateChangedSubEntriesCount(
     std::unordered_map<AccountID, SubEntriesChange>& subEntriesChange,
-    std::shared_ptr<LedgerEntry const> const& current,
-    std::shared_ptr<LedgerEntry const> const& previous)
+    LedgerEntry const* current, LedgerEntry const* previous)
 {
     auto valid = current ? current : previous;
     assert(valid);
@@ -74,8 +72,29 @@ updateChangedSubEntriesCount(
             calculateDelta(current, previous);
         break;
     }
+    case CLAIMABLE_BALANCE:
+    {
+        // claimable balance is not a subentry
+        break;
+    }
     default:
         abort();
+    }
+}
+
+static void
+updateChangedSubEntriesCount(
+    std::unordered_map<AccountID, SubEntriesChange>& subEntriesChange,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genCurrent,
+    std::shared_ptr<GeneralizedLedgerEntry const> const& genPrevious)
+{
+    auto type = genCurrent ? genCurrent->type() : genPrevious->type();
+    if (type == GeneralizedLedgerEntryType::LEDGER_ENTRY)
+    {
+        auto const* current = genCurrent ? &genCurrent->ledgerEntry() : nullptr;
+        auto const* previous =
+            genPrevious ? &genPrevious->ledgerEntry() : nullptr;
+        updateChangedSubEntriesCount(subEntriesChange, current, previous);
     }
 }
 
@@ -105,9 +124,9 @@ AccountSubEntriesCountIsValid::checkOnOperationApply(
     std::unordered_map<AccountID, SubEntriesChange> subEntriesChange;
     for (auto const& entryDelta : ltxDelta.entry)
     {
-        DiamNet::updateChangedSubEntriesCount(subEntriesChange,
-                                              entryDelta.second.current,
-                                              entryDelta.second.previous);
+        updateChangedSubEntriesCount(subEntriesChange,
+                                     entryDelta.second.current,
+                                     entryDelta.second.previous);
     }
 
     for (auto const& kv : subEntriesChange)
@@ -126,10 +145,18 @@ AccountSubEntriesCountIsValid::checkOnOperationApply(
     for (auto const& entryDelta : ltxDelta.entry)
     {
         if (entryDelta.second.current)
+        {
             continue;
+        }
         assert(entryDelta.second.previous);
 
-        auto const& previous = *entryDelta.second.previous;
+        auto const& genPrevious = *entryDelta.second.previous;
+        if (genPrevious.type() != GeneralizedLedgerEntryType::LEDGER_ENTRY)
+        {
+            continue;
+        }
+
+        auto const& previous = genPrevious.ledgerEntry();
         if (previous.data.type() == ACCOUNT)
         {
             auto const& account = previous.data.account();

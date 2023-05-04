@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,25 +10,31 @@
 #include "ledger/LedgerManager.h"
 #include "work/ConditionalWork.h"
 #include "work/WorkSequence.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 DownloadApplyTxsWork::DownloadApplyTxsWork(
     Application& app, TmpDir const& downloadDir, LedgerRange const& range,
-    LedgerHeaderHistoryEntry& lastApplied)
+    LedgerHeaderHistoryEntry& lastApplied, bool waitForPublish,
+    std::shared_ptr<HistoryArchive> archive)
     : BatchWork(app, "download-apply-ledgers")
     , mRange(range)
     , mDownloadDir(downloadDir)
     , mLastApplied(lastApplied)
     , mCheckpointToQueue(
           app.getHistoryManager().checkpointContainingLedger(range.mFirst))
+    , mWaitForPublish(waitForPublish)
+    , mArchive(archive)
 {
 }
 
 std::shared_ptr<BasicWork>
 DownloadApplyTxsWork::yieldMoreWork()
 {
+    ZoneScoped;
     if (!hasNext())
     {
         throw std::runtime_error("Work has no more children to iterate over!");
@@ -39,27 +45,53 @@ DownloadApplyTxsWork::yieldMoreWork()
                           << " for checkpoint " << mCheckpointToQueue;
     FileTransferInfo ft(mDownloadDir, HISTORY_FILE_TYPE_TRANSACTIONS,
                         mCheckpointToQueue);
-    auto getAndUnzip = std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft);
+    auto getAndUnzip =
+        std::make_shared<GetAndUnzipRemoteFileWork>(mApp, ft, mArchive);
 
     auto const& hm = mApp.getHistoryManager();
-    auto low = std::max(LedgerManager::GENESIS_LEDGER_SEQ,
-                        hm.prevCheckpointLedger(mCheckpointToQueue));
-    auto high = std::min(mCheckpointToQueue, mRange.mLast);
-    auto apply = std::make_shared<ApplyCheckpointWork>(mApp, mDownloadDir,
-                                                       LedgerRange{low, high});
+    auto low = hm.firstLedgerInCheckpointContaining(mCheckpointToQueue);
+    auto high = std::min(mCheckpointToQueue, mRange.last());
+    auto apply = std::make_shared<ApplyCheckpointWork>(
+        mApp, mDownloadDir, LedgerRange::inclusive(low, high));
 
     std::vector<std::shared_ptr<BasicWork>> seq{getAndUnzip};
 
     if (mLastYieldedWork)
     {
         auto prev = mLastYieldedWork;
-        auto predicate = [prev]() {
+        bool pqFellBehind = false;
+        auto predicate = [
+            prev, pqFellBehind, waitForPublish = mWaitForPublish, &hm
+        ]() mutable
+        {
             if (!prev)
             {
                 throw std::runtime_error("Download and apply txs: related Work "
                                          "is destroyed unexpectedly");
             }
-            return prev->getState() == State::WORK_SUCCESS;
+
+            // First, ensure download work is finished
+            if (prev->getState() != State::WORK_SUCCESS)
+            {
+                return false;
+            }
+
+            // Second, check if publish queue isn't too far off
+            bool res = true;
+            if (waitForPublish)
+            {
+                auto length = hm.publishQueueLength();
+                if (length <= CatchupWork::PUBLISH_QUEUE_UNBLOCK_APPLICATION)
+                {
+                    pqFellBehind = false;
+                }
+                else if (length > CatchupWork::PUBLISH_QUEUE_MAX_SIZE)
+                {
+                    pqFellBehind = true;
+                }
+                res = !pqFellBehind;
+            }
+            return res;
         };
         seq.push_back(std::make_shared<ConditionalWork>(
             mApp, "conditional-" + apply->getName(), predicate, apply));
@@ -89,8 +121,12 @@ DownloadApplyTxsWork::resetIter()
 bool
 DownloadApplyTxsWork::hasNext() const
 {
+    if (mRange.mCount == 0)
+    {
+        return false;
+    }
     auto last =
-        mApp.getHistoryManager().checkpointContainingLedger(mRange.mLast);
+        mApp.getHistoryManager().checkpointContainingLedger(mRange.last());
     return mCheckpointToQueue <= last;
 }
 
@@ -98,5 +134,25 @@ void
 DownloadApplyTxsWork::onSuccess()
 {
     mLastApplied = mApp.getLedgerManager().getLastClosedLedgerHeader();
+}
+
+std::string
+DownloadApplyTxsWork::getStatus() const
+{
+    auto& hm = mApp.getHistoryManager();
+    auto first = hm.checkpointContainingLedger(mRange.mFirst);
+    auto last =
+        (mRange.mCount == 0 ? first
+                            : hm.checkpointContainingLedger(mRange.last()));
+
+    auto checkpointsStarted =
+        (mCheckpointToQueue - first) / hm.getCheckpointFrequency();
+    auto checkpointsApplied = checkpointsStarted - getNumWorksInBatch();
+
+    auto totalCheckpoints = (last - first) / hm.getCheckpointFrequency() + 1;
+    return fmt::format("Download & apply checkpoints: num checkpoints left to "
+                       "apply:{} ({}% done)",
+                       totalCheckpoints - checkpointsApplied,
+                       100 * checkpointsApplied / totalCheckpoints);
 }
 }

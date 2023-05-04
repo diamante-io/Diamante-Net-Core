@@ -1,4 +1,4 @@
-#include "main/DiamNetCoreVersion.h"
+#include "main/DiamnetCoreVersion.h"
 
-const std::string DiamNet_CORE_VERSION = "%%VERSION%%";
+const std::string DIAMNET_CORE_VERSION = "%%VERSION%%";
 

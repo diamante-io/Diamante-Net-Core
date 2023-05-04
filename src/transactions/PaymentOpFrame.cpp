@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,8 +9,9 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "transactions/PathPaymentStrictReceiveOpFrame.h"
 #include "transactions/TransactionUtils.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -24,14 +25,19 @@ PaymentOpFrame::PaymentOpFrame(Operation const& op, OperationResult& res,
 bool
 PaymentOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "PaymentOp apply", true);
+    std::string payStr = assetToString(mPayment.asset);
+    ZoneTextV(applyZone, payStr.c_str(), payStr.size());
+
     // if sending to self XLM directly, just mark as success, else we need at
     // least to check trustlines
     // in ledger version 2 it would work for any asset type
     auto ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+    auto destID = toAccountID(mPayment.destination);
     auto instantSuccess = ledgerVersion > 2
-                              ? mPayment.destination == getSourceID() &&
+                              ? destID == getSourceID() &&
                                     mPayment.asset.type() == ASSET_TYPE_NATIVE
-                              : mPayment.destination == getSourceID();
+                              : destID == getSourceID();
     if (instantSuccess)
     {
         innerResult().code(PAYMENT_SUCCESS);
@@ -128,16 +134,14 @@ void
 PaymentOpFrame::insertLedgerKeysToPrefetch(
     std::unordered_set<LedgerKey>& keys) const
 {
-    keys.emplace(accountKey(mPayment.destination));
+    auto destID = toAccountID(mPayment.destination);
+    keys.emplace(accountKey(destID));
 
     // Prefetch issuer for non-native assets
     if (mPayment.asset.type() != ASSET_TYPE_NATIVE)
     {
-        auto issuer = getIssuer(mPayment.asset);
-        keys.emplace(accountKey(issuer));
-
         // These are *maybe* needed; For now, we load everything
-        keys.emplace(trustlineKey(mPayment.destination, mPayment.asset));
+        keys.emplace(trustlineKey(destID, mPayment.asset));
         keys.emplace(trustlineKey(getSourceID(), mPayment.asset));
     }
 }

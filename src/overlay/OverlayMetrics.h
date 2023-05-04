@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -16,7 +16,7 @@ class Meter;
 class Counter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -26,12 +26,17 @@ struct OverlayMetrics
     OverlayMetrics(Application& app);
     medida::Meter& mMessageRead;
     medida::Meter& mMessageWrite;
+    medida::Meter& mAsyncRead;
+    medida::Meter& mAsyncWrite;
     medida::Meter& mByteRead;
     medida::Meter& mByteWrite;
     medida::Meter& mErrorRead;
     medida::Meter& mErrorWrite;
     medida::Meter& mTimeoutIdle;
     medida::Meter& mTimeoutStraggler;
+    medida::Timer& mConnectionLatencyTimer;
+
+    medida::Meter& mItemFetcherNextPeer;
 
     medida::Timer& mRecvErrorTimer;
     medida::Timer& mRecvHelloTimer;
@@ -52,6 +57,12 @@ struct OverlayMetrics
     medida::Timer& mRecvSCPNominateTimer;
     medida::Timer& mRecvSCPExternalizeTimer;
 
+    medida::Timer& mRecvSurveyRequestTimer;
+    medida::Timer& mRecvSurveyResponseTimer;
+
+    medida::Timer& mMessageDelayInWriteQueueTimer;
+    medida::Timer& mMessageDelayInAsyncWriteTimer;
+
     medida::Meter& mSendErrorMeter;
     medida::Meter& mSendHelloMeter;
     medida::Meter& mSendAuthMeter;
@@ -65,6 +76,9 @@ struct OverlayMetrics
     medida::Meter& mSendSCPQuorumSetMeter;
     medida::Meter& mSendSCPMessageSetMeter;
     medida::Meter& mSendGetSCPStateMeter;
+
+    medida::Meter& mSendSurveyRequestMeter;
+    medida::Meter& mSendSurveyResponseMeter;
 
     medida::Meter& mMessagesBroadcast;
     medida::Counter& mPendingPeersSize;

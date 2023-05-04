@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -12,8 +12,9 @@
 #include "lib/catch.hpp"
 #include "main/Application.h"
 #include "transactions/TransactionUtils.h"
+#include <numeric>
 
-namespace DiamNet
+namespace diamnet
 {
 namespace InvariantTestUtils
 {
@@ -73,7 +74,7 @@ store(Application& app, UpdateList const& apply, AbstractLedgerTxn* ltxPtr,
 
         if (entry && entry.current().data.type() == ACCOUNT)
         {
-            normalizeSigners(entry);
+            normalizeSigners(entry.current().data.account());
         }
     }
 
@@ -139,6 +140,48 @@ makeUpdateList(std::nullptr_t current, std::vector<LedgerEntry> const& previous)
                        return UpdateList::value_type{nullptr, prevPtr};
                    });
     return updates;
+}
+
+void
+normalizeSigners(AccountEntry& acc)
+{
+    // Get indexes after sorting by acc.signer keys
+    std::vector<std::size_t> indices(acc.signers.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(), [&acc](size_t i, size_t j) {
+        return acc.signers[i] < acc.signers[j];
+    });
+
+    // Sort both vectors based on indices from above. If a signer in acc.signers
+    // moves, the corresponding sponsoringID needs to move to the same index as
+    // well
+    xdr::xvector<Signer, MAX_SIGNERS> sortedSigners;
+    xdr::xvector<SponsorshipDescriptor, MAX_SIGNERS> sortedSignerSponsoringIDs;
+    bool aeIsV2 = hasAccountEntryExtV2(acc);
+
+    for (size_t index : indices)
+    {
+        sortedSigners.emplace_back(acc.signers[index]);
+        if (aeIsV2)
+        {
+            sortedSignerSponsoringIDs.emplace_back(
+                acc.ext.v1().ext.v2().signerSponsoringIDs[index]);
+        }
+    }
+
+    acc.signers.swap(sortedSigners);
+    if (aeIsV2)
+    {
+        acc.ext.v1().ext.v2().signerSponsoringIDs.swap(
+            sortedSignerSponsoringIDs);
+    }
+}
+
+int64_t
+getMinBalance(Application& app, AccountEntry const& acc)
+{
+    LedgerTxn ltx(app.getLedgerTxnRoot());
+    return getMinBalance(ltx.loadHeader().current(), acc);
 }
 }
 }

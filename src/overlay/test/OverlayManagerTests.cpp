@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,12 +19,12 @@
 
 #include <soci.h>
 
-using namespace DiamNet;
+using namespace diamnet;
 using namespace std;
 using namespace soci;
 using namespace txtest;
 
-namespace DiamNet
+namespace diamnet
 {
 
 class PeerStub : public Peer
@@ -245,19 +245,29 @@ class OverlayManagerTests
         auto c = TestAccount{*app, getAccount("c")};
         auto d = TestAccount{*app, getAccount("d")};
 
-        DiamNetMessage AtoC = a.tx({payment(b, 10)})->toDiamNetMessage();
+        DiamnetMessage AtoB = a.tx({payment(b, 10)})->toDiamnetMessage();
         auto i = 0;
         for (auto p : pm.mOutboundPeers.mAuthenticated)
+        {
             if (i++ == 2)
-                pm.recvFloodedMsg(AtoC, p.second);
-        pm.broadcastMessage(AtoC);
+            {
+                pm.recvFloodedMsg(AtoB, p.second);
+            }
+        }
+        pm.broadcastMessage(AtoB);
         std::vector<int> expected{1, 1, 0, 1, 1};
         REQUIRE(sentCounts(pm) == expected);
-        pm.broadcastMessage(AtoC);
+        pm.broadcastMessage(AtoB);
         REQUIRE(sentCounts(pm) == expected);
-        DiamNetMessage CtoD = c.tx({payment(d, 10)})->toDiamNetMessage();
+        DiamnetMessage CtoD = c.tx({payment(d, 10)})->toDiamnetMessage();
         pm.broadcastMessage(CtoD);
         std::vector<int> expectedFinal{2, 2, 1, 2, 2};
+        REQUIRE(sentCounts(pm) == expectedFinal);
+
+        // Test that we updating a flood record actually prevents re-broadcast
+        DiamnetMessage AtoC = a.tx({payment(c, 10)})->toDiamnetMessage();
+        pm.updateFloodRecord(AtoB, AtoC);
+        pm.broadcastMessage(AtoC);
         REQUIRE(sentCounts(pm) == expectedFinal);
     }
 };

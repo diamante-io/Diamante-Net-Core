@@ -1,8 +1,8 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
-#define DiamNet_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
+#define DIAMNET_CORE_REAL_TIMER_FOR_CERTAIN_NOT_JUST_VIRTUAL_TIME
 #include "process/ProcessManagerImpl.h"
 // ASIO is somewhat particular about when it gets included -- it wants to be the
 // first to include <windows.h> -- so we try to include it before everything
@@ -17,7 +17,8 @@
 #include "util/Fs.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
-#include "util/format.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <functional>
@@ -39,7 +40,7 @@
 extern char** environ;
 #endif
 
-namespace DiamNet
+namespace diamnet
 {
 
 static const asio::error_code ABORT_ERROR_CODE(asio::error::operation_aborted,
@@ -88,6 +89,7 @@ class ProcessExitEvent::Impl
     bool
     finish()
     {
+        ZoneScoped;
         if (!mOutFile.empty())
         {
             if (fs::exists(mOutFile))
@@ -191,6 +193,7 @@ ProcessManagerImpl::shutdown()
 bool
 ProcessManagerImpl::tryProcessShutdown(std::shared_ptr<ProcessExitEvent> pe)
 {
+    ZoneScoped;
     if (!pe)
     {
         CLOG(ERROR, "Process")
@@ -289,6 +292,7 @@ struct InfoHelper
     void
     prepare()
     {
+        ZoneScoped;
         if (mInitialized)
         {
             throw std::runtime_error(
@@ -331,6 +335,7 @@ struct InfoHelper
 void
 ProcessExitEvent::Impl::run()
 {
+    ZoneScoped;
     auto manager = mProcManagerImpl.lock();
     assert(manager && !manager->isShutdown());
     if (mRunning)
@@ -459,6 +464,7 @@ ProcessExitEvent::Impl::run()
 asio::error_code
 ProcessManagerImpl::handleProcessTermination(int pid, int /*status*/)
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> guard(mProcessesMutex);
     auto ec = asio::error_code();
     auto process = mProcesses.find(pid);
@@ -473,6 +479,7 @@ ProcessManagerImpl::handleProcessTermination(int pid, int /*status*/)
 bool
 ProcessManagerImpl::cleanShutdown(ProcessExitEvent& pe)
 {
+    ZoneScoped;
     if (!GenerateConsoleCtrlEvent(CTRL_C_EVENT, pe.mImpl->getProcessId()))
     {
         CLOG(WARNING, "Process")
@@ -486,6 +493,7 @@ ProcessManagerImpl::cleanShutdown(ProcessExitEvent& pe)
 bool
 ProcessManagerImpl::forceShutdown(ProcessExitEvent& pe)
 {
+    ZoneScoped;
     if (!TerminateProcess(pe.mImpl->mProcessHandle.native_handle(), 1))
     {
         CLOG(WARNING, "Process")
@@ -563,6 +571,7 @@ ProcessManagerImpl::handleSignalWait()
 asio::error_code
 ProcessManagerImpl::handleProcessTermination(int pid, int status)
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> guard(mProcessesMutex);
     auto ec = asio::error_code();
 
@@ -644,6 +653,7 @@ ProcessManagerImpl::handleProcessTermination(int pid, int status)
 bool
 ProcessManagerImpl::cleanShutdown(ProcessExitEvent& pe)
 {
+    ZoneScoped;
     const int pid = pe.mImpl->getProcessId();
     if (kill(pid, SIGINT) != 0)
     {
@@ -657,6 +667,7 @@ ProcessManagerImpl::cleanShutdown(ProcessExitEvent& pe)
 bool
 ProcessManagerImpl::forceShutdown(ProcessExitEvent& pe)
 {
+    ZoneScoped;
     const int pid = pe.mImpl->getProcessId();
     if (kill(pid, SIGKILL) != 0)
     {
@@ -680,6 +691,7 @@ split(std::string const& s)
 void
 ProcessExitEvent::Impl::run()
 {
+    ZoneScoped;
     auto manager = mProcManagerImpl.lock();
     assert(manager && !manager->isShutdown());
     if (mRunning)
@@ -742,6 +754,7 @@ ProcessExitEvent::Impl::run()
 std::weak_ptr<ProcessExitEvent>
 ProcessManagerImpl::runProcess(std::string const& cmdLine, std::string outFile)
 {
+    ZoneScoped;
     std::lock_guard<std::recursive_mutex> guard(mProcessesMutex);
     auto pe =
         std::shared_ptr<ProcessExitEvent>(new ProcessExitEvent(mIOContext));
@@ -763,6 +776,7 @@ ProcessManagerImpl::runProcess(std::string const& cmdLine, std::string outFile)
 void
 ProcessManagerImpl::maybeRunPendingProcesses()
 {
+    ZoneScoped;
     if (mIsShutdown)
     {
         return;

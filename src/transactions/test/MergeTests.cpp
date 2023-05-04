@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -18,11 +18,12 @@
 #include "test/test.h"
 #include "transactions/MergeOpFrame.h"
 #include "transactions/TransactionUtils.h"
+#include "transactions/test/SponsorshipTestUtils.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
 
-using namespace DiamNet;
-using namespace DiamNet::txtest;
+using namespace diamnet;
+using namespace diamnet::txtest;
 
 // Merging when you are holding credit
 // Merging when others are holding your credit
@@ -81,13 +82,14 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1Balance = a1.getBalance();
         auto b1Balance = b1.getBalance();
         auto createBalance = app->getLedgerManager().getLastMinBalance(1);
-        auto txFrame =
-            a1.tx({a1.op(accountMerge(b1)),
-                   b1.op(createAccount(a1.getPublicKey(), createBalance)),
-                   a1.op(accountMerge(b1))});
-        txFrame->addSignature(b1.getSecretKey());
 
         for_versions_to(5, *app, [&] {
+            auto txFrame =
+                a1.tx({a1.op(accountMerge(b1)),
+                       b1.op(createAccount(a1.getPublicKey(), createBalance)),
+                       a1.op(accountMerge(b1))});
+            txFrame->addSignature(b1.getSecretKey());
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txSUCCESS,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - txFrame->getFeeBid()},
@@ -103,6 +105,12 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions(6, 9, *app, [&] {
+            auto txFrame =
+                a1.tx({a1.op(accountMerge(b1)),
+                       b1.op(createAccount(a1.getPublicKey(), createBalance)),
+                       a1.op(accountMerge(b1))});
+            txFrame->addSignature(b1.getSecretKey());
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txSUCCESS,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - txFrame->getFeeBid()},
@@ -117,6 +125,12 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions_from(10, *app, [&]() {
+            auto txFrame =
+                a1.tx({a1.op(accountMerge(b1)),
+                       b1.op(createAccount(a1.getPublicKey(), createBalance)),
+                       a1.op(accountMerge(b1))});
+            txFrame->addSignature(b1.getSecretKey());
+
             // can't merge an account that just got created
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
@@ -133,13 +147,14 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1Balance = a1.getBalance();
         auto b1Balance = b1.getBalance();
         auto createBalance = app->getLedgerManager().getLastMinBalance(1);
-        auto txFrame =
-            a1.tx({a1.op(accountMerge(b1)),
-                   b1.op(createAccount(a1.getPublicKey(), createBalance)),
-                   b1.op(accountMerge(a1))});
-        txFrame->addSignature(b1.getSecretKey());
 
         for_all_versions(*app, [&] {
+            auto txFrame =
+                a1.tx({a1.op(accountMerge(b1)),
+                       b1.op(createAccount(a1.getPublicKey(), createBalance)),
+                       b1.op(accountMerge(a1))});
+            txFrame->addSignature(b1.getSecretKey());
+
             // a1 gets re-created so we disable sequence number checks
             applyCheck(txFrame, *app, false);
 
@@ -167,10 +182,11 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1SeqNum = a1.loadSequenceNumber();
         auto b1SeqNum = b1.loadSequenceNumber();
         auto createBalance = app->getLedgerManager().getLastMinBalance(1);
-        auto tx = a1.tx({accountMerge(b1), createAccount(b1, createBalance),
-                         accountMerge(b1)});
 
         for_versions_to(4, *app, [&] {
+            auto tx = a1.tx({accountMerge(b1), createAccount(b1, createBalance),
+                             accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - tx->getFeeBid()},
@@ -187,6 +203,9 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions(5, 7, *app, [&] {
+            auto tx = a1.tx({accountMerge(b1), createAccount(b1, createBalance),
+                             accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - tx->getFeeBid()},
@@ -203,6 +222,9 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = a1.tx({accountMerge(b1), createAccount(b1, createBalance),
+                             accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - tx->getFeeBid()},
@@ -227,11 +249,12 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1SeqNum = a1.loadSequenceNumber();
         auto b1SeqNum = b1.loadSequenceNumber();
         auto createBalance = app->getLedgerManager().getLastMinBalance(1);
-        auto tx = a1.tx({accountMerge(b1),
-                         createAccount(c1.getPublicKey(), createBalance),
-                         accountMerge(b1)});
 
         for_versions_to(7, *app, [&] {
+            auto tx = a1.tx({accountMerge(b1),
+                             createAccount(c1.getPublicKey(), createBalance),
+                             accountMerge(b1)});
+
             auto applyResult = expectedResult(txfee * 3, 3, txINTERNAL_ERROR);
             validateTxResults(tx, *app, {txfee * 3, txSUCCESS}, applyResult);
 
@@ -245,6 +268,10 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto tx = a1.tx({accountMerge(b1),
+                             createAccount(c1.getPublicKey(), createBalance),
+                             accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - tx->getFeeBid()},
@@ -267,9 +294,9 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1Balance = a1.getBalance();
         auto b1Balance = b1.getBalance();
 
-        auto txFrame = a1.tx({accountMerge(b1), accountMerge(b1)});
-
         for_versions_to(4, *app, [&] {
+            auto txFrame = a1.tx({accountMerge(b1), accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 2, 2, txSUCCESS,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - txFrame->getFeeBid()},
@@ -284,6 +311,8 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions(5, 7, *app, [&] {
+            auto txFrame = a1.tx({accountMerge(b1), accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 2, 2, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - txFrame->getFeeBid()},
@@ -296,6 +325,8 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto txFrame = a1.tx({accountMerge(b1), accountMerge(b1)});
+
             auto applyResult = expectedResult(
                 txfee * 2, 2, txFAILED,
                 {{ACCOUNT_MERGE_SUCCESS, a1Balance - txFrame->getFeeBid()},
@@ -312,11 +343,11 @@ TEST_CASE("merge", "[tx][merge]")
     {
         auto a1Balance = a1.getBalance();
 
-        auto txFrame =
-            a1.tx({accountMerge(getAccount("non-existing").getPublicKey()),
-                   accountMerge(getAccount("non-existing").getPublicKey())});
-
         for_all_versions(*app, [&] {
+            auto txFrame = a1.tx(
+                {accountMerge(getAccount("non-existing").getPublicKey()),
+                 accountMerge(getAccount("non-existing").getPublicKey())});
+
             applyCheck(txFrame, *app);
 
             auto result = MergeOpFrame::getInnerCode(
@@ -340,11 +371,12 @@ TEST_CASE("merge", "[tx][merge]")
         auto a1Balance = a1.getBalance();
         auto createBalance = app->getLedgerManager().getLastMinBalance(0);
 
-        auto txFrame = a1.tx({createAccount(c.getPublicKey(), createBalance),
-                              accountMerge(c.getPublicKey()),
-                              createAccount(d.getPublicKey(), createBalance)});
-
         for_versions_to(7, *app, [&] {
+            auto txFrame =
+                a1.tx({createAccount(c.getPublicKey(), createBalance),
+                       accountMerge(c.getPublicKey()),
+                       createAccount(d.getPublicKey(), createBalance)});
+
             auto applyResult = expectedResult(txfee * 3, 3, txINTERNAL_ERROR);
             validateTxResults(txFrame, *app, {txfee * 3, txSUCCESS},
                               applyResult);
@@ -356,6 +388,11 @@ TEST_CASE("merge", "[tx][merge]")
         });
 
         for_versions_from(8, *app, [&] {
+            auto txFrame =
+                a1.tx({createAccount(c.getPublicKey(), createBalance),
+                       accountMerge(c.getPublicKey()),
+                       createAccount(d.getPublicKey(), createBalance)});
+
             auto applyResult = expectedResult(
                 txfee * 3, 3, txFAILED,
                 {CREATE_ACCOUNT_SUCCESS,
@@ -450,7 +487,7 @@ TEST_CASE("merge", "[tx][merge]")
 
                 {
                     LedgerTxn ltx(app->getLedgerTxnRoot());
-                    REQUIRE(!DiamNet::loadAccount(ltx, a1.getPublicKey()));
+                    REQUIRE(!diamnet::loadAccount(ltx, a1.getPublicKey()));
                 }
             });
         }
@@ -467,7 +504,7 @@ TEST_CASE("merge", "[tx][merge]")
 
                 {
                     LedgerTxn ltx(app->getLedgerTxnRoot());
-                    REQUIRE(!DiamNet::loadAccount(ltx, a1.getPublicKey()));
+                    REQUIRE(!diamnet::loadAccount(ltx, a1.getPublicKey()));
                 }
 
                 int64 expectedB1Balance =
@@ -622,11 +659,159 @@ TEST_CASE("merge", "[tx][merge]")
             {
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
-                auto account = DiamNet::loadAccount(ltx, acc1.getPublicKey());
+                auto account = diamnet::loadAccount(ltx, acc1.getPublicKey());
                 auto const& ae = account.current().data.account();
                 REQUIRE(ae.balance == 2 * minBal);
                 REQUIRE(ae.balance + getBuyingLiabilities(header, account) ==
                         INT64_MAX);
+            }
+        });
+    }
+
+    SECTION("sponsorships")
+    {
+        auto sponsoringAcc = root.create("sponsoringAcc", minBalance);
+        auto addSponsoredSigner =
+            [&](TestAccount& dest, int leExt, AccountID const* sponsoringID,
+                uint32_t numSubEntries, int aeExt, uint32_t numSponsoring,
+                uint32_t numSponsored) {
+                // add sponsored signer
+                auto signer = makeSigner(getAccount("S1"), 1);
+                auto tx = transactionFrameFromOps(
+                    app->getNetworkID(), dest,
+                    {sponsoringAcc.op(beginSponsoringFutureReserves(dest)),
+                     dest.op(setOptions(setSigner(signer))),
+                     dest.op(endSponsoringFutureReserves())},
+                    {sponsoringAcc});
+
+                {
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    TransactionMeta txm(2);
+                    REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                    REQUIRE(tx->apply(*app, ltx, txm));
+
+                    checkSponsorship(ltx, dest, signer.key, 2,
+                                     &sponsoringAcc.getPublicKey());
+                    checkSponsorship(ltx, sponsoringAcc, leExt, sponsoringID,
+                                     numSubEntries, aeExt, numSponsoring,
+                                     numSponsored);
+                    ltx.commit();
+                }
+            };
+
+        for_versions_from(14, *app, [&] {
+            SECTION("with sponsored signers")
+            {
+                // add non-sponsored signer
+                a1.setOptions(setSigner(makeSigner(gateway, 5)));
+                addSponsoredSigner(a1, 0, nullptr, 0, 2, 1, 0);
+
+                a1.merge(b1);
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                checkSponsorship(ltx, sponsoringAcc, 0, nullptr, 0, 2, 0, 0);
+            }
+
+            SECTION("with sponsored account")
+            {
+                auto key = getAccount("acc1");
+                TestAccount acc1(*app, key);
+                auto tx = transactionFrameFromOps(
+                    app->getNetworkID(), sponsoringAcc,
+                    {sponsoringAcc.op(beginSponsoringFutureReserves(acc1)),
+                     sponsoringAcc.op(createAccount(acc1, txfee * 4)),
+                     acc1.op(endSponsoringFutureReserves())},
+                    {key});
+
+                {
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    TransactionMeta txm(2);
+                    REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                    REQUIRE(tx->apply(*app, ltx, txm));
+
+                    checkSponsorship(ltx, key.getPublicKey(), 1,
+                                     &sponsoringAcc.getPublicKey(), 0, 2, 0, 2);
+                    ltx.commit();
+                }
+
+                auto merge = [&](bool addSigner) {
+                    if (addSigner)
+                    {
+                        addSponsoredSigner(
+                            acc1, 0, &sponsoringAcc.getPublicKey(), 0, 2, 3, 0);
+                    }
+
+                    acc1.merge(b1);
+
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, sponsoringAcc.getPublicKey(), 0,
+                                     nullptr, 0, 2, 0, 0);
+                };
+
+                SECTION("without sponsored signer")
+                {
+                    merge(false);
+                }
+
+                SECTION("with sponsored signer")
+                {
+                    merge(true);
+                }
+            }
+
+            SECTION("is sponsor error")
+            {
+                // close ledger to increase ledger seq num so we don't hit
+                // ACCOUNT_MERGE_SEQNUM_TOO_FAR
+                closeLedgerOn(*app, 3, 1, 1, 2016);
+
+                SECTION("is sponsoring future reserves")
+                {
+                    auto tx = transactionFrameFromOps(
+                        app->getNetworkID(), a1,
+                        {a1.op(beginSponsoringFutureReserves(b1)),
+                         a1.op(accountMerge(b1)),
+                         b1.op(endSponsoringFutureReserves())},
+                        {b1});
+
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    TransactionMeta txm(2);
+                    REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                    REQUIRE(!tx->apply(*app, ltx, txm));
+                    REQUIRE(tx->getResult()
+                                .result.results()[1]
+                                .tr()
+                                .accountMergeResult()
+                                .code() == ACCOUNT_MERGE_IS_SPONSOR);
+                }
+
+                SECTION("is sponsoring reserve")
+                {
+                    auto cur1 = makeAsset(root, "CUR1");
+                    auto tx = transactionFrameFromOps(
+                        app->getNetworkID(), a1,
+                        {sponsoringAcc.op(beginSponsoringFutureReserves(a1)),
+                         a1.op(changeTrust(cur1, 1000)),
+                         a1.op(endSponsoringFutureReserves())},
+                        {sponsoringAcc});
+
+                    {
+                        LedgerTxn ltx(app->getLedgerTxnRoot());
+                        TransactionMeta txm(2);
+                        REQUIRE(tx->checkValid(ltx, 0, 0, 0));
+                        REQUIRE(tx->apply(*app, ltx, txm));
+
+                        checkSponsorship(ltx, sponsoringAcc, 0, nullptr, 0, 2,
+                                         1, 0);
+                        ltx.commit();
+                    }
+
+                    REQUIRE_THROWS_AS(sponsoringAcc.merge(b1),
+                                      ex_ACCOUNT_MERGE_IS_SPONSOR);
+
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    checkSponsorship(ltx, sponsoringAcc, 0, nullptr, 0, 2, 1,
+                                     0);
+                }
             }
         });
     }

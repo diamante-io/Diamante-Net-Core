@@ -1,4 +1,4 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,8 +11,9 @@
 #include "transactions/SignatureUtils.h"
 #include "util/Algoritm.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 SignatureChecker::SignatureChecker(
@@ -54,7 +55,6 @@ SignatureChecker::checkSignature(AccountID const& accountID,
     {
         if (signerKey.key.preAuthTx() == mContentsHash)
         {
-            mUsedOneTimeSignerKeys[accountID].insert(signerKey.key);
             auto w = signerKey.weight;
             if (mProtocolVersion > 9 && w > UINT8_MAX)
             {
@@ -140,11 +140,5 @@ SignatureChecker::checkAllSignaturesUsed() const
         }
     }
     return true;
-}
-
-const UsedOneTimeSignerKeys&
-SignatureChecker::usedOneTimeSignerKeys() const
-{
-    return mUsedOneTimeSignerKeys;
 }
 };

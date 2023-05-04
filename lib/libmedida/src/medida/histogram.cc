@@ -4,16 +4,21 @@
 
 #include "medida/histogram.h"
 
-#include <atomic>
 #include <cmath>
 #include <mutex>
+#include <algorithm>
 
 #include "medida/stats/exp_decay_sample.h"
 #include "medida/stats/uniform_sample.h"
+#include "medida/stats/sliding_window_sample.h"
 
 namespace medida {
 
 static const double kDefaultAlpha = 0.015;
+
+// Sliding windows are 5 minutes by default. They also respect the sample-size
+// limit by stochastic rate-limiting of additions.
+static const std::chrono::seconds kDefaultWindowTime = std::chrono::seconds(5 * 60);
 
 class Histogram::Impl {
  public:
@@ -33,13 +38,13 @@ class Histogram::Impl {
  private:
   static const std::uint64_t kDefaultSampleSize = 1028;
   std::unique_ptr<stats::Sample> sample_;
-  std::atomic<std::int64_t> min_;
-  std::atomic<std::int64_t> max_;
-  std::atomic<std::int64_t> sum_;
-  std::atomic<std::uint64_t> count_;
+  double min_;
+  double max_;
+  double sum_;
+  std::uint64_t count_;
   double variance_m_;
   double variance_s_;
-  mutable std::mutex variance_mutex_;
+  mutable std::mutex mutex_;
 };
 
 
@@ -114,6 +119,9 @@ Histogram::Impl::Impl(SampleType sample_type) {
     sample_ = std::unique_ptr<stats::Sample>(new stats::UniformSample(kDefaultSampleSize));
   } else if (sample_type == kBiased) {
     sample_ = std::unique_ptr<stats::Sample>(new stats::ExpDecaySample(kDefaultSampleSize, kDefaultAlpha));
+  } else if (sample_type == kSliding) {
+    sample_ = std::unique_ptr<stats::Sample>(new stats::SlidingWindowSample(kDefaultSampleSize,
+                                                                            kDefaultWindowTime));
   } else {
       throw std::invalid_argument("invalid sample_type");
   }
@@ -137,32 +145,37 @@ void Histogram::Impl::Clear() {
 
 
 std::uint64_t Histogram::Impl::count() const {
+  std::lock_guard<std::mutex> lock {mutex_};
   return count_;
 }
 
 
 double Histogram::Impl::sum() const {
-  return sum_.load();
+  std::lock_guard<std::mutex> lock {mutex_};
+  return sum_;
 }
 
 
 double Histogram::Impl::max() const {
+  std::lock_guard<std::mutex> lock {mutex_};
   if (count_ > 0) {
-    return max_.load();
+    return max_;
   }
   return 0.0;
 }
 
 
 double Histogram::Impl::min() const {
+  std::lock_guard<std::mutex> lock {mutex_};
   if (count_ > 0) {
-    return min_.load();
+    return min_;
   }
   return 0.0;
 }
 
 
 double Histogram::Impl::mean() const {
+  std::lock_guard<std::mutex> lock {mutex_};
   if (count_ > 0) {
     return sum_ / (double)count_;
   }
@@ -171,8 +184,10 @@ double Histogram::Impl::mean() const {
 
 
 double Histogram::Impl::std_dev() const {
+  double var = variance();
+  std::lock_guard<std::mutex> lock {mutex_};
   if (count_ > 0) {
-    return std::sqrt(variance());
+    return std::sqrt(var);
   }
   return 0.0;
 }
@@ -181,7 +196,7 @@ double Histogram::Impl::std_dev() const {
 double Histogram::Impl::variance() const {
   auto c = count();
   if (c > 1) {
-    std::lock_guard<std::mutex> lock {variance_mutex_};
+    std::lock_guard<std::mutex> lock {mutex_};
     return variance_s_ / (c - 1.0);
   }
   return 0.0;
@@ -195,29 +210,24 @@ stats::Snapshot Histogram::Impl::GetSnapshot() const {
 
 void Histogram::Impl::Update(std::int64_t value) {
   sample_->Update(value);
+  std::lock_guard<std::mutex> lock {mutex_};
+  double dval = (double)value;
   if (count_ > 0) {
-    auto cur_max = max_.load();
-    auto cur_min = min_.load();
-    while (cur_max < value && !max_.compare_exchange_weak(cur_max, value)) {
-      // Spin until max is updated
-    }
-    while(cur_min > value && !min_.compare_exchange_weak(cur_min, value)) {
-      // Spin until min is updated
-    }
+    max_ = std::max(max_, dval);
+    min_ = std::min(min_, dval);
   } else {
-    max_ = value;
-    min_ = value;
+    max_ = dval;
+    min_ = dval;
   }
-  sum_ += value;
-  auto new_count = ++count_;
-  std::lock_guard<std::mutex> lock {variance_mutex_};
-  auto old_vm = variance_m_;
-  auto old_vs = variance_s_;
+  sum_ += dval;
+  double new_count = (double)++count_;
+  double old_vm = variance_m_;
+  double old_vs = variance_s_;
   if (new_count > 1) {
-    variance_m_ = old_vm + (value - old_vm) / new_count;
-    variance_s_ = old_vs + (value - old_vm) * (value - variance_m_);
+    variance_m_ = old_vm + (dval - old_vm) / new_count;
+    variance_s_ = old_vs + (dval - old_vm) * (dval - variance_m_);
   } else {
-    variance_m_ = value;
+    variance_m_ = dval;
   }
 }
 

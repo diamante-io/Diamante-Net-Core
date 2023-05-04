@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,10 +13,11 @@
 #include "util/Logging.h"
 #include "util/XDROperators.h"
 #include "xdrpp/marshal.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
-Floodgate::FloodRecord::FloodRecord(DiamNetMessage const& msg, uint32_t ledger,
+Floodgate::FloodRecord::FloodRecord(DiamnetMessage const& msg, uint32_t ledger,
                                     Peer::pointer peer)
     : mLedgerSeq(ledger), mMessage(msg)
 {
@@ -38,12 +39,13 @@ Floodgate::Floodgate(Application& app)
 void
 Floodgate::clearBelow(uint32_t currentLedger)
 {
+    ZoneScoped;
     for (auto it = mFloodMap.cbegin(); it != mFloodMap.cend();)
     {
         // give one ledger of leeway
         if (it->second->mLedgerSeq + 10 < currentLedger)
         {
-            mFloodMap.erase(it++);
+            it = mFloodMap.erase(it);
         }
         else
         {
@@ -54,19 +56,22 @@ Floodgate::clearBelow(uint32_t currentLedger)
 }
 
 bool
-Floodgate::addRecord(DiamNetMessage const& msg, Peer::pointer peer)
+Floodgate::addRecord(DiamnetMessage const& msg, Peer::pointer peer, Hash& index)
 {
+    ZoneScoped;
+    index = sha256(xdr::xdr_to_opaque(msg));
     if (mShuttingDown)
     {
         return false;
     }
-    Hash index = sha256(xdr::xdr_to_opaque(msg));
     auto result = mFloodMap.find(index);
     if (result == mFloodMap.end())
     { // we have never seen this message
         mFloodMap[index] = std::make_shared<FloodRecord>(
             msg, mApp.getHerder().getCurrentLedgerSeq(), peer);
         mFloodMapSize.set_count(mFloodMap.size());
+        TracyPlot("overlay.memory.flood-known",
+                  static_cast<int64_t>(mFloodMap.size()));
         return true;
     }
     else
@@ -78,37 +83,44 @@ Floodgate::addRecord(DiamNetMessage const& msg, Peer::pointer peer)
 
 // send message to anyone you haven't gotten it from
 void
-Floodgate::broadcast(DiamNetMessage const& msg, bool force)
+Floodgate::broadcast(DiamnetMessage const& msg, bool force)
 {
+    ZoneScoped;
     if (mShuttingDown)
     {
         return;
     }
     Hash index = sha256(xdr::xdr_to_opaque(msg));
-    CLOG(TRACE, "Overlay") << "broadcast " << hexAbbrev(index);
 
+    FloodRecord::pointer fr;
     auto result = mFloodMap.find(index);
     if (result == mFloodMap.end() || force)
-    { // no one has sent us this message
-        FloodRecord::pointer record = std::make_shared<FloodRecord>(
+    { // no one has sent us this message / start from scratch
+        fr = std::make_shared<FloodRecord>(
             msg, mApp.getHerder().getCurrentLedgerSeq(), Peer::pointer());
-        result = mFloodMap.insert(std::make_pair(index, record)).first;
+        mFloodMap[index] = fr;
         mFloodMapSize.set_count(mFloodMap.size());
     }
+    else
+    {
+        fr = result->second;
+    }
     // send it to people that haven't sent it to us
-    auto& peersTold = result->second->mPeersTold;
+    auto& peersTold = fr->mPeersTold;
 
     // make a copy, in case peers gets modified
     auto peers = mApp.getOverlayManager().getAuthenticatedPeers();
 
+    bool log = true;
     for (auto peer : peers)
     {
         assert(peer.second->isAuthenticated());
         if (peersTold.find(peer.second->toString()) == peersTold.end())
         {
             mSendFromBroadcast.Mark();
-            peer.second->sendMessage(msg);
+            peer.second->sendMessage(msg, log);
             peersTold.insert(peer.second->toString());
+            log = false;
         }
     }
     CLOG(TRACE, "Overlay") << "broadcast " << hexAbbrev(index) << " told "
@@ -140,5 +152,30 @@ Floodgate::shutdown()
 {
     mShuttingDown = true;
     mFloodMap.clear();
+}
+
+void
+Floodgate::forgetRecord(Hash const& h)
+{
+    mFloodMap.erase(h);
+}
+
+void
+Floodgate::updateRecord(DiamnetMessage const& oldMsg,
+                        DiamnetMessage const& newMsg)
+{
+    ZoneScoped;
+    Hash oldHash = sha256(xdr::xdr_to_opaque(oldMsg));
+    Hash newHash = sha256(xdr::xdr_to_opaque(newMsg));
+
+    auto oldIter = mFloodMap.find(oldHash);
+    if (oldIter != mFloodMap.end())
+    {
+        auto record = oldIter->second;
+        record->mMessage = newMsg;
+
+        mFloodMap.erase(oldIter);
+        mFloodMap.emplace(newHash, record);
+    }
 }
 }

@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,7 +15,7 @@ namespace
 // Implementation of QBitSet
 ////////////////////////////////////////////////////////////////////////////////
 
-using namespace DiamNet;
+using namespace diamnet;
 struct QBitSet;
 using QGraph = std::vector<QBitSet>;
 
@@ -136,7 +136,8 @@ TarjanSCCCalculator::scc(size_t i)
 size_t
 MinQuorumEnumerator::pickSplitNode() const
 {
-    std::vector<size_t> inDegrees(mQic.mGraph.size(), 0);
+    std::vector<size_t>& inDegrees = mQic.mInDegrees;
+    inDegrees.assign(mQic.mGraph.size(), 0);
     assert(!mRemaining.empty());
     size_t maxNode = mRemaining.max();
     size_t maxCount = 1;
@@ -181,15 +182,16 @@ MinQuorumEnumerator::pickSplitNode() const
 size_t
 MinQuorumEnumerator::maxCommit() const
 {
-    return (mQic.mMaxSCC.count() / 2) + 1;
+    return (mScanSCC.count() / 2) + 1;
 }
 
 MinQuorumEnumerator::MinQuorumEnumerator(
-    BitSet const& committed, BitSet const& remaining,
+    BitSet const& committed, BitSet const& remaining, BitSet const& scanSCC,
     QuorumIntersectionCheckerImpl const& qic)
     : mCommitted(committed)
     , mRemaining(remaining)
     , mPerimeter(committed | remaining)
+    , mScanSCC(scanSCC)
     , mQic(qic)
 {
 }
@@ -197,6 +199,11 @@ MinQuorumEnumerator::MinQuorumEnumerator(
 bool
 MinQuorumEnumerator::anyMinQuorumHasDisjointQuorum()
 {
+    if (mQic.mInterruptFlag)
+    {
+        throw QuorumIntersectionChecker::InterruptedException();
+    }
+
     mQic.mStats.mCallsStarted++;
 
     // Emit a progress meter every million calls.
@@ -245,7 +252,7 @@ MinQuorumEnumerator::anyMinQuorumHasDisjointQuorum()
                     << "early exit 3.1: minimal quorum=" << committedQuorum;
             }
             mQic.mStats.mEarlyExit31s++;
-            return mQic.hasDisjointQuorum(committedQuorum);
+            return hasDisjointQuorum(committedQuorum);
         }
         if (mQic.mLogTrace)
         {
@@ -308,7 +315,8 @@ MinQuorumEnumerator::anyMinQuorumHasDisjointQuorum()
         CLOG(TRACE, "SCP") << "recursing into subproblems, split=" << split;
     }
     mRemaining.unset(split);
-    MinQuorumEnumerator childExcludingSplit(mCommitted, mRemaining, mQic);
+    MinQuorumEnumerator childExcludingSplit(mCommitted, mRemaining, mScanSCC,
+                                            mQic);
     mQic.mStats.mFirstRecursionsTaken++;
     if (childExcludingSplit.anyMinQuorumHasDisjointQuorum())
     {
@@ -320,7 +328,8 @@ MinQuorumEnumerator::anyMinQuorumHasDisjointQuorum()
         return true;
     }
     mCommitted.set(split);
-    MinQuorumEnumerator childIncludingSplit(mCommitted, mRemaining, mQic);
+    MinQuorumEnumerator childIncludingSplit(mCommitted, mRemaining, mScanSCC,
+                                            mQic);
     mQic.mStats.mSecondRecursionsTaken++;
     return childIncludingSplit.anyMinQuorumHasDisjointQuorum();
 }
@@ -330,11 +339,13 @@ MinQuorumEnumerator::anyMinQuorumHasDisjointQuorum()
 ////////////////////////////////////////////////////////////////////////////////
 
 QuorumIntersectionCheckerImpl::QuorumIntersectionCheckerImpl(
-    QuorumTracker::QuorumMap const& qmap, Config const& cfg, bool quiet)
+    QuorumTracker::QuorumMap const& qmap, Config const& cfg,
+    std::atomic<bool>& interruptFlag, bool quiet)
     : mCfg(cfg)
     , mLogTrace(Logging::logTrace("SCP"))
     , mQuiet(quiet)
     , mTSC(mGraph)
+    , mInterruptFlag(interruptFlag)
 {
     buildGraph(qmap);
     buildSCCs();
@@ -359,7 +370,7 @@ QuorumIntersectionCheckerImpl::Stats::log() const
     size_t exits = (mEarlyExit1s + mEarlyExit21s + mEarlyExit22s +
                     mEarlyExit31s + mEarlyExit32s);
     CLOG(DEBUG, "SCP") << "[Nodes: " << mTotalNodes << ", SCCs: " << mNumSCCs
-                       << ", MaxSCC: " << mMaxSCC
+                       << ", ScanSCC: " << mScanSCCSize
                        << ", MaxQs:" << mMaxQuorumsSeen
                        << ", MinQs:" << mMinQuorumsSeen
                        << ", Calls:" << mCallsStarted
@@ -563,19 +574,19 @@ QuorumIntersectionCheckerImpl::noteFoundDisjointQuorums(
 }
 
 bool
-QuorumIntersectionCheckerImpl::hasDisjointQuorum(BitSet const& nodes) const
+MinQuorumEnumerator::hasDisjointQuorum(BitSet const& nodes) const
 {
-    BitSet disj = contractToMaximalQuorum(mMaxSCC - nodes);
+    BitSet disj = mQic.contractToMaximalQuorum(mScanSCC - nodes);
     if (disj)
     {
-        noteFoundDisjointQuorums(nodes, disj);
+        mQic.noteFoundDisjointQuorums(nodes, disj);
     }
     else
     {
-        if (mLogTrace)
+        if (mQic.mLogTrace)
         {
             CLOG(TRACE, "SCP")
-                << "no quorum in complement  = " << (mMaxSCC - nodes);
+                << "no quorum in complement  = " << (mScanSCC - nodes);
         }
     }
     return disj;
@@ -641,7 +652,7 @@ QuorumIntersectionCheckerImpl::buildGraph(QuorumTracker::QuorumMap const& qmap)
 
     for (auto const& pair : qmap)
     {
-        if (pair.second)
+        if (pair.second.mQuorumSet)
         {
             size_t n = mBitNumPubKeys.size();
             mPubKeyBitNums.insert(std::make_pair(pair.first, n));
@@ -656,13 +667,13 @@ QuorumIntersectionCheckerImpl::buildGraph(QuorumTracker::QuorumMap const& qmap)
 
     for (auto const& pair : qmap)
     {
-        if (pair.second)
+        if (pair.second.mQuorumSet)
         {
             auto i = mPubKeyBitNums.find(pair.first);
             assert(i != mPubKeyBitNums.end());
             auto nodeNum = i->second;
             assert(nodeNum == mGraph.size());
-            auto qb = convertSCPQuorumSet(*pair.second);
+            auto qb = convertSCPQuorumSet(*(pair.second.mQuorumSet));
             qb.log();
             mGraph.emplace_back(qb);
         }
@@ -674,18 +685,7 @@ void
 QuorumIntersectionCheckerImpl::buildSCCs()
 {
     mTSC.calculateSCCs();
-    mMaxSCC.clear();
-    for (auto const& scc : mTSC.mSCCs)
-    {
-        if (scc.count() > mMaxSCC.count())
-        {
-            mMaxSCC = scc;
-        }
-        CLOG(DEBUG, "SCP") << "Found " << scc.count() << "-node SCC " << scc;
-    }
-    CLOG(DEBUG, "SCP") << "Maximal SCC is " << mMaxSCC;
     mStats.mNumSCCs = mTSC.mSCCs.size();
-    mStats.mMaxSCC = mMaxSCC.count();
 }
 
 std::string
@@ -697,68 +697,74 @@ QuorumIntersectionCheckerImpl::nodeName(size_t node) const
 bool
 QuorumIntersectionCheckerImpl::networkEnjoysQuorumIntersection() const
 {
-    // First stage: check the graph-level SCCs for disjoint quorums,
-    // and filter out nodes that aren't in the main SCC.
-    bool foundDisjoint = false;
     size_t nNodes = mPubKeyBitNums.size();
     if (!mQuiet)
     {
         CLOG(INFO, "SCP") << "Calculating " << nNodes
                           << "-node network quorum intersection";
     }
+
+    // First stage: do a single pass over the SCCs searching for one with a
+    // quorum (on which to focus second stage enumeration); also note and bypass
+    // second stage exhaustive scan if there are _two_ such SCCs with quorums,
+    // as they necessarily contain disjoint min-quorums.
+    bool foundDisjoint = false;
+    BitSet scanSCC;
     for (auto const& scc : mTSC.mSCCs)
     {
-        if (scc == mMaxSCC)
+        if (auto q = contractToMaximalQuorum(scc))
         {
-            continue;
-        }
-        if (auto other = contractToMaximalQuorum(scc))
-        {
-            CLOG(DEBUG, "SCP") << "found SCC-disjoint quorum = " << other;
-            CLOG(DEBUG, "SCP") << "disjoint from quorum = "
-                               << contractToMaximalQuorum(mMaxSCC);
-            noteFoundDisjointQuorums(contractToMaximalQuorum(mMaxSCC), other);
-            foundDisjoint = true;
-            break;
+            if (scanSCC.empty())
+            {
+                // This is the first SCC with a quorum, we'll make it the
+                // scan SCC.
+                scanSCC = scc;
+                mStats.mScanSCCSize = scanSCC.count();
+                CLOG(DEBUG, "SCP") << "Found scan SCC: " << scc;
+                CLOG(DEBUG, "SCP") << "Containing quorum: " << q;
+                for (size_t i = 0; scanSCC.nextSet(i); ++i)
+                {
+                    CLOG(DEBUG, "SCP") << "SCC node to scan: " << nodeName(i);
+                }
+            }
+            else
+            {
+                CLOG(DEBUG, "SCP") << "Found extra SCC: " << scc;
+                CLOG(DEBUG, "SCP") << "Containing quorum: " << q;
+                noteFoundDisjointQuorums(contractToMaximalQuorum(scanSCC), q);
+                foundDisjoint = true;
+                break;
+            }
         }
         else
         {
             CLOG(DEBUG, "SCP") << "SCC contains no quorums = " << scc;
             for (size_t i = 0; scc.nextSet(i); ++i)
             {
-                CLOG(DEBUG, "SCP") << "Node outside main SCC: " << nodeName(i);
+                CLOG(DEBUG, "SCP") << "Node outside scan-SCC: " << nodeName(i);
             }
         }
     }
-    for (size_t i = 0; mMaxSCC.nextSet(i); ++i)
-    {
-        CLOG(DEBUG, "SCP") << "Main SCC node: " << nodeName(i);
-    }
 
-    auto q = contractToMaximalQuorum(mMaxSCC);
-    if (q)
-    {
-        CLOG(DEBUG, "SCP") << "Maximal main SCC quorum: " << q;
-    }
-    else
+    if (scanSCC.empty())
     {
         // We vacuously "enjoy quorum intersection" if there are no quorums,
         // though this is probably enough of a potential problem itself that
         // it's worth warning about.
         if (!mQuiet)
         {
-            CLOG(WARNING, "SCP") << "No quorum found in transitive closure "
+            CLOG(WARNING, "SCP") << "No quorums found in any SCC "
                                     "(possible network halt)";
         }
         return true;
     }
 
-    // Second stage: scan the main SCC powerset, potentially expensive.
+    // Second stage: scan the scan-SCC powerset, potentially expensive.
     if (!foundDisjoint)
     {
         BitSet committed;
-        BitSet remaining = mMaxSCC;
-        MinQuorumEnumerator mqe(committed, remaining, *this);
+        BitSet remaining = scanSCC;
+        MinQuorumEnumerator mqe(committed, remaining, scanSCC, *this);
         foundDisjoint = mqe.anyMinQuorumHasDisjointQuorum();
         mStats.log();
     }
@@ -835,18 +841,21 @@ groupString(Config const& cfg, std::set<PublicKey> const& group)
 }
 }
 
-namespace DiamNet
+namespace diamnet
 {
 std::shared_ptr<QuorumIntersectionChecker>
 QuorumIntersectionChecker::create(QuorumTracker::QuorumMap const& qmap,
-                                  Config const& cfg, bool quiet)
+                                  Config const& cfg,
+                                  std::atomic<bool>& interruptFlag, bool quiet)
 {
-    return std::make_shared<QuorumIntersectionCheckerImpl>(qmap, cfg, quiet);
+    return std::make_shared<QuorumIntersectionCheckerImpl>(
+        qmap, cfg, interruptFlag, quiet);
 }
 
 std::set<std::set<PublicKey>>
 QuorumIntersectionChecker::getIntersectionCriticalGroups(
-    DiamNet::QuorumTracker::QuorumMap const& qmap, DiamNet::Config const& cfg)
+    diamnet::QuorumTracker::QuorumMap const& qmap, diamnet::Config const& cfg,
+    std::atomic<bool>& interruptFlag)
 {
     // We're going to search for "intersection-critical" groups, by considering
     // each SCPQuorumSet S that (a) has no innerSets of its own and (b) occurs
@@ -861,7 +870,7 @@ QuorumIntersectionChecker::getIntersectionCriticalGroups(
     // validators it has to choose from has two innerSets: one that's the group
     // itself, and one that contains everyone that depends on any member of the
     // group. In other words the group will "go along with anyone". This is an
-    // overapproximation of "bad configutation": the group's still online and
+    // overapproximation of "bad configuration": the group's still online and
     // behaving correctly, but someone really messed up its configuration.
     //
     // This is a less-dramatic (and more likely) behaviour than true Byzantine
@@ -879,13 +888,13 @@ QuorumIntersectionChecker::getIntersectionCriticalGroups(
 
     for (auto const& k : qmap)
     {
-        if (k.second)
+        if (k.second.mQuorumSet)
         {
-            findCriticalityCandidates(*(k.second), candidates, true);
+            findCriticalityCandidates(*(k.second.mQuorumSet), candidates, true);
         }
     }
 
-    CLOG(INFO, "SCP") << "Examininng " << candidates.size()
+    CLOG(INFO, "SCP") << "Examining " << candidates.size()
                       << " node groups for intersection-criticality";
 
     for (auto const& group : candidates)
@@ -908,8 +917,8 @@ QuorumIntersectionChecker::getIntersectionCriticalGroups(
         {
             for (auto const& d : qmap)
             {
-                if (group.find(d.first) == group.end() && d.second &&
-                    pointsToCandidate(*d.second, candidate))
+                if (group.find(d.first) == group.end() && d.second.mQuorumSet &&
+                    pointsToCandidate(*(d.second.mQuorumSet), candidate))
                 {
                     pointsToGroup.insert(d.first);
                 }
@@ -928,12 +937,13 @@ QuorumIntersectionChecker::getIntersectionCriticalGroups(
         // Install the fickle qset in every member of the group.
         for (auto const& candidate : group)
         {
-            test_qmap[candidate] = fickleQSet;
+            test_qmap[candidate] = QuorumTracker::NodeInfo{fickleQSet, 0};
         }
 
         // Check to see if this modified config is vulnerable to splitting.
-        auto checker = QuorumIntersectionChecker::create(test_qmap, cfg,
-                                                         /*quiet=*/true);
+        auto checker =
+            QuorumIntersectionChecker::create(test_qmap, cfg, interruptFlag,
+                                              /*quiet=*/true);
         if (checker->networkEnjoysQuorumIntersection())
         {
             CLOG(DEBUG, "SCP") << "group is not intersection-critical: "

@@ -1,12 +1,13 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "util/Fs.h"
 #include "crypto/Hex.h"
-#include "lib/util/format.h"
 #include "util/FileSystemException.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
 #include <map>
 #include <regex>
@@ -14,7 +15,11 @@
 
 #ifdef _WIN32
 #include <direct.h>
-#include <filesystem>
+
+// Latest version of VC++ complains without this define (confused by C++ 17)
+#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING 1
+#include <experimental/filesystem>
+
 #include <io.h>
 #else
 #include <dirent.h>
@@ -24,7 +29,7 @@
 
 #include <cstdio>
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace fs
@@ -40,6 +45,7 @@ static std::map<std::string, HANDLE> lockMap;
 void
 lockFile(std::string const& path)
 {
+    ZoneScoped;
     std::ostringstream errmsg;
 
     if (lockMap.find(path) != lockMap.end())
@@ -66,6 +72,7 @@ lockFile(std::string const& path)
 void
 unlockFile(std::string const& path)
 {
+    ZoneScoped;
     auto it = lockMap.find(path);
     if (it != lockMap.end())
     {
@@ -79,20 +86,9 @@ unlockFile(std::string const& path)
 }
 
 void
-flushFileChanges(FILE* fp)
+flushFileChanges(native_handle_t fh)
 {
-    int fd = _fileno(fp);
-    if (fd == -1)
-    {
-        FileSystemException::failWithErrno(
-            "fs::flushFileChanges() failed on _fileno(): ");
-    }
-    HANDLE fh = (HANDLE)_get_osfhandle(fd);
-    if (fh == INVALID_HANDLE_VALUE)
-    {
-        FileSystemException::failWithErrno(
-            "fs::flushFileChanges() failed on _get_osfhandle(): ");
-    }
+    ZoneScoped;
     if (FlushFileBuffers(fh) == FALSE)
     {
         FileSystemException::failWithGetLastError(
@@ -101,9 +97,39 @@ flushFileChanges(FILE* fp)
 }
 
 bool
+shouldUseRandomAccessHandle(std::string const& path)
+{
+    // Named pipes use stream mode, everything else uses random access.
+    return path.find("\\\\.\\pipe\\") != 0;
+}
+
+native_handle_t
+openFileToWrite(std::string const& path)
+{
+    ZoneScoped;
+    HANDLE h = ::CreateFile(
+        path.c_str(),
+        GENERIC_READ | GENERIC_WRITE,                   // DesiredAccess
+        FILE_SHARE_READ | FILE_SHARE_WRITE,             // ShareMode
+        NULL,                                           // SecurityAttributes
+        CREATE_ALWAYS,                                  // CreationDisposition
+        (FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED), // FlagsAndAttributes
+        NULL);                                          // TemplateFile
+
+    if (h == INVALID_HANDLE_VALUE)
+    {
+        FileSystemException::failWithGetLastError(
+            std::string("fs::openFileToWrite() failed on CreateFile(\"") +
+            path + std::string("\"): "));
+    }
+    return h;
+}
+
+bool
 durableRename(std::string const& src, std::string const& dst,
               std::string const& dir)
 {
+    ZoneScoped;
     if (MoveFileExA(src.c_str(), dst.c_str(), MOVEFILE_WRITE_THROUGH) == 0)
     {
         FileSystemException::failWithGetLastError(
@@ -115,6 +141,7 @@ durableRename(std::string const& src, std::string const& dst,
 bool
 exists(std::string const& name)
 {
+    ZoneScoped;
     if (name.empty())
         return false;
 
@@ -137,6 +164,7 @@ exists(std::string const& name)
 bool
 mkdir(std::string const& name)
 {
+    ZoneScoped;
     bool b = _mkdir(name.c_str()) == 0;
     CLOG(DEBUG, "Fs") << (b ? "created dir " : "failed to create dir ") << name;
     return b;
@@ -145,23 +173,16 @@ mkdir(std::string const& name)
 void
 deltree(std::string const& d)
 {
-    SHFILEOPSTRUCT s = {0};
-    std::string from = d;
-    from.push_back('\0');
-    from.push_back('\0');
-    s.wFunc = FO_DELETE;
-    s.pFrom = from.data();
-    s.fFlags = FOF_NO_UI;
-    if (SHFileOperation(&s) != 0)
-    {
-        throw FileSystemException("SHFileOperation failed in deltree");
-    }
+    ZoneScoped;
+    namespace fs = std::experimental::filesystem;
+    fs::remove_all(fs::path(d));
 }
 
 std::vector<std::string>
 findfiles(std::string const& p,
           std::function<bool(std::string const& name)> predicate)
 {
+    ZoneScoped;
     using namespace std;
     namespace fs = std::experimental::filesystem;
 
@@ -194,6 +215,7 @@ static std::map<std::string, int> lockMap;
 void
 lockFile(std::string const& path)
 {
+    ZoneScoped;
     std::ostringstream errmsg;
 
     if (lockMap.find(path) != lockMap.end())
@@ -225,6 +247,7 @@ lockFile(std::string const& path)
 void
 unlockFile(std::string const& path)
 {
+    ZoneScoped;
     auto it = lockMap.find(path);
     if (it != lockMap.end())
     {
@@ -239,42 +262,78 @@ unlockFile(std::string const& path)
 }
 
 void
-flushFileChanges(FILE* fp)
+flushFileChanges(native_handle_t fd)
 {
-    int fd = fileno(fp);
-    if (fd == -1)
+    ZoneScoped;
+    while (fsync(fd) == -1)
     {
-        FileSystemException::failWithErrno(
-            "fs::flushFileChanges() failed on fileno(): ");
-    }
-    if (fsync(fd) == -1)
-    {
+        if (errno == EINTR)
+        {
+            continue;
+        }
         FileSystemException::failWithErrno(
             "fs::flushFileChanges() failed on fsync(): ");
     }
 }
 
 bool
+shouldUseRandomAccessHandle(std::string const& path)
+{
+    return false;
+}
+
+native_handle_t
+openFileToWrite(std::string const& path)
+{
+    ZoneScoped;
+    int fd;
+    while ((fd = ::open(path.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0644)) ==
+           -1)
+    {
+        if (errno == EINTR)
+        {
+            continue;
+        }
+        FileSystemException::failWithErrno(std::string("fs::openFile(\"") +
+                                           path + "\") failed: ");
+    }
+    return fd;
+}
+
+bool
 durableRename(std::string const& src, std::string const& dst,
               std::string const& dir)
 {
+    ZoneScoped;
     if (rename(src.c_str(), dst.c_str()) != 0)
     {
         return false;
     }
-    auto dfd = open(dir.c_str(), O_RDONLY);
-    if (dfd == -1)
+    int dfd;
+    while ((dfd = open(dir.c_str(), O_RDONLY)) == -1)
     {
+        if (errno == EINTR)
+        {
+            continue;
+        }
         FileSystemException::failWithErrno(
             std::string("Failed to open directory ") + dir + " :");
     }
-    if (fsync(dfd) == -1)
+    while (fsync(dfd) == -1)
     {
+        if (errno == EINTR)
+        {
+            continue;
+        }
         FileSystemException::failWithErrno(
             std::string("Failed to fsync directory ") + dir + " :");
     }
-    if (close(dfd) == -1)
+    while (close(dfd) == -1)
     {
+        if (errno == EINTR)
+        {
+            continue;
+        }
         FileSystemException::failWithErrno(
             std::string("Failed to close directory ") + dir + " :");
     }
@@ -284,6 +343,7 @@ durableRename(std::string const& src, std::string const& dst,
 bool
 exists(std::string const& name)
 {
+    ZoneScoped;
     struct stat buf;
     if (stat(name.c_str(), &buf) == -1)
     {
@@ -303,6 +363,7 @@ exists(std::string const& name)
 bool
 mkdir(std::string const& name)
 {
+    ZoneScoped;
     bool b = ::mkdir(name.c_str(), 0700) == 0;
     CLOG(DEBUG, "Fs") << (b ? "created dir " : "failed to create dir ") << name;
     return b;
@@ -315,6 +376,7 @@ int
 nftw_deltree_callback(char const* name, struct stat const* st, int flag,
                       struct FTW* ftw)
 {
+    ZoneScoped;
     CLOG(DEBUG, "Fs") << "deleting: " << name;
     if (flag == FTW_DP)
     {
@@ -339,6 +401,7 @@ nftw_deltree_callback(char const* name, struct stat const* st, int flag,
 void
 deltree(std::string const& d)
 {
+    ZoneScoped;
     if (nftw(d.c_str(), nftw_deltree_callback, FOPEN_MAX, FTW_DEPTH) != 0)
     {
         throw FileSystemException("nftw failed in deltree for " + d);
@@ -349,6 +412,7 @@ std::vector<std::string>
 findfiles(std::string const& path,
           std::function<bool(std::string const& name)> predicate)
 {
+    ZoneScoped;
     auto dir = opendir(path.c_str());
     auto result = std::vector<std::string>{};
     if (!dir)
@@ -408,6 +472,7 @@ PathSplitter::hasNext() const
 bool
 mkpath(const std::string& path)
 {
+    ZoneScoped;
     auto splitter = PathSplitter{path};
     while (splitter.hasNext())
     {
@@ -430,7 +495,8 @@ hexStr(uint32_t checkpointNum)
 std::string
 hexDir(std::string const& hexStr)
 {
-    std::regex rx("([[:xdigit:]]{2})([[:xdigit:]]{2})([[:xdigit:]]{2}).*");
+    static const std::regex rx(
+        "([[:xdigit:]]{2})([[:xdigit:]]{2})([[:xdigit:]]{2}).*");
     std::smatch sm;
     bool matched = std::regex_match(hexStr, sm, rx);
     assert(matched);
@@ -461,7 +527,7 @@ remoteName(std::string const& type, std::string const& hexStr,
 void
 checkGzipSuffix(std::string const& filename)
 {
-    std::string suf(".gz");
+    static const std::string suf(".gz");
     if (!(filename.size() >= suf.size() &&
           equal(suf.rbegin(), suf.rend(), filename.rbegin())))
     {
@@ -472,7 +538,7 @@ checkGzipSuffix(std::string const& filename)
 void
 checkNoGzipSuffix(std::string const& filename)
 {
-    std::string suf(".gz");
+    static const std::string suf(".gz");
     if (filename.size() >= suf.size() &&
         equal(suf.rbegin(), suf.rend(), filename.rbegin()))
     {
@@ -483,6 +549,7 @@ checkNoGzipSuffix(std::string const& filename)
 size_t
 size(std::ifstream& ifs)
 {
+    ZoneScoped;
     assert(ifs.is_open());
 
     ifs.seekg(0, ifs.end);
@@ -495,10 +562,12 @@ size(std::ifstream& ifs)
 size_t
 size(std::string const& filename)
 {
+    ZoneScoped;
     std::ifstream ifs;
     ifs.open(filename, std::ifstream::binary);
     if (ifs)
     {
+        ifs.exceptions(std::ios::badbit);
         return size(ifs);
     }
     else

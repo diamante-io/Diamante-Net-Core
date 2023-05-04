@@ -1,15 +1,15 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "bucket/FutureBucket.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "xdrpp/message.h"
 #include <future>
 
-namespace DiamNet
+namespace diamnet
 {
 // This is the "bucket list", a set sets-of-hashed-objects, organized into
 // temporal "levels", with older levels being larger and changing less
@@ -356,6 +356,8 @@ class BucketList
     // protocol. Careful about changing it.
     static BucketListDepth kNumLevels;
 
+    static bool shouldMergeWithEmptyCurr(uint32_t ledger, uint32_t level);
+
     // Returns size of a given level, in ledgers.
     static uint32_t levelSize(uint32_t level);
 
@@ -422,7 +424,11 @@ class BucketList
     // HistoryArchiveStates, that can cause repeated merges when re-activated.
     void resolveAnyReadyFutures();
 
-    bool futuresAllResolved() const;
+    // returns true if levels [0, maxLevel] are resolved
+    bool futuresAllResolved(uint32_t maxLevel = kNumLevels - 1) const;
+
+    // returns the largest level that this ledger will need to merge
+    uint32_t getMaxMergeLevel(uint32_t currLedger) const;
 
     // Add a batch of initial (created), live (updated) and dead entries to the
     // bucketlist, representing the entries effected by closing

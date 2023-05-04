@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,7 +11,7 @@
 #include "util/Logging.h"
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using asio::ip::tcp;
@@ -57,8 +57,8 @@ PeerDoor::acceptNextPeer()
     }
 
     CLOG(DEBUG, "Overlay") << "PeerDoor acceptNextPeer()";
-    auto sock =
-        make_shared<TCPPeer::SocketType>(mApp.getClock().getIOContext());
+    auto sock = make_shared<TCPPeer::SocketType>(mApp.getClock().getIOContext(),
+                                                 TCPPeer::BUFSZ);
     mAcceptor.async_accept(sock->next_layer(),
                            [this, sock](asio::error_code const& ec) {
                                if (ec)

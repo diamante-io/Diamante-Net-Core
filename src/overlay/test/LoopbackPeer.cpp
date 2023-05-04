@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -9,12 +9,12 @@
 #include "overlay/LoadManager.h"
 #include "overlay/OverlayManager.h"
 #include "overlay/OverlayMetrics.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/Logging.h"
 #include "util/Math.h"
 #include "xdrpp/marshal.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -62,7 +62,10 @@ LoopbackPeer::sendMessage(xdr::msg_ptr&& msg)
     }
 
     // CLOG(TRACE, "Overlay") << "LoopbackPeer queueing message";
-    mOutQueue.emplace_back(std::move(msg));
+    TimestampedMessage tsm;
+    tsm.mMessage = std::move(msg);
+    tsm.mEnqueuedTime = mApp.getClock().now();
+    mOutQueue.emplace_back(std::move(tsm));
     // Possibly flush some queued messages if queue's full.
     while (mOutQueue.size() > mMaxQueueDepth && !mCorked)
     {
@@ -74,14 +77,14 @@ LoopbackPeer::sendMessage(xdr::msg_ptr&& msg)
         {
             if (rand_flip() || rand_flip())
             {
-                CLOG(INFO, "Overlay")
+                CLOG(DEBUG, "Overlay")
                     << "Loopback send-to-straggler pausing, "
                     << "outbound queue at " << mOutQueue.size();
                 break;
             }
             else
             {
-                CLOG(INFO, "Overlay")
+                CLOG(DEBUG, "Overlay")
                     << "Loopback send-to-straggler sending, "
                     << "outbound queue at " << mOutQueue.size();
             }
@@ -100,19 +103,24 @@ LoopbackPeer::drop(std::string const& reason, DropDirection direction, DropMode)
 
     mDropReason = reason;
     mState = CLOSING;
-    mIdleTimer.cancel();
+    mRecurringTimer.cancel();
     getApp().getOverlayManager().removePeer(this);
 
     auto remote = mRemote.lock();
     if (remote)
     {
         remote->getApp().postOnMainThread(
-            [remote, reason, direction]() {
-                remote->drop("remote dropping because of " + reason,
-                             direction == Peer::DropDirection::WE_DROPPED_REMOTE
-                                 ? Peer::DropDirection::REMOTE_DROPPED_US
-                                 : Peer::DropDirection::WE_DROPPED_REMOTE,
-                             Peer::DropMode::IGNORE_WRITE_QUEUE);
+            [ remW = mRemote, reason, direction ]() {
+                auto remS = remW.lock();
+                if (remS)
+                {
+                    remS->drop(reason,
+                               direction ==
+                                       Peer::DropDirection::WE_DROPPED_REMOTE
+                                   ? Peer::DropDirection::REMOTE_DROPPED_US
+                                   : Peer::DropDirection::WE_DROPPED_REMOTE,
+                               Peer::DropMode::IGNORE_WRITE_QUEUE);
+                }
             },
             "LoopbackPeer: drop");
     }
@@ -141,11 +149,14 @@ damageMessage(default_random_engine& gen, xdr::msg_ptr& msg)
     return bitsFlipped != 0;
 }
 
-static xdr::msg_ptr
-duplicateMessage(xdr::msg_ptr const& msg)
+static Peer::TimestampedMessage
+duplicateMessage(Peer::TimestampedMessage const& msg)
 {
-    xdr::msg_ptr msg2 = xdr::message_t::alloc(msg->size());
-    memcpy(msg2->raw_data(), msg->raw_data(), msg->raw_size());
+    xdr::msg_ptr m2 = xdr::message_t::alloc(msg.mMessage->size());
+    memcpy(m2->raw_data(), msg.mMessage->raw_data(), msg.mMessage->raw_size());
+    Peer::TimestampedMessage msg2;
+    msg2.mEnqueuedTime = msg.mEnqueuedTime;
+    msg2.mMessage = std::move(m2);
     return msg2;
 }
 
@@ -179,7 +190,7 @@ LoopbackPeer::deliverOne()
 
     if (!mOutQueue.empty() && !mCorked)
     {
-        xdr::msg_ptr msg = std::move(mOutQueue.front());
+        TimestampedMessage msg = std::move(mOutQueue.front());
         mOutQueue.pop_front();
 
         // CLOG(TRACE, "Overlay") << "LoopbackPeer dequeued message";
@@ -205,7 +216,7 @@ LoopbackPeer::deliverOne()
         if (mDamageProb(gRandomEngine))
         {
             CLOG(INFO, "Overlay") << "LoopbackPeer damaged message";
-            if (damageMessage(gRandomEngine, msg))
+            if (damageMessage(gRandomEngine, msg.mMessage))
                 mStats.messagesDamaged++;
         }
 
@@ -217,8 +228,10 @@ LoopbackPeer::deliverOne()
             return;
         }
 
-        size_t nBytes = msg->raw_size();
+        size_t nBytes = msg.mMessage->raw_size();
         mStats.bytesDelivered += nBytes;
+
+        mEnqueueTimeOfLastWrite = msg.mEnqueuedTime;
 
         // Pass ownership of a serialized XDR message buffer to a recvMesage
         // callback event against the remote Peer, posted on the remote
@@ -227,19 +240,23 @@ LoopbackPeer::deliverOne()
         if (remote)
         {
             // move msg to remote's in queue
-            remote->mInQueue.emplace(std::move(msg));
+            remote->mInQueue.emplace(std::move(msg.mMessage));
             remote->getApp().postOnMainThread(
-                [remote]() { remote->processInQueue(); },
+                [remW = mRemote]() {
+                    auto remS = remW.lock();
+                    if (remS)
+                    {
+                        remS->processInQueue();
+                    }
+                },
                 "LoopbackPeer: processInQueue in deliverOne");
         }
         LoadManager::PeerContext loadCtx(mApp, mPeerID);
         mLastWrite = mApp.getClock().now();
-        if (mOutQueue.empty())
-        {
-            mLastEmpty = mApp.getClock().now();
-        }
         getOverlayMetrics().mMessageWrite.Mark();
         getOverlayMetrics().mByteWrite.Mark(nBytes);
+        ++mPeerMetrics.mMessageWrite;
+        mPeerMetrics.mByteWrite += nBytes;
 
         // CLOG(TRACE, "Overlay") << "LoopbackPeer posted message to remote";
     }
@@ -266,7 +283,7 @@ LoopbackPeer::getBytesQueued() const
     size_t t = 0;
     for (auto const& m : mOutQueue)
     {
-        t += m->raw_size();
+        t += m.mMessage->raw_size();
     }
     return t;
 }
@@ -433,12 +450,18 @@ LoopbackPeerConnection::LoopbackPeerConnection(Application& initiator,
         return;
     }
 
-    mInitiator->startIdleTimer();
-    mAcceptor->startIdleTimer();
+    mInitiator->startRecurrentTimer();
+    mAcceptor->startRecurrentTimer();
 
-    auto init = mInitiator;
+    std::weak_ptr<LoopbackPeer> init = mInitiator;
     mInitiator->getApp().postOnMainThread(
-        [init]() { init->connectHandler(asio::error_code()); },
+        [init]() {
+            auto inC = init.lock();
+            if (inC)
+            {
+                inC->connectHandler(asio::error_code());
+            }
+        },
         "LoopbackPeer: connect");
 }
 

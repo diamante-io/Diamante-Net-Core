@@ -1,22 +1,23 @@
 #pragma once
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/SecretKey.h"
 #include "lib/util/cpptoml.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "util/SecretValue.h"
 #include "util/Timer.h"
 #include "util/optional.h"
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 
 #define DEFAULT_PEER_PORT 11625
 
-namespace DiamNet
+namespace diamnet
 {
 struct HistoryArchiveConfiguration
 {
@@ -26,14 +27,23 @@ struct HistoryArchiveConfiguration
     std::string mMkdirCmd;
 };
 
+enum class ValidationThresholdLevels : int
+{
+    SIMPLE_MAJORITY = 0,
+    BYZANTINE_FAULT_TOLERANCE = 1,
+    ALL_REQUIRED = 2
+};
+
 class Config : public std::enable_shared_from_this<Config>
 {
     enum class ValidatorQuality : int
     {
         VALIDATOR_LOW_QUALITY = 0,
         VALIDATOR_MED_QUALITY = 1,
-        VALIDATOR_HIGH_QUALITY = 2
+        VALIDATOR_HIGH_QUALITY = 2,
+        VALIDATOR_CRITICAL_QUALITY = 3
     };
+
     struct ValidatorEntry
     {
         std::string mName;
@@ -43,15 +53,19 @@ class Config : public std::enable_shared_from_this<Config>
         bool mHasHistory;
     };
 
-    void validateConfig(bool mixed);
+    void validateConfig(ValidationThresholdLevels thresholdLevel);
     void loadQset(std::shared_ptr<cpptoml::table> group, SCPQuorumSet& qset,
-                  int level);
+                  uint32 level);
 
     void processConfig(std::shared_ptr<cpptoml::table>);
 
     void parseNodeID(std::string configStr, PublicKey& retKey);
     void parseNodeID(std::string configStr, PublicKey& retKey, SecretKey& sKey,
                      bool isSeed);
+
+    void parseNodeIDsIntoSet(std::shared_ptr<cpptoml::table> t,
+                             std::string const& configStr,
+                             std::set<PublicKey>& keySet);
 
     std::string expandNodeID(std::string const& s) const;
     void addValidatorName(std::string const& pubKeyStr,
@@ -104,13 +118,13 @@ class Config : public std::enable_shared_from_this<Config>
 
     // application config
 
-    // The default way DiamNet-core starts is to load the state from disk and
-    // catch up to the network before starting SCP. If you need different
-    // behavior you need to use new-db or force-scp which sets the following
-    // flags:
+    // The default way diamnet-core starts is to load the state from disk and
+    // start a consensus round (if node is validating), then maybe trigger
+    // catchup. If you need different behavior you need to use new-db or
+    // --wait-for-consensus option which sets the following flag to false:
 
     // SCP will start running immediately using the current local state to
-    // participate in consensus. DO NOT INCLUDE THIS IN A CONFIG FILE
+    // participate in consensus
     bool FORCE_SCP;
 
     // This is a mode for testing. It prevents you from trying to connect to
@@ -174,6 +188,36 @@ class Config : public std::enable_shared_from_this<Config>
     // system.
     bool ARTIFICIALLY_REPLAY_WITH_NEWEST_BUCKET_LOGIC_FOR_TESTING;
 
+    // A config parameter that forces transaction application during ledger
+    // close to sleep for a given number of microseconds. This option is only
+    // for consensus and overlay simulation testing.
+    uint32_t OP_APPLY_SLEEP_TIME_FOR_TESTING;
+
+    // A config parameter that allows a node to generate buckets. This should
+    // be set to `false` only for testing purposes.
+    bool MODE_ENABLES_BUCKETLIST;
+
+    // A config parameter that uses a never-committing ledger. This means that
+    // all ledger entries will be kept in memory, and not persisted to DB
+    // (relevant tables won't even be created). This should not be set for
+    // production validators.
+    bool MODE_USES_IN_MEMORY_LEDGER;
+
+    // A config parameter that stores historical data, such as transactions,
+    // fees, and scp history in the database
+    bool MODE_STORES_HISTORY;
+
+    // A config parameter that controls whether core automatically catches up
+    // when it has buffered enough input; if false an out-of-sync node will
+    // remain out-of-sync, buffering ledgers from the network in memory until
+    // it is halted.
+    bool MODE_DOES_CATCHUP;
+
+    // A config parameter that controls whether the application starts the
+    // overlay on startup, or waits for a later startup after performing some
+    // other pre-overlay-start operations (eg. offline catchup).
+    bool MODE_AUTO_STARTS_OVERLAY;
+
     // A config to allow connections to localhost
     // this should only be enabled when testing as it's a security issue
     bool ALLOW_LOCALHOST_FOR_TESTING;
@@ -185,7 +229,7 @@ class Config : public std::enable_shared_from_this<Config>
     // This is the number of failures you want to be able to tolerate.
     // You will need at least 3f+1 nodes in your quorum set.
     // If you don't have enough in your quorum set to tolerate the level you
-    //  set here DiamNet-core won't run.
+    //  set here diamnet-core won't run.
     int32_t FAILURE_SAFETY;
 
     // If set to true allows you to specify an unsafe quorum set.
@@ -209,11 +253,32 @@ class Config : public std::enable_shared_from_this<Config>
     // you want to make that trade.
     bool DISABLE_XDR_FSYNC;
 
+    // Number of most recent ledgers to remember. Defaults to 12, or
+    // approximately ~1 min of network activity.
+    uint32 MAX_SLOTS_TO_REMEMBER;
+
+    // A string specifying a stream to write fine-grained metadata to for each
+    // ledger close while running. This will be opened at startup and
+    // synchronously streamed-to during both catchup and live ledger-closing.
+    //
+    // Streams may be specified either as a pathname (typically a named FIFO on
+    // POSIX or a named pipe on Windows, though plain files also work) or a
+    // string of the form "fd:N" for some integer N which, on POSIX, specifies
+    // the existing open file descriptor N inherited by the process (for example
+    // to write to an anonymous pipe).
+    //
+    // As a further safety check, this option is mutually exclusive with
+    // NODE_IS_VALIDATOR, as its typical use writing to a pipe with a reader
+    // process on the other end introduces a potentially-unbounded synchronous
+    // delay in closing a ledger, and should not be used on a node participating
+    // in consensus, only a passive "watcher" node.
+    std::string METADATA_OUTPUT_STREAM;
+
     // Set of cursors added at each startup with value '1'.
     std::vector<std::string> KNOWN_CURSORS;
 
     uint32_t LEDGER_PROTOCOL_VERSION;
-    VirtualClock::time_point TESTING_UPGRADE_DATETIME;
+    VirtualClock::system_time_point TESTING_UPGRADE_DATETIME;
 
     // maximum allowed drift for close time when joining the network for the
     // first time
@@ -244,15 +309,22 @@ class Config : public std::enable_shared_from_this<Config>
     unsigned short PEER_AUTHENTICATION_TIMEOUT;
     unsigned short PEER_TIMEOUT;
     unsigned short PEER_STRAGGLER_TIMEOUT;
+    std::chrono::milliseconds MAX_BATCH_READ_PERIOD_MS;
+    int MAX_BATCH_READ_COUNT;
+    int MAX_BATCH_WRITE_COUNT;
+    int MAX_BATCH_WRITE_BYTES;
     static constexpr auto const POSSIBLY_PREFERRED_EXTRA = 2;
     static constexpr auto const REALLY_DEAD_NUM_FAILURES_CUTOFF = 120;
+
+    // survey config
+    std::set<PublicKey> SURVEYOR_KEYS;
 
     // Peers we will always try to stay connected to
     std::vector<std::string> PREFERRED_PEERS;
     std::vector<std::string> KNOWN_PEERS;
 
     // Preference can also be expressed by peer pubkey
-    std::vector<std::string> PREFERRED_PEER_KEYS;
+    std::set<PublicKey> PREFERRED_PEER_KEYS;
 
     // Whether to exclude peers that are not preferred.
     bool PREFERRED_PEERS_ONLY;
@@ -274,7 +346,7 @@ class Config : public std::enable_shared_from_this<Config>
     // SCP config
     SecretKey NODE_SEED;
     bool NODE_IS_VALIDATOR;
-    DiamNet::SCPQuorumSet QUORUM_SET;
+    diamnet::SCPQuorumSet QUORUM_SET;
     // this node's home domain
     std::string NODE_HOME_DOMAIN;
 
@@ -310,6 +382,13 @@ class Config : public std::enable_shared_from_this<Config>
     // the entry cache
     size_t PREFETCH_BATCH_SIZE;
 
+#ifdef BUILD_TESTS
+    // If set to true, the application will be aware this run is for a test
+    // case.  This is used right now in the signal handler to exit() instead of
+    // doing a graceful shutdown
+    bool TEST_CASES_ENABLED;
+#endif
+
     Config();
 
     void load(std::string const& filename);
@@ -330,8 +409,13 @@ class Config : public std::enable_shared_from_this<Config>
 
     void logBasicInfo();
     void setNoListen();
+    void setNoPublish();
 
     // function to stringify a quorum set
     std::string toString(SCPQuorumSet const& qset);
+
+    // A special name to be used for stdin in stead of a file name in command
+    // line arguments.
+    static std::string const STDIN_SPECIAL_NAME;
 };
 }

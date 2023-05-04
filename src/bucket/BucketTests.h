@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,7 +6,7 @@
 #include <functional>
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 class Application;
 class Config;
@@ -15,12 +15,16 @@ class Bucket;
 
 namespace BucketTests
 {
-uint32_t getAppLedgerVersion(DiamNet::Application& app);
+uint32_t getAppLedgerVersion(diamnet::Application& app);
 
-uint32_t getAppLedgerVersion(std::shared_ptr<DiamNet::Application> app);
+uint32_t getAppLedgerVersion(std::shared_ptr<diamnet::Application> app);
 void for_versions_with_differing_bucket_logic(
-    DiamNet::Config const& cfg,
-    std::function<void(DiamNet::Config const&)> const& f);
+    diamnet::Config const& cfg,
+    std::function<void(diamnet::Config const&)> const& f);
+
+void for_versions_with_differing_initentry_logic(
+    diamnet::Config const& cfg,
+    std::function<void(diamnet::Config const&)> const& f);
 
 struct EntryCounts
 {
@@ -38,8 +42,8 @@ struct EntryCounts
     {
         return nLive + nInit + nDead + nMeta;
     }
-    EntryCounts(std::shared_ptr<DiamNet::Bucket> bucket);
+    EntryCounts(std::shared_ptr<diamnet::Bucket> bucket);
 };
 
-size_t countEntries(std::shared_ptr<DiamNet::Bucket> bucket);
+size_t countEntries(std::shared_ptr<diamnet::Bucket> bucket);
 }

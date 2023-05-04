@@ -1,11 +1,11 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/Peer.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include <map>
 
 /**
@@ -26,7 +26,7 @@ namespace medida
 class Counter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Floodgate
@@ -37,14 +37,14 @@ class Floodgate
         typedef std::shared_ptr<FloodRecord> pointer;
 
         uint32_t mLedgerSeq;
-        DiamNetMessage mMessage;
+        DiamnetMessage mMessage;
         std::set<std::string> mPeersTold;
 
-        FloodRecord(DiamNetMessage const& msg, uint32_t ledger,
+        FloodRecord(DiamnetMessage const& msg, uint32_t ledger,
                     Peer::pointer peer);
     };
 
-    std::map<uint256, FloodRecord::pointer> mFloodMap;
+    std::map<Hash, FloodRecord::pointer> mFloodMap;
     Application& mApp;
     medida::Counter& mFloodMapSize;
     medida::Meter& mSendFromBroadcast;
@@ -55,13 +55,23 @@ class Floodgate
     // Floodgate will be cleared after every ledger close
     void clearBelow(uint32_t currentLedger);
     // returns true if this is a new record
-    bool addRecord(DiamNetMessage const& msg, Peer::pointer fromPeer);
+    // fills msgID with msg's hash
+    bool addRecord(DiamnetMessage const& msg, Peer::pointer fromPeer,
+                   Hash& msgID);
 
-    void broadcast(DiamNetMessage const& msg, bool force);
+    void broadcast(DiamnetMessage const& msg, bool force);
 
-    // returns the list of peers that sent us the item with hash `h`
-    std::set<Peer::pointer> getPeersKnows(Hash const& h);
+    // returns the list of peers that sent us the item with hash `msgID`
+    // NB: `msgID` is the hash of a `DiamnetMessage`
+    std::set<Peer::pointer> getPeersKnows(Hash const& msgID);
+
+    // removes the record corresponding to `msgID`
+    // `msgID` corresponds to a `DiamnetMessage`
+    void forgetRecord(Hash const& msgID);
 
     void shutdown();
+
+    void updateRecord(DiamnetMessage const& oldMsg,
+                      DiamnetMessage const& newMsg);
 };
 }

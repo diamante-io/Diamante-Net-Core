@@ -2,8 +2,8 @@
 
 This directory contains minor convenience wrappers around
 [libsodium](http://libsodium.org). The fork used is stored in
-[another repository](https://github.com/DiamNet/libsodium)
-and used as a submodule by `DiamNet-core`.
+[another repository](https://github.com/diamnet/libsodium)
+and used as a submodule by `diamnet-core`.
 
 The crypto module also contains a small implementation to turn public/private
 keys into human manageable strings (StrKey).

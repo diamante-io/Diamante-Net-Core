@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,9 +10,11 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/TrustLineWrapper.h"
 #include "main/Application.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 AllowTrustOpFrame::AllowTrustOpFrame(Operation const& op, OperationResult& res,
                                      TransactionFrame& parentTx)
@@ -30,6 +32,7 @@ AllowTrustOpFrame::getThresholdLevel() const
 bool
 AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "AllowTrustOp apply", true);
     if (ltx.loadHeader().current().ledgerVersion > 2)
     {
         if (mAllowTrust.trustor == getSourceID())
@@ -40,6 +43,7 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
         }
     }
 
+    bool authNotRevocable;
     {
         LedgerTxn ltxSource(ltx); // ltxSource will be rolled back
         auto header = ltxSource.loadHeader();
@@ -52,8 +56,8 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             return false;
         }
 
-        if (!(sourceAccount.flags & AUTH_REVOCABLE_FLAG) &&
-            !mAllowTrust.authorize)
+        authNotRevocable = !(sourceAccount.flags & AUTH_REVOCABLE_FLAG);
+        if (authNotRevocable && mAllowTrust.authorize == 0)
         {
             innerResult().code(ALLOW_TRUST_CANT_REVOKE);
             return false;
@@ -84,7 +88,7 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
     key.trustLine().accountID = mAllowTrust.trustor;
     key.trustLine().asset = ci;
 
-    bool didRevokeAuth = false;
+    bool shouldRemoveOffers = false;
     {
         auto trust = ltx.load(key);
         if (!trust)
@@ -92,11 +96,28 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             innerResult().code(ALLOW_TRUST_NO_TRUST_LINE);
             return false;
         }
-        didRevokeAuth = isAuthorized(trust) && !mAllowTrust.authorize;
+
+        // There are two cases where we set the result to
+        // ALLOW_TRUST_CANT_REVOKE -
+        // 1. We try to revoke authorization when AUTH_REVOCABLE_FLAG is not set
+        // (This is done above when we call loadSourceAccount)
+        // 2. We try to go from AUTHORIZED_FLAG to
+        // AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG when AUTH_REVOCABLE_FLAG is
+        // not set
+        if (authNotRevocable &&
+            (isAuthorized(trust) &&
+             (mAllowTrust.authorize & AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG)))
+        {
+            innerResult().code(ALLOW_TRUST_CANT_REVOKE);
+            return false;
+        }
+
+        shouldRemoveOffers = isAuthorizedToMaintainLiabilities(trust) &&
+                             mAllowTrust.authorize == 0;
     }
 
     auto header = ltx.loadHeader();
-    if (header.current().ledgerVersion >= 10 && didRevokeAuth)
+    if (header.current().ledgerVersion >= 10 && shouldRemoveOffers)
     {
         // Delete all offers owned by the trustor that are either buying or
         // selling the asset which had authorization revoked.
@@ -115,14 +136,15 @@ AllowTrustOpFrame::doApply(AbstractLedgerTxn& ltx)
             }
 
             releaseLiabilities(ltx, header, offer);
-            auto trustAcc = DiamNet::loadAccount(ltx, mAllowTrust.trustor);
-            addNumEntries(header, trustAcc, -1);
+            auto trustAcc = diamnet::loadAccount(ltx, mAllowTrust.trustor);
+            removeEntryWithPossibleSponsorship(ltx, header, offer.current(),
+                                               trustAcc);
             offer.erase();
         }
     }
 
     auto trustLineEntry = ltx.load(key);
-    setAuthorized(trustLineEntry, mAllowTrust.authorize);
+    setAuthorized(header, trustLineEntry, mAllowTrust.authorize);
 
     innerResult().code(ALLOW_TRUST_SUCCESS);
     return true;
@@ -136,6 +158,13 @@ AllowTrustOpFrame::doCheckValid(uint32_t ledgerVersion)
         innerResult().code(ALLOW_TRUST_MALFORMED);
         return false;
     }
+
+    if (!trustLineFlagIsValid(mAllowTrust.authorize, ledgerVersion))
+    {
+        innerResult().code(ALLOW_TRUST_MALFORMED);
+        return false;
+    }
+
     Asset ci;
     ci.type(mAllowTrust.asset.type());
     if (mAllowTrust.asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4)

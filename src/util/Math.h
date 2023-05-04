@@ -1,18 +1,21 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include <cstdlib>
 #include <random>
+#include <set>
 #include <stdexcept>
 
-namespace DiamNet
+namespace diamnet
 {
 double rand_fraction();
 
-size_t rand_pareto(float alpha, size_t max);
+std::set<double> k_means(std::vector<double> const& points, uint32_t k);
+
+double closest_cluster(double p, std::set<double> const& centers);
 
 bool rand_flip();
 

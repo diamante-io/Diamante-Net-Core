@@ -1,15 +1,16 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #define CATCH_CONFIG_RUNNER
 
 #include "util/asio.h"
+#include <autocheck/autocheck.hpp>
 
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Config.h"
-#include "main/DiamNetCoreVersion.h"
+#include "main/DiamnetCoreVersion.h"
 #include "test.h"
 #include "test/TestUtils.h"
 #include "util/Logging.h"
@@ -17,7 +18,7 @@
 #include "util/TmpDir.h"
 
 #include <cstdlib>
-#include <lib/util/format.h>
+#include <fmt/format.h>
 #include <numeric>
 #include <time.h>
 
@@ -41,7 +42,7 @@ SimpleTestReporter::~SimpleTestReporter()
 }
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 // We use a Catch event-listener to re-seed all the PRNGs we know about on every
@@ -53,18 +54,10 @@ struct ReseedPRNGListener : Catch::TestEventListenerBase
     static void
     reseed()
     {
-        if (sCommandLineSeed == 0)
-        {
-            srand(1);
-            gRandomEngine.seed(gRandomEngine.default_seed);
-            Catch::rng().seed(Catch::rng().default_seed);
-        }
-        else
-        {
-            srand(sCommandLineSeed);
-            gRandomEngine.seed(sCommandLineSeed);
-            Catch::rng().seed(sCommandLineSeed);
-        }
+        srand(sCommandLineSeed);
+        gRandomEngine.seed(sCommandLineSeed);
+        Catch::rng().seed(sCommandLineSeed);
+        autocheck::rng().seed(sCommandLineSeed);
     }
     virtual void
     testCaseStarting(Catch::TestCaseInfo const& testInfo) override
@@ -84,7 +77,7 @@ static bool gTestAllVersions{false};
 static std::vector<uint32> gVersionsToTest;
 static int gBaseInstance{0};
 
-bool force_sqlite = (std::getenv("DiamNet_FORCE_SQLITE") != nullptr);
+bool force_sqlite = (std::getenv("DIAMNET_FORCE_SQLITE") != nullptr);
 
 Config const&
 getTestConfig(int instanceNumber, Config::TestDbMode mode)
@@ -106,7 +99,14 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
 
     if (!cfgs[instanceNumber])
     {
-        gTestRoots.emplace_back("DiamNet-core-test");
+        if (gTestRoots.empty())
+        {
+            gTestRoots.emplace_back(
+                fmt::format("diamnet-core-test-{}", gBaseInstance));
+        }
+        auto const& testBase = gTestRoots[0].getName();
+        gTestRoots.emplace_back(
+            fmt::format("{}/test-{}", testBase, instanceNumber));
 
         std::string rootDir = gTestRoots.back().getName();
         rootDir += "/";
@@ -115,10 +115,6 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
         Config& thisConfig = *cfgs[instanceNumber];
         thisConfig.USE_CONFIG_FOR_GENESIS = true;
 
-        std::ostringstream sstream;
-
-        sstream << "DiamNet" << instanceNumber << ".log";
-        thisConfig.LOG_FILE_PATH = sstream.str();
         thisConfig.BUCKET_DIR_PATH = rootDir + "bucket";
 
         thisConfig.INVARIANT_CHECKS = {".*"};
@@ -134,6 +130,10 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
         // attempted.
         thisConfig.RUN_STANDALONE = true;
         thisConfig.FORCE_SCP = true;
+
+        thisConfig.MANUAL_CLOSE = true;
+
+        thisConfig.TEST_CASES_ENABLED = true;
 
         thisConfig.PEER_PORT =
             static_cast<unsigned short>(DEFAULT_PEER_PORT + instanceNumber * 2);
@@ -173,8 +173,7 @@ getTestConfig(int instanceNumber, Config::TestDbMode mode)
             thisConfig.DISABLE_XDR_FSYNC = true;
             break;
         case Config::TESTDB_ON_DISK_SQLITE:
-            dbname << "sqlite3://" << rootDir << "test" << instanceNumber
-                   << ".db";
+            dbname << "sqlite3://" << rootDir << "test.db";
             break;
 #ifdef USE_POSTGRES
         case Config::TESTDB_POSTGRESQL:
@@ -202,6 +201,11 @@ runTest(CommandLineArgs const& args)
 
     Catch::Session session{};
 
+    auto& seed = session.configData().rngSeed;
+
+    // rotate the seed every 24 hours
+    seed = static_cast<unsigned int>(std::time(nullptr)) / (24 * 3600);
+
     auto parser = session.cli();
     parser |= Catch::clara::Opt(
         [&](std::string const& arg) {
@@ -216,7 +220,7 @@ runTest(CommandLineArgs const& args)
         "test specific version(s)");
     parser |= Catch::clara::Opt(gBaseInstance, "offset")["--base-instance"](
         "instance number offset so multiple instances of "
-        "DiamNet-core can run tests concurrently");
+        "diamnet-core can run tests concurrently");
     session.cli(parser);
 
     auto result = session.cli().parse(
@@ -243,33 +247,41 @@ runTest(CommandLineArgs const& args)
         return 0;
     }
 
+    ReseedPRNGListener::sCommandLineSeed = seed;
+    ReseedPRNGListener::reseed();
+
     // Note: Have to setLogLevel twice here to ensure --list-test-names-only is
-    // not mixed with DiamNet-core logging.
+    // not mixed with diamnet-core logging.
     Logging::setFmt("<test>");
     Logging::setLogLevel(logLevel, nullptr);
-    Config const& cfg = getTestConfig();
-    Logging::setLoggingToFile(cfg.LOG_FILE_PATH);
+    // use base instance for logging as we're guaranteed to not have conflicting
+    // instances of diamnet-core running at the same time with the same base
+    // instance
+    auto logFile = fmt::format("diamnet{}.log", gBaseInstance);
+    Logging::setLoggingToFile(logFile);
     Logging::setLogLevel(logLevel, nullptr);
-    auto seed = session.configData().rngSeed;
 
-    LOG(INFO) << "Testing DiamNet-core " << DiamNet_CORE_VERSION;
-    LOG(INFO) << "Logging to " << cfg.LOG_FILE_PATH;
+    LOG(INFO) << "Testing diamnet-core " << DIAMNET_CORE_VERSION;
+    LOG(INFO) << "Logging to " << logFile;
 
     if (gVersionsToTest.empty())
     {
         gVersionsToTest.emplace_back(Config::CURRENT_LEDGER_PROTOCOL_VERSION);
     }
-    if (seed != 0)
-    {
-        DiamNet::gRandomEngine.seed(seed);
-    }
 
     auto r = session.run();
-    gTestRoots.clear();
-    gTestCfg->clear();
-    if (r != 0 && seed != 0)
+    while (!gTestRoots.empty())
     {
-        LOG(FATAL) << "Nonzero test result with --rng-seed " << seed;
+        // Don't call gTestRoots.clear() here -- order of deletion is
+        // not actually specified by vector::clear, and varies between
+        // different C++ stdlibs, and we're (ulp) relying on destructor
+        // order to clean up tmpdirs sensibly. Instead: pop repeatedly.
+        gTestRoots.pop_back();
+    }
+    gTestCfg->clear();
+    if (r != 0)
+    {
+        LOG(ERROR) << "Nonzero test result with --rng-seed " << seed;
     }
     return r;
 }

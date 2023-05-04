@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -17,7 +17,6 @@
 #include "crypto/Random.h"
 #include "crypto/SHA.h"
 #include "database/Database.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "medida/timer.h"
 #include "util/Fs.h"
@@ -25,10 +24,12 @@
 #include "util/TmpDir.h"
 #include "util/XDRStream.h"
 #include "xdrpp/message.h"
+#include <Tracy.hpp>
 #include <cassert>
+#include <fmt/format.h>
 #include <future>
 
-namespace DiamNet
+namespace diamnet
 {
 
 Bucket::Bucket(std::string const& filename, Hash const& hash)
@@ -84,14 +85,15 @@ Bucket::containsBucketIdentity(BucketEntry const& id) const
 void
 Bucket::apply(Application& app) const
 {
+    ZoneScoped;
     BucketApplicator applicator(app, app.getConfig().LEDGER_PROTOCOL_VERSION,
                                 shared_from_this());
-    BucketApplicator::Counters counters(std::chrono::system_clock::now());
+    BucketApplicator::Counters counters(app.getClock().now());
     while (applicator)
     {
         applicator.advance(counters);
     }
-    counters.logInfo("direct", 0, std::chrono::system_clock::now());
+    counters.logInfo("direct", 0, app.getClock().now());
 }
 
 std::vector<BucketEntry>
@@ -138,8 +140,9 @@ Bucket::fresh(BucketManager& bucketManager, uint32_t protocolVersion,
               std::vector<LedgerEntry> const& initEntries,
               std::vector<LedgerEntry> const& liveEntries,
               std::vector<LedgerKey> const& deadEntries, bool countMergeEvents,
-              bool doFsync)
+              asio::io_context& ctx, bool doFsync)
 {
+    ZoneScoped;
     // When building fresh buckets after protocol version 10 (i.e. version
     // 11-or-after) we differentiate INITENTRY from LIVEENTRY. In older
     // protocols, for compatibility sake, we mark both cases as LIVEENTRY.
@@ -152,7 +155,7 @@ Bucket::fresh(BucketManager& bucketManager, uint32_t protocolVersion,
         convertToBucketEntry(useInit, initEntries, liveEntries, deadEntries);
 
     MergeCounters mc;
-    BucketOutputIterator out(bucketManager.getTmpDir(), true, meta, mc,
+    BucketOutputIterator out(bucketManager.getTmpDir(), true, meta, mc, ctx,
                              doFsync);
     for (auto const& e : entries)
     {
@@ -186,7 +189,7 @@ countShadowedEntryType(MergeCounters& mc, BucketEntry const& e)
     }
 }
 
-inline void
+void
 Bucket::checkProtocolLegality(BucketEntry const& entry,
                               uint32_t protocolVersion)
 {
@@ -238,7 +241,7 @@ maybePut(BucketOutputIterator& out, BucketEntry const& entry,
     //
     // Note that this decision only controls whether to elide dead entries due
     // to _shadows_. There is a secondary elision of dead entries at the _oldest
-    // level_ of the bucketlist that is accompished through filtering at the
+    // level_ of the bucketlist that is accomplished through filtering at the
     // BucketOutputIterator level, and happens independent of ledger protocol
     // version.
 
@@ -327,7 +330,7 @@ countNewEntryType(MergeCounters& mc, BucketEntry const& e)
 // preserves lifecycle-events.
 //
 //     IOW we want to prevent the following scenario
-//     (assumign lev1 and lev2 are on the new protocol, but 3 and 4
+//     (assuming lev1 and lev2 are on the new protocol, but 3 and 4
 //      are on the old protocol):
 //
 //       lev1:DEAD, lev2:INIT, lev3:DEAD, lev4:LIVE
@@ -589,8 +592,10 @@ Bucket::merge(BucketManager& bucketManager, uint32_t maxProtocolVersion,
               std::shared_ptr<Bucket> const& oldBucket,
               std::shared_ptr<Bucket> const& newBucket,
               std::vector<std::shared_ptr<Bucket>> const& shadows,
-              bool keepDeadEntries, bool countMergeEvents, bool doFsync)
+              bool keepDeadEntries, bool countMergeEvents,
+              asio::io_context& ctx, bool doFsync)
 {
+    ZoneScoped;
     // This is the key operation in the scheme: merging two (read-only)
     // buckets together into a new 3rd bucket, while calculating its hash,
     // in a single pass.
@@ -614,11 +619,27 @@ Bucket::merge(BucketManager& bucketManager, uint32_t maxProtocolVersion,
     BucketMetadata meta;
     meta.ledgerVersion = protocolVersion;
     BucketOutputIterator out(bucketManager.getTmpDir(), keepDeadEntries, meta,
-                             mc, doFsync);
+                             mc, ctx, doFsync);
 
     BucketEntryIdCmp cmp;
+    size_t iter = 0;
+
     while (oi || ni)
     {
+        // Check if the merge should be stopped every few entries
+        if (++iter >= 1000)
+        {
+            iter = 0;
+            if (bucketManager.isShutdown())
+            {
+                // Stop merging, as BucketManager is now shutdown
+                // This is safe as temp file has not been adopted yet,
+                // so it will be removed with the tmp dir
+                throw std::runtime_error(
+                    "Incomplete bucket merge due to BucketManager shutdown");
+            }
+        }
+
         if (!mergeCasesWithDefaultAcceptance(cmp, mc, oi, ni, out,
                                              shadowIterators, protocolVersion,
                                              keepShadowedLifecycleEntries))
@@ -632,8 +653,7 @@ Bucket::merge(BucketManager& bucketManager, uint32_t maxProtocolVersion,
     {
         bucketManager.incrMergeCounters(mc);
     }
-    MergeKey mk{maxProtocolVersion, keepDeadEntries, oldBucket, newBucket,
-                shadows};
+    MergeKey mk{keepDeadEntries, oldBucket, newBucket, shadows};
     return out.getBucket(bucketManager, &mk);
 }
 

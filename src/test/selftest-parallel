@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+# Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 # under the Apache License, Version 2.0. See the COPYING file at the root
 # of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,7 +10,7 @@ if [[ -z "$NUM_PARTITIONS" ]]; then
     NUM_PARTITIONS=1
 fi
 if [[ -z "$RUN_PARTITIONS" ]]; then
-    RUN_PARTITIONS=$(seq 0 $((NUM_PARTITIONS-1)));
+    RUN_PARTITIONS=$(seq 0 $((NUM_PARTITIONS-1)))
 fi
 if [[ -z "$TEST_SPEC" ]]; then
     TEST_SPEC="~[acceptance]~[.]" # All non-hidden non-acceptance tests by default
@@ -29,31 +29,42 @@ cleanup() {
 TEST_PARTITIONS_DIR=$(mktemp -d ./test-partitions.XXXXXXXX)
 trap cleanup 0 2 15 ERR
 
+# tests with special characters like "," may cause weird interactions with catch
+# so we white list characters that can be used for test case names
 perl -e '
          use List::Util qw/shuffle/;
          srand($ARGV[3]);
          my $num_partitions = $ARGV[0];
          my $test_spec = $ARGV[1];
          my $test_partitions_dir = $ARGV[2];
-         my @all_tests = shuffle `./DiamNet-core test --ll FATAL --list-test-names-only $test_spec`;
+         my @all_tests = shuffle `./diamnet-core test --ll FATAL --list-test-names-only "$test_spec"`;
          for (my $p = 0; $p < $num_partitions; $p++) {
-             die "Invalid test name \"$p\"" if $p =~ /[^A-Za-z0-9 _()]/;
              open(my $out, ">", "$test_partitions_dir/test-partition-$p.txt");
              for (my $i = $p; $i < @all_tests; $i+=$num_partitions) {
-                 print $out $all_tests[$i];
+                my $tn = $all_tests[$i];
+                chomp $tn;
+                die "Invalid test name \"$tn\"" if $tn =~ m{[^-A-Za-z0-9 _():/]};
+                print $out "$tn\n";
              }
              close $out;
          }' -- "$NUM_PARTITIONS" "$TEST_SPEC" "$TEST_PARTITIONS_DIR" "$RND_SEED"
+
+NUM_TESTS=0
+for p in $(seq 0 $((NUM_PARTITIONS-1))); do
+    NUM_TESTS=$((NUM_TESTS + $(awk 'END{print NR}' $TEST_PARTITIONS_DIR/test-partition-$p.txt)))
+done
+ACTUAL_NUM_TESTS=$(./diamnet-core test --ll FATAL --list-test-names-only "$TEST_SPEC" | awk 'END{print NR}')
+if [[ $NUM_TESTS -ne $ACTUAL_NUM_TESTS ]]; then
+    echo "Partitions contain $NUM_TESTS tests, while diamnet-core lists $ACTUAL_NUM_TESTS tests"
+    exit 1
+fi
 
 runpart()
 {
   local PART=$1
   shift
-  C=""
-  for i in "$@"
-  do
-    C="$i,$C"
-  done
+  local IFS=","
+  C="$*"
   "$COMMAND" $((50*(PART-1))) "$C"
   exit $?
 }

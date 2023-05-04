@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -13,40 +13,40 @@
 #include "util/Logging.h"
 #include <chrono>
 
-using namespace DiamNet;
+using namespace diamnet;
 
-TEST_CASE("pointToTm tmToPoint stuff", "[timer]")
+TEST_CASE("pointToTm tmToSystemPoint stuff", "[timer]")
 {
-    VirtualClock::time_point tp;
+    VirtualClock::system_time_point tp;
     tp = tp + std::chrono::seconds(12); // 01/01/70 00:00:12 UTC+8 is before GMT
                                         // epoch, mktime may fail.
 
-    std::tm tt = VirtualClock::pointToTm(tp);
+    std::tm tt = VirtualClock::systemPointToTm(tp);
 
-    VirtualClock::time_point tp2 = VirtualClock::tmToPoint(tt);
+    VirtualClock::system_time_point tp2 = VirtualClock::tmToSystemPoint(tt);
 
     auto twelvesec = VirtualClock::to_time_t(tp2);
     CHECK(twelvesec == 12);
 }
 
-TEST_CASE("VirtualClock pointToISOString", "[timer]")
+TEST_CASE("VirtualClock systemPointToISOString", "[timer]")
 {
     VirtualClock clock;
 
-    VirtualClock::time_point now = clock.now();
-    CHECK(VirtualClock::pointToISOString(now) ==
+    VirtualClock::system_time_point now = clock.system_now();
+    CHECK(VirtualClock::systemPointToISOString(now) ==
           std::string("1970-01-01T00:00:00Z"));
 
     now += std::chrono::hours(36);
-    CHECK(VirtualClock::pointToISOString(now) ==
+    CHECK(VirtualClock::systemPointToISOString(now) ==
           std::string("1970-01-02T12:00:00Z"));
 
     now += std::chrono::minutes(10);
-    CHECK(VirtualClock::pointToISOString(now) ==
+    CHECK(VirtualClock::systemPointToISOString(now) ==
           std::string("1970-01-02T12:10:00Z"));
 
     now += std::chrono::seconds(3618);
-    CHECK(VirtualClock::pointToISOString(now) ==
+    CHECK(VirtualClock::systemPointToISOString(now) ==
           std::string("1970-01-02T13:10:18Z"));
 }
 
@@ -54,7 +54,7 @@ TEST_CASE("VirtualClock to_time_t", "[timer]")
 {
     VirtualClock clock;
 
-    VirtualClock::time_point now = clock.now();
+    VirtualClock::system_time_point now = clock.system_now();
     CHECK(VirtualClock::to_time_t(now) == 0);
 
     now += std::chrono::hours(36);
@@ -71,7 +71,7 @@ TEST_CASE("VirtualClock from_time_t", "[timer]")
 {
     VirtualClock clock;
 
-    VirtualClock::time_point now = clock.now();
+    VirtualClock::system_time_point now = clock.system_now();
     CHECK(now == VirtualClock::from_time_t(0));
 
     now += std::chrono::hours(36);
@@ -236,72 +236,4 @@ TEST_CASE("timer cancels", "[timer]")
     // timers that already triggered don't fire again
     REQUIRE(timerFired == 8);
     REQUIRE(timerCancelled == 2);
-}
-
-TEST_CASE("crank returns correct value", "[timer]")
-{
-    for (auto mode : {
-             std::make_pair("REAL_TIME", VirtualClock::REAL_TIME),
-             std::make_pair("VIRTUAL_TIME", VirtualClock::VIRTUAL_TIME),
-         })
-    {
-        SECTION(mode.first)
-        {
-            VirtualClock clock{mode.second};
-            auto& io = clock.getIOContext();
-            asio::io_context::work mainWork(io);
-
-            auto executed = false;
-            auto execute = [&executed] { executed = true; };
-            auto executeLater = [&] { clock.postToNextCrank(execute); };
-            auto executeMuchLater = [&] {
-                clock.postToNextCrank(executeLater);
-            };
-
-            REQUIRE(clock.crank(false) == 0);
-
-            clock.postToCurrentCrank(execute);
-            REQUIRE(!executed);
-            // 1 for "execute"
-            REQUIRE(clock.crank(false) == 1);
-            REQUIRE(executed);
-            REQUIRE(clock.crank(false) == 0);
-
-            executed = false;
-            clock.postToNextCrank(execute);
-            REQUIRE(!executed);
-            // 1 for "execute"
-            REQUIRE(clock.crank(false) == 1);
-            REQUIRE(executed);
-            REQUIRE(clock.crank(false) == 0);
-
-            executed = false;
-            clock.postToCurrentCrank(executeLater);
-            REQUIRE(!executed);
-            // 1 for "executeLater"
-            // 1 for posting "execute" to io_context
-            REQUIRE(clock.crank(false) == 2);
-            REQUIRE(!executed);
-            // 1 for "execute"
-            REQUIRE(clock.crank(false) == 1);
-            REQUIRE(executed);
-            REQUIRE(clock.crank(false) == 0);
-
-            executed = false;
-            clock.postToCurrentCrank(executeMuchLater);
-            REQUIRE(!executed);
-            // 1 for "executeMuchLater"
-            // 1 for posting "executeLater" to io_context
-            REQUIRE(clock.crank(false) == 2);
-            REQUIRE(!executed);
-            // 1 for "executeLater"
-            // 1 for posting "execute" to io_context
-            REQUIRE(clock.crank(false) == 2);
-            REQUIRE(!executed);
-            // 1 for "execute"
-            REQUIRE(clock.crank(false) == 1);
-            REQUIRE(executed);
-            REQUIRE(clock.crank(false) == 0);
-        }
-    }
 }

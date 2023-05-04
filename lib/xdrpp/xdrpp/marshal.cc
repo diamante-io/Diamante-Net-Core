@@ -43,6 +43,8 @@ message_t::shrink(std::size_t newsize)
 void
 marshal_base::get_bytes(const std::uint32_t *&pr, void *buf, std::size_t len)
 {
+  if (!len)
+    return;
   const char *p = reinterpret_cast<const char *>(pr);
   std::memcpy(buf, p, len);
   p += len;
@@ -57,6 +59,8 @@ marshal_base::get_bytes(const std::uint32_t *&pr, void *buf, std::size_t len)
 void
 marshal_base::put_bytes(std::uint32_t *&pr, const void *buf, std::size_t len)
 {
+  if (!len)
+    return;
   char *p = reinterpret_cast<char *>(pr);
   std::memcpy(p, buf, len);
   p += len;

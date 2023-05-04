@@ -1,4 +1,4 @@
-; This file sets emacs variables that are helpful for editing DiamNet-core
+; This file sets emacs variables that are helpful for editing diamnet-core
 
 ((c-mode . ((indent-tabs-mode .  nil)))
  (c++-mode . ((indent-tabs-mode .  nil)))

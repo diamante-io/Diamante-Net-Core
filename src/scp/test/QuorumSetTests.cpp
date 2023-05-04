@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,11 +6,12 @@
 #include "crypto/SHA.h"
 #include "crypto/SecretKey.h"
 #include "lib/catch.hpp"
+#include "main/Config.h"
 #include "scp/QuorumSetUtils.h"
-#include "xdr/DiamNet-SCP.h"
+#include "xdr/Diamnet-SCP.h"
 #include <algorithm>
 
-namespace DiamNet
+namespace diamnet
 {
 
 TEST_CASE("sane quorum set", "[scp][quorumset]")
@@ -38,13 +39,14 @@ TEST_CASE("sane quorum set", "[scp][quorumset]")
     auto check = [&](SCPQuorumSet const& qSetCheck, bool expected,
                      SCPQuorumSet const& expectedSelfQSet) {
         // first, without normalization
-        REQUIRE(expected == isQuorumSetSane(qSetCheck, false));
+        char const* errString;
+        REQUIRE(expected == isQuorumSetSane(qSetCheck, false, errString));
 
         // secondary test: attempts to build local node with the set
         // (this normalizes the set)
         auto normalizedQSet = qSetCheck;
         normalizeQSet(normalizedQSet);
-        auto selfIsSane = isQuorumSetSane(qSetCheck, false);
+        auto selfIsSane = isQuorumSetSane(qSetCheck, false, errString);
 
         REQUIRE(expected == selfIsSane);
         REQUIRE(expectedSelfQSet == normalizedQSet);
@@ -172,27 +174,40 @@ TEST_CASE("sane quorum set", "[scp][quorumset]")
         check(qSet, true, qSelfSet);
     }
 
-    SECTION("{ t: 1, v0, { t: 1, v1, { t: 1, v2, { t: 1, v3 , { t: 1, v4} } } "
-            "} } -> too deep")
+    auto testNestingLevel = [&makeSingleton, &keys, &check](int nestingLevel,
+                                                            bool expected) {
+        std::vector<SCPQuorumSet> qSets;
+        for (int i = 0; i <= nestingLevel; i++)
+        {
+            qSets.push_back(makeSingleton(keys[i]));
+        }
+        for (int i = nestingLevel - 1; i >= 0; i--)
+        {
+            qSets[i].innerSets.push_back(qSets[i + 1]);
+        }
+
+        auto qSelfSet = qSets[0];
+        auto qSetB = &qSelfSet;
+        for (int i = 0; i < nestingLevel - 1; i++)
+        {
+            qSetB = &qSetB->innerSets.back();
+        }
+        qSetB->validators.emplace_back(keys[nestingLevel]);
+        qSetB->innerSets.clear();
+
+        check(qSets[0], expected, qSelfSet);
+    };
+
+    SECTION("{ t: 1, v0, { t: 1, v1, { .. t: 1, "
+            "v_{MAXIMUM_QUORUM_NESTING_LEVEL + 1} }..} -> too deep")
     {
-        auto qSet = makeSingleton(keys[0]);
-        auto qSet1 = makeSingleton(keys[1]);
-        auto qSet2 = makeSingleton(keys[2]);
-        auto qSet3 = makeSingleton(keys[3]);
-        auto qSet4 = makeSingleton(keys[4]);
-        qSet3.innerSets.push_back(qSet4);
-        qSet2.innerSets.push_back(qSet3);
-        qSet1.innerSets.push_back(qSet2);
-        qSet.innerSets.push_back(qSet1);
+        testNestingLevel(MAXIMUM_QUORUM_NESTING_LEVEL + 1, false);
+    }
 
-        // normalized: v4 gets moved next to v3
-        auto qSelfSet = qSet;
-        auto& qSet3b =
-            qSelfSet.innerSets.back().innerSets.back().innerSets.back();
-        qSet3b.validators.emplace_back(keys[4]);
-        qSet3b.innerSets.clear();
-
-        check(qSet, false, qSelfSet);
+    SECTION("{ t: 1, v0, { t: 1, v1, { .. t: 1, v_MAXIMUM_QUORUM_NESTING_LEVEL "
+            "}..} ")
+    {
+        testNestingLevel(MAXIMUM_QUORUM_NESTING_LEVEL, true);
     }
 
     SECTION("{ t: 1, v0..v999 } -> { t: 1, v0..v999 }")

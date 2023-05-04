@@ -382,13 +382,19 @@ gen(std::ostream &os, const rpc_union &u)
   os << nl << "using _xdr_case_type = " << "xdr::xdr_traits<" << u.tagtype
      << ">::case_type;"
      << nl.outdent << "private:"
-     << nl << "_xdr_case_type " << u.tagid << "_;"
-     << nl << "union {";
-  ++nl;
-  for (const rpc_ufield &f : u.fields)
-    if (f.decl.type != "void")
-      os << nl << decl_type(f.decl) << ' ' << f.decl.id << "_;";
-  os << nl.close << "};" << endl;
+     << nl << "_xdr_case_type " << u.tagid << "_;";
+
+  for (const rpc_ufield &f0 : u.fields) {
+    if (f0.decl.type != "void") {
+      os << nl << "union {";
+      ++nl;
+      for (const rpc_ufield &f : u.fields)
+	if (f.decl.type != "void")
+	  os << nl << decl_type(f.decl) << ' ' << f.decl.id << "_;";
+      os << nl.close << "};" << endl;
+      break;
+    }
+  }
 
   os << nl.outdent << "public:";
 #if 0

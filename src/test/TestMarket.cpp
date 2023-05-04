@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,13 +6,14 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/LedgerTxnEntry.h"
 #include "lib/catch.hpp"
+#include "main/Application.h"
 #include "test/TestAccount.h"
 #include "test/TxTests.h"
 #include "transactions/TransactionUtils.h"
 #include "util/XDROperators.h"
-#include "xdr/DiamNet-ledger-entries.h"
+#include "xdr/Diamnet-ledger-entries.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace txtest;
@@ -251,13 +252,13 @@ TestMarket::checkState(std::map<OfferKey, OfferState> const& offers,
     LedgerTxn ltx(mApp.getLedgerTxnRoot());
     for (auto const& o : offers)
     {
-        auto offer = DiamNet::loadOffer(ltx, o.first.sellerID, o.first.offerID);
+        auto offer = diamnet::loadOffer(ltx, o.first.sellerID, o.first.offerID);
         REQUIRE(offer);
         REQUIRE(offer.current().data.offer() == o.second);
     }
     for (auto const& o : deletedOffers)
     {
-        REQUIRE(!DiamNet::loadOffer(ltx, o.sellerID, o.offerID));
+        REQUIRE(!diamnet::loadOffer(ltx, o.sellerID, o.offerID));
     }
 }
 }

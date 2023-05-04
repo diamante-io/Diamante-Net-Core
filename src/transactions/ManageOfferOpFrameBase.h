@@ -1,12 +1,12 @@
 #pragma once
 
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "transactions/OperationFrame.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 class AbstractLedgerTxn;
@@ -27,7 +27,10 @@ class ManageOfferOpFrameBase : public OperationFrame
                                         int64_t& maxSheepSend,
                                         int64_t& maxWheatReceive);
 
-    LedgerEntry buildOffer(int64_t amount, uint32_t flags) const;
+    LedgerEntry buildOffer(int64_t amount, uint32_t flags,
+                           LedgerEntry::_ext_t const& extension) const;
+
+    virtual int64_t generateNewOfferID(LedgerTxnHeader& header);
 
   public:
     ManageOfferOpFrameBase(Operation const& op, OperationResult& res,

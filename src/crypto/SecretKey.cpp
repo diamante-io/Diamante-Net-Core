@@ -1,8 +1,9 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "crypto/SecretKey.h"
+#include "crypto/Curve25519.h"
 #include "crypto/Hex.h"
 #include "crypto/KeyUtils.h"
 #include "crypto/SHA.h"
@@ -12,6 +13,7 @@
 #include "util/HashOfHash.h"
 #include "util/Math.h"
 #include "util/RandomEvictionCache.h"
+#include <Tracy.hpp>
 #include <memory>
 #include <mutex>
 #include <sodium.h>
@@ -21,7 +23,7 @@
 #include <sanitizer/msan_interface.h>
 #endif
 
-namespace DiamNet
+namespace diamnet
 {
 
 // Process-wide global Ed25519 signature-verification cache.
@@ -33,7 +35,6 @@ namespace DiamNet
 
 static std::mutex gVerifySigCacheMutex;
 static RandomEvictionCache<Hash, bool> gVerifySigCache(0xffff);
-static std::unique_ptr<SHA256> gHasher = SHA256::create();
 static uint64_t gVerifyCacheHit = 0;
 static uint64_t gVerifyCacheMiss = 0;
 
@@ -43,11 +44,11 @@ verifySigCacheKey(PublicKey const& key, Signature const& signature,
 {
     assert(key.type() == PUBLIC_KEY_TYPE_ED25519);
 
-    gHasher->reset();
-    gHasher->add(key.ed25519());
-    gHasher->add(signature);
-    gHasher->add(bin);
-    return gHasher->finish();
+    SHA256 hasher;
+    hasher.add(key.ed25519());
+    hasher.add(signature);
+    hasher.add(bin);
+    return hasher.finish();
 }
 
 SecretKey::SecretKey() : mKeyType(PUBLIC_KEY_TYPE_ED25519)
@@ -88,7 +89,7 @@ SecretKey::getSeed() const
     if (crypto_sign_ed25519_sk_to_seed(seed.mSeed.data(), mSecretKey.data()) !=
         0)
     {
-        throw std::runtime_error("error extracting seed from secret key");
+        throw CryptoError("error extracting seed from secret key");
     }
     return seed;
 }
@@ -123,13 +124,14 @@ SecretKey::isZero() const
 Signature
 SecretKey::sign(ByteSlice const& bin) const
 {
+    ZoneScoped;
     assert(mKeyType == PUBLIC_KEY_TYPE_ED25519);
 
     Signature out(crypto_sign_BYTES, 0);
     if (crypto_sign_detached(out.data(), NULL, bin.data(), bin.size(),
                              mSecretKey.data()) != 0)
     {
-        throw std::runtime_error("error while signing");
+        throw CryptoError("error while signing");
     }
     return out;
 }
@@ -142,7 +144,7 @@ SecretKey::random()
     if (crypto_sign_keypair(sk.mPublicKey.ed25519().data(),
                             sk.mSecretKey.data()) != 0)
     {
-        throw std::runtime_error("error generating random secret key");
+        throw CryptoError("error generating random secret key");
     }
 #ifdef MSAN_ENABLED
     __msan_unpoison(out.key.data(), out.key.size());
@@ -190,12 +192,12 @@ SecretKey::fromSeed(ByteSlice const& seed)
 
     if (seed.size() != crypto_sign_SEEDBYTES)
     {
-        throw std::runtime_error("seed does not match byte size");
+        throw CryptoError("seed does not match byte size");
     }
     if (crypto_sign_seed_keypair(sk.mPublicKey.ed25519().data(),
                                  sk.mSecretKey.data(), seed.data()) != 0)
     {
-        throw std::runtime_error("error generating secret key from seed");
+        throw CryptoError("error generating secret key from seed");
     }
     return sk;
 }
@@ -210,7 +212,7 @@ SecretKey::fromStrKeySeed(std::string const& strKeySeed)
         (seed.size() != crypto_sign_SEEDBYTES) ||
         (strKeySeed.size() != strKey::getStrKeySize(crypto_sign_SEEDBYTES)))
     {
-        throw std::runtime_error("invalid seed");
+        throw CryptoError("invalid seed");
     }
 
     SecretKey sk;
@@ -218,7 +220,7 @@ SecretKey::fromStrKeySeed(std::string const& strKeySeed)
     if (crypto_sign_seed_keypair(sk.mPublicKey.ed25519().data(),
                                  sk.mSecretKey.data(), seed.data()) != 0)
     {
-        throw std::runtime_error("error generating secret key from seed");
+        throw CryptoError("error generating secret key from seed");
     }
     return sk;
 }
@@ -267,7 +269,7 @@ KeyFunctions<PublicKey>::toKeyType(strKey::StrKeyVersionByte keyVersion)
     case strKey::STRKEY_PUBKEY_ED25519:
         return PublicKeyType::PUBLIC_KEY_TYPE_ED25519;
     default:
-        throw std::invalid_argument("invalid public key type");
+        throw CryptoError("invalid public key type");
     }
 }
 
@@ -279,7 +281,7 @@ KeyFunctions<PublicKey>::toKeyVersion(PublicKeyType keyType)
     case PublicKeyType::PUBLIC_KEY_TYPE_ED25519:
         return strKey::STRKEY_PUBKEY_ED25519;
     default:
-        throw std::invalid_argument("invalid public key type");
+        throw CryptoError("invalid public key type");
     }
 }
 
@@ -291,7 +293,7 @@ KeyFunctions<PublicKey>::getKeyValue(PublicKey& key)
     case PUBLIC_KEY_TYPE_ED25519:
         return key.ed25519();
     default:
-        throw std::invalid_argument("invalid public key type");
+        throw CryptoError("invalid public key type");
     }
 }
 
@@ -303,7 +305,7 @@ KeyFunctions<PublicKey>::getKeyValue(PublicKey const& key)
     case PUBLIC_KEY_TYPE_ED25519:
         return key.ed25519();
     default:
-        throw std::invalid_argument("invalid public key type");
+        throw CryptoError("invalid public key type");
     }
 }
 
@@ -311,6 +313,7 @@ bool
 PubKeyUtils::verifySig(PublicKey const& key, Signature const& signature,
                        ByteSlice const& bin)
 {
+    ZoneScoped;
     assert(key.type() == PUBLIC_KEY_TYPE_ED25519);
     if (signature.size() != 64)
     {
@@ -324,10 +327,14 @@ PubKeyUtils::verifySig(PublicKey const& key, Signature const& signature,
         if (gVerifySigCache.exists(cacheKey))
         {
             ++gVerifyCacheHit;
+            std::string hitStr("hit");
+            ZoneText(hitStr.c_str(), hitStr.size());
             return gVerifySigCache.get(cacheKey);
         }
     }
 
+    std::string missStr("miss");
+    ZoneText(missStr.c_str(), missStr.size());
     ++gVerifyCacheMiss;
     bool ok =
         (crypto_sign_verify_detached(signature.data(), bin.data(), bin.size(),
@@ -419,10 +426,10 @@ HashUtils::random()
 namespace std
 {
 size_t
-hash<DiamNet::PublicKey>::operator()(DiamNet::PublicKey const& k) const noexcept
+hash<diamnet::PublicKey>::operator()(diamnet::PublicKey const& k) const noexcept
 {
-    assert(k.type() == DiamNet::PUBLIC_KEY_TYPE_ED25519);
+    assert(k.type() == diamnet::PUBLIC_KEY_TYPE_ED25519);
 
-    return std::hash<DiamNet::uint256>()(k.ed25519());
+    return std::hash<diamnet::uint256>()(k.ed25519());
 }
 }

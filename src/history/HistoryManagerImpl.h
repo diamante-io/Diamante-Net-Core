@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -15,7 +15,7 @@ namespace medida
 class Meter;
 }
 
-namespace DiamNet
+namespace diamnet
 {
 
 class Application;
@@ -48,9 +48,6 @@ class HistoryManagerImpl : public HistoryManager
     ~HistoryManagerImpl() override;
 
     uint32_t getCheckpointFrequency() const override;
-    uint32_t checkpointContainingLedger(uint32_t ledger) const override;
-    uint32_t prevCheckpointLedger(uint32_t ledger) const override;
-    uint32_t nextCheckpointLedger(uint32_t ledger) const override;
 
     void logAndUpdatePublishStatus() override;
 
@@ -85,9 +82,9 @@ class HistoryManagerImpl : public HistoryManager
 
     std::string localFilename(std::string const& basename) override;
 
-    uint64_t getPublishQueueCount() override;
-    uint64_t getPublishSuccessCount() override;
-    uint64_t getPublishFailureCount() override;
+    uint64_t getPublishQueueCount() const override;
+    uint64_t getPublishSuccessCount() const override;
+    uint64_t getPublishFailureCount() const override;
 
 #ifdef BUILD_TESTS
     void setPublicationEnabled(bool enabled) override;

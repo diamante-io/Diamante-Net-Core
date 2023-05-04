@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -29,12 +29,12 @@
 //
 // - A network N is a set of nodes {N₀, N₁, ...}
 //
-// - Every node Nᵢ has an associated quorum qet (or "qset") QSᵢ that is a set of
+// - Every node Nᵢ has an associated quorum set (or "qset") QSᵢ that is a set of
 //   subsets of N.
 //
 // - Every element of a qset QSᵢ is called a quorum slice.
 //
-// - A quorum Q ⊆ N is a set satisfying: Q ≠ ∅ and Ɐ v ∈ Q, ∃ S ∈ QSᵢ, S ⊆ Q
+// - A quorum Q ⊆ N is a set satisfying: Q ≠ ∅ and Ɐ Nᵢ ∈ Q, ∃ S ∈ QSᵢ, S ⊆ Q
 //
 // - Equivalently in english: a quorum is a subset of the network such that for
 //   each node Nᵢ in the quorum, there's some slice S in the node's quorum set
@@ -344,7 +344,7 @@
 // go as fast as possible. For this, we use graph and set representations that
 // minimize allocation, hashing, indirection and so forth: vectors of dense
 // bitsets and bitwise operations. These are not the same representations used
-// elsewhere in DiamNet-core so there's a little work up front converting
+// elsewhere in diamnet-core so there's a little work up front converting
 // representations.
 //
 // Remaining details of the implementation are noted as we go, but the above
@@ -353,8 +353,8 @@
 #include "QuorumIntersectionChecker.h"
 #include "main/Config.h"
 #include "util/BitSet.h"
-#include "xdr/DiamNet-SCP.h"
-#include "xdr/DiamNet-types.h"
+#include "xdr/Diamnet-SCP.h"
+#include "xdr/Diamnet-types.h"
 
 namespace
 {
@@ -436,6 +436,10 @@ class MinQuorumEnumerator
     // any set enumerated by this enumerator and its children.
     BitSet mPerimeter;
 
+    // The initial value of mRemaining at the root of the search, representing
+    // the overall SCC we're considering subsets of.
+    BitSet const& mScanSCC;
+
     // Checker that owns us, contains state of stats, graph, etc.
     QuorumIntersectionCheckerImpl const& mQic;
 
@@ -447,8 +451,10 @@ class MinQuorumEnumerator
 
   public:
     MinQuorumEnumerator(BitSet const& committed, BitSet const& remaining,
+                        BitSet const& scanSCC,
                         QuorumIntersectionCheckerImpl const& qic);
 
+    bool hasDisjointQuorum(BitSet const& nodes) const;
     bool anyMinQuorumHasDisjointQuorum();
 };
 
@@ -456,16 +462,16 @@ class MinQuorumEnumerator
 // QuorumIntersectionChecker on a given QuorumMap. The QuorumIntersectionChecker
 // builds a QGraph of the nodes, uses TarjanSCCCalculator to calculate its SCCs,
 // and then runs a MinQuorumEnumerator to recursively scan the powerset.
-class QuorumIntersectionCheckerImpl : public DiamNet::QuorumIntersectionChecker
+class QuorumIntersectionCheckerImpl : public diamnet::QuorumIntersectionChecker
 {
 
-    DiamNet::Config const& mCfg;
+    diamnet::Config const& mCfg;
 
     struct Stats
     {
         size_t mTotalNodes = {0};
         size_t mNumSCCs = {0};
-        size_t mMaxSCC = {0};
+        size_t mScanSCCSize = {0};
         size_t mCallsStarted = {0};
         size_t mFirstRecursionsTaken = {0};
         size_t mSecondRecursionsTaken = {0};
@@ -492,23 +498,33 @@ class QuorumIntersectionCheckerImpl : public DiamNet::QuorumIntersectionChecker
 
     // State to capture a counterexample found during search, for later
     // reporting.
-    mutable std::pair<std::vector<DiamNet::PublicKey>,
-                      std::vector<DiamNet::PublicKey>>
+    mutable std::pair<std::vector<diamnet::PublicKey>,
+                      std::vector<diamnet::PublicKey>>
         mPotentialSplit;
 
     // These are the key state of the checker: the mapping from node public keys
     // to graph node numbers, and the graph of QBitSets itself.
-    std::vector<DiamNet::PublicKey> mBitNumPubKeys;
-    std::unordered_map<DiamNet::PublicKey, size_t> mPubKeyBitNums;
+    std::vector<diamnet::PublicKey> mBitNumPubKeys;
+    std::unordered_map<diamnet::PublicKey, size_t> mPubKeyBitNums;
     QGraph mGraph;
 
-    // This just calculates SCCs and stores the maximal one, which we use for
-    // the remainder of the search.
-    TarjanSCCCalculator mTSC;
-    BitSet mMaxSCC;
+    // This is a temporary structure that's reused very often within the
+    // MinQuorumEnumerators, but never reentrantly / simultaneously. So we
+    // allocate it once here and let the MQEs use it to avoid hammering
+    // on malloc.
+    mutable std::vector<size_t> mInDegrees;
 
-    QBitSet convertSCPQuorumSet(DiamNet::SCPQuorumSet const& sqs);
-    void buildGraph(DiamNet::QuorumTracker::QuorumMap const& qmap);
+    // This just calculates SCCs, from which we extract the first one found with
+    // a quorum, which (assuming no other SCCs have quorums) we'll use for the
+    // remainder of the search.
+    TarjanSCCCalculator mTSC;
+
+    // Interruption flag: setting this causes the QIC / MQEs to throw
+    // InterruptedException at the nearest convenient moment.
+    std::atomic<bool>& mInterruptFlag;
+
+    QBitSet convertSCPQuorumSet(diamnet::SCPQuorumSet const& sqs);
+    void buildGraph(diamnet::QuorumTracker::QuorumMap const& qmap);
     void buildSCCs();
 
     bool containsQuorumSlice(BitSet const& bs, QBitSet const& qbs) const;
@@ -516,7 +532,6 @@ class QuorumIntersectionCheckerImpl : public DiamNet::QuorumIntersectionChecker
     BitSet contractToMaximalQuorum(BitSet nodes) const;
     bool isAQuorum(BitSet const& nodes) const;
     bool isMinimalQuorum(BitSet const& nodes) const;
-    bool hasDisjointQuorum(BitSet const& nodes) const;
     void noteFoundDisjointQuorums(BitSet const& nodes,
                                   BitSet const& disj) const;
     std::string nodeName(size_t node) const;
@@ -524,12 +539,13 @@ class QuorumIntersectionCheckerImpl : public DiamNet::QuorumIntersectionChecker
     friend class MinQuorumEnumerator;
 
   public:
-    QuorumIntersectionCheckerImpl(DiamNet::QuorumTracker::QuorumMap const& qmap,
-                                  DiamNet::Config const& cfg,
+    QuorumIntersectionCheckerImpl(diamnet::QuorumTracker::QuorumMap const& qmap,
+                                  diamnet::Config const& cfg,
+                                  std::atomic<bool>& interruptFlag,
                                   bool quiet = false);
     bool networkEnjoysQuorumIntersection() const override;
 
-    std::pair<std::vector<DiamNet::PublicKey>, std::vector<DiamNet::PublicKey>>
+    std::pair<std::vector<diamnet::PublicKey>, std::vector<diamnet::PublicKey>>
     getPotentialSplit() const override;
     size_t getMaxQuorumsFound() const override;
 };

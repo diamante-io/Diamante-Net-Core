@@ -1,4 +1,4 @@
-// Copyright 2019 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2019 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,9 +8,11 @@
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/TrustLineWrapper.h"
 #include "transactions/OfferExchange.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 ManageOfferOpFrameBase::ManageOfferOpFrameBase(
@@ -37,14 +39,19 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
         return true;
     }
 
+    auto ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+
     if (mSheep.type() != ASSET_TYPE_NATIVE)
     {
         auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
-        auto issuer = DiamNet::loadAccount(ltx, getIssuer(mSheep));
-        if (!issuer)
+        if (ledgerVersion < 13)
         {
-            setResultSellNoIssuer();
-            return false;
+            auto issuer = diamnet::loadAccount(ltx, getIssuer(mSheep));
+            if (!issuer)
+            {
+                setResultSellNoIssuer();
+                return false;
+            }
         }
         if (!sheepLineA)
         { // we don't have what we are trying to sell
@@ -67,11 +74,15 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
     if (mWheat.type() != ASSET_TYPE_NATIVE)
     {
         auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
-        auto issuer = DiamNet::loadAccount(ltx, getIssuer(mWheat));
-        if (!issuer)
+
+        if (ledgerVersion < 13)
         {
-            setResultBuyNoIssuer();
-            return false;
+            auto issuer = diamnet::loadAccount(ltx, getIssuer(mWheat));
+            if (!issuer)
+            {
+                setResultBuyNoIssuer();
+                return false;
+            }
         }
         if (!wheatLineA)
         { // we can't hold what we are trying to buy
@@ -100,27 +111,32 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
     auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto ledgerVersion = header.current().ledgerVersion;
-
-    if (creatingNewOffer &&
+    if (ledgerVersion < 14 && creatingNewOffer &&
         (ledgerVersion >= 10 ||
          (mSheep.type() == ASSET_TYPE_NATIVE && ledgerVersion > 8)))
     {
         // we need to compute maxAmountOfSheepCanSell based on the
         // updated reserve to avoid selling too many and falling
         // below the reserve when we try to create the offer later on
-        switch (addNumEntries(header, sourceAccount, 1))
+        auto le = buildOffer(0, 0, LedgerEntry::_ext_t{});
+        switch (canCreateEntryWithoutSponsorship(header.current(), le,
+                                                 sourceAccount.current()))
         {
-        case AddSubentryResult::SUCCESS:
+        case SponsorshipResult::SUCCESS:
             break;
-        case AddSubentryResult::LOW_RESERVE:
+        case SponsorshipResult::LOW_RESERVE:
             setResultLowReserve();
             return false;
-        case AddSubentryResult::TOO_MANY_SUBENTRIES:
+        case SponsorshipResult::TOO_MANY_SUBENTRIES:
             mResult.code(opTOO_MANY_SUBENTRIES);
             return false;
         default:
-            throw std::runtime_error("Unexpected result from addNumEntries");
+            // Includes of SponsorshipResult::TOO_MANY_SPONSORING
+            // and SponsorshipResult::TOO_MANY_SPONSORED
+            throw std::runtime_error("Unexpected result from "
+                                     "createEntryWithPossibleSponsorship");
         }
+        createEntryWithoutSponsorship(le, sourceAccount.current());
     }
 
     auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
@@ -193,6 +209,12 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
 bool
 ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
 {
+    ZoneNamedN(applyZone, "ManageOfferOp apply", true);
+    std::string pairStr = assetToString(mSheep);
+    pairStr += ":";
+    pairStr += assetToString(mWheat);
+    ZoneTextV(applyZone, pairStr.c_str(), pairStr.size());
+
     LedgerTxn ltx(ltxOuter);
     if (!checkOfferValid(ltx))
     {
@@ -203,10 +225,11 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
     bool passive = false;
     int64_t amount = 0;
     uint32_t flags = 0;
+    LedgerEntry::_ext_t extension;
 
     if (mOfferID)
     { // modifying an old offer
-        auto sellSheepOffer = DiamNet::loadOffer(ltx, getSourceID(), mOfferID);
+        auto sellSheepOffer = diamnet::loadOffer(ltx, getSourceID(), mOfferID);
         if (!sellSheepOffer)
         {
             setResultNotFound();
@@ -228,10 +251,17 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
         flags = sellSheepOffer.current().data.offer().flags;
         passive = flags & PASSIVE_FLAG;
 
+        // Capture sponsorship before erasing offer
+        extension = sellSheepOffer.current().ext;
+
         // WARNING: sellSheepOffer is deleted but sourceAccount is not updated
         // to reflect the change in numSubEntries at this point. However, we
         // can't update it here since doing so would modify sourceAccount,
-        // which would lead to different buckets being generated.
+        // which would lead to different buckets being generated. Furthermore,
+        // sponsorships are not updated here.
+        //
+        // This allows the entire operation to be applied after accounting for
+        // the potential of retaining this entry.
         sellSheepOffer.erase();
     }
     else
@@ -239,6 +269,41 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
         creatingNewOffer = true;
         passive = mSetPassiveOnCreate;
         flags = passive ? PASSIVE_FLAG : 0;
+
+        auto header = ltx.loadHeader();
+        if (header.current().ledgerVersion >= 14)
+        {
+            // WARNING: no offer is actually created here. Instead, we are just
+            // establishing the numSubEntries and sponsorship changes.
+            //
+            // This allows the entire operation to be applied after accounting
+            // for potential of creating this entry.
+            auto le = buildOffer(0, 0, LedgerEntry::_ext_t{});
+            auto sourceAccount = loadAccount(ltx, getSourceID());
+            switch (createEntryWithPossibleSponsorship(ltx, header, le,
+                                                       sourceAccount))
+            {
+            case SponsorshipResult::SUCCESS:
+                break;
+            case SponsorshipResult::LOW_RESERVE:
+                setResultLowReserve();
+                return false;
+            case SponsorshipResult::TOO_MANY_SUBENTRIES:
+                mResult.code(opTOO_MANY_SUBENTRIES);
+                return false;
+            case SponsorshipResult::TOO_MANY_SPONSORING:
+                mResult.code(opTOO_MANY_SPONSORING);
+                return false;
+            case SponsorshipResult::TOO_MANY_SPONSORED:
+                // This is impossible right now because there is a limit on sub
+                // entries, fall through and throw
+            default:
+                throw std::runtime_error("Unexpected result from "
+                                         "createEntryWithPossibleSponsorship");
+            }
+
+            extension = le.ext;
+        }
     }
 
     setResultSuccess();
@@ -368,7 +433,7 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
             if (sheepStays)
             {
                 auto sourceAccount =
-                    DiamNet::loadAccountWithoutRecord(ltx, getSourceID());
+                    diamnet::loadAccountWithoutRecord(ltx, getSourceID());
                 auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
                     ltx, getSourceID(), mSheep);
                 auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(
@@ -396,28 +461,40 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
     auto header = ltx.loadHeader();
     if (amount > 0)
     {
-        auto newOffer = buildOffer(amount, flags);
+        auto newOffer = buildOffer(amount, flags, extension);
         if (creatingNewOffer)
         {
-            // make sure we don't allow us to add offers when we don't have
-            // the minbalance (should never happen at this stage in v9+)
-            auto sourceAccount = loadSourceAccount(ltx, header);
-            switch (addNumEntries(header, sourceAccount, 1))
+            if (header.current().ledgerVersion < 14)
             {
-            case AddSubentryResult::SUCCESS:
-                break;
-            case AddSubentryResult::LOW_RESERVE:
-                setResultLowReserve();
-                return false;
-            case AddSubentryResult::TOO_MANY_SUBENTRIES:
-                mResult.code(opTOO_MANY_SUBENTRIES);
-                return false;
-            default:
-                throw std::runtime_error(
-                    "Unexpected result from addNumEntries");
+                // make sure we don't allow us to add offers when we don't have
+                // the minbalance (should never happen at this stage in v9+)
+                auto sourceAccount = loadSourceAccount(ltx, header);
+                switch (canCreateEntryWithoutSponsorship(
+                    header.current(), newOffer, sourceAccount.current()))
+                {
+                case SponsorshipResult::SUCCESS:
+                    break;
+                case SponsorshipResult::LOW_RESERVE:
+                    setResultLowReserve();
+                    return false;
+                case SponsorshipResult::TOO_MANY_SUBENTRIES:
+                    mResult.code(opTOO_MANY_SUBENTRIES);
+                    return false;
+                default:
+                    // Includes of SponsorshipResult::TOO_MANY_SPONSORING
+                    // and SponsorshipResult::TOO_MANY_SPONSORED
+                    throw std::runtime_error(
+                        "Unexpected result from "
+                        "createEntryWithPossibleSponsorship");
+                }
+                createEntryWithoutSponsorship(newOffer,
+                                              sourceAccount.current());
             }
+            // In versions 14 and beyond, numSubEntries and sponsorships are
+            // updated at the beginning of this operation. Therefore, there is
+            // nothing to do here.
 
-            newOffer.data.offer().offerID = generateID(header);
+            newOffer.data.offer().offerID = generateNewOfferID(header);
             getSuccessResult().offer.effect(MANAGE_OFFER_CREATED);
         }
         else
@@ -438,10 +515,11 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
     {
         getSuccessResult().offer.effect(MANAGE_OFFER_DELETED);
 
-        if (!creatingNewOffer)
+        if (!creatingNewOffer || header.current().ledgerVersion >= 14)
         {
             auto sourceAccount = loadSourceAccount(ltx, header);
-            addNumEntries(header, sourceAccount, -1);
+            auto le = buildOffer(0, 0, extension);
+            removeEntryWithPossibleSponsorship(ltx, header, le, sourceAccount);
         }
     }
 
@@ -449,13 +527,21 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
     return true;
 }
 
+int64_t
+ManageOfferOpFrameBase::generateNewOfferID(LedgerTxnHeader& header)
+{
+    return generateID(header);
+}
+
 LedgerEntry
-ManageOfferOpFrameBase::buildOffer(int64_t amount, uint32_t flags) const
+ManageOfferOpFrameBase::buildOffer(int64_t amount, uint32_t flags,
+                                   LedgerEntry::_ext_t const& extension) const
 {
     LedgerEntry le;
     le.data.type(OFFER);
-    OfferEntry& o = le.data.offer();
+    le.ext = extension;
 
+    OfferEntry& o = le.data.offer();
     o.sellerID = getSourceID();
     o.amount = amount;
     o.price = mPrice;
@@ -502,6 +588,12 @@ ManageOfferOpFrameBase::doCheckValid(uint32_t ledgerVersion)
         // Note: This was not invalid before version 3
     }
 
+    if (ledgerVersion >= 15 && mOfferID < 0)
+    {
+        setResultMalformed();
+        return false;
+    }
+
     return true;
 }
 
@@ -509,11 +601,6 @@ void
 ManageOfferOpFrameBase::insertLedgerKeysToPrefetch(
     std::unordered_set<LedgerKey>& keys) const
 {
-    if (isDeleteOffer())
-    {
-        return;
-    }
-
     // Prefetch existing offer
     if (mOfferID)
     {
@@ -523,8 +610,6 @@ ManageOfferOpFrameBase::insertLedgerKeysToPrefetch(
     auto addIssuerAndTrustline = [&](Asset const& asset) {
         if (asset.type() != ASSET_TYPE_NATIVE)
         {
-            auto issuer = getIssuer(asset);
-            keys.emplace(accountKey(issuer));
             keys.emplace(trustlineKey(this->getSourceID(), asset));
         }
     };

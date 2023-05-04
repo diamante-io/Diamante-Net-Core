@@ -1,4 +1,4 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,8 +8,9 @@
 #include "database/Database.h"
 #include "main/Application.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
@@ -31,12 +32,16 @@ BanManagerImpl::~BanManagerImpl()
 void
 BanManagerImpl::banNode(NodeID nodeID)
 {
+    ZoneScoped;
     if (isBanned(nodeID))
     {
         return;
     }
 
     auto nodeIDString = KeyUtils::toStrKey(nodeID);
+
+    CLOG(INFO, "Overlay") << "ban " << nodeIDString;
+
     auto timer = mApp.getDatabase().getInsertTimer("ban");
     auto prep = mApp.getDatabase().getPreparedStatement(
         "INSERT INTO ban (nodeid) VALUES(:n)");
@@ -49,7 +54,9 @@ BanManagerImpl::banNode(NodeID nodeID)
 void
 BanManagerImpl::unbanNode(NodeID nodeID)
 {
+    ZoneScoped;
     auto nodeIDString = KeyUtils::toStrKey(nodeID);
+    CLOG(INFO, "Overlay") << "unban " << nodeIDString;
     auto timer = mApp.getDatabase().getDeleteTimer("ban");
     auto prep = mApp.getDatabase().getPreparedStatement(
         "DELETE FROM ban WHERE nodeid = :n;");
@@ -62,6 +69,7 @@ BanManagerImpl::unbanNode(NodeID nodeID)
 bool
 BanManagerImpl::isBanned(NodeID nodeID)
 {
+    ZoneScoped;
     auto nodeIDString = KeyUtils::toStrKey(nodeID);
     auto timer = mApp.getDatabase().getSelectTimer("ban");
     auto prep = mApp.getDatabase().getPreparedStatement(
@@ -78,6 +86,7 @@ BanManagerImpl::isBanned(NodeID nodeID)
 std::vector<std::string>
 BanManagerImpl::getBans()
 {
+    ZoneScoped;
     std::vector<std::string> result;
     std::string nodeIDString;
     auto timer = mApp.getDatabase().getSelectTimer("ban");

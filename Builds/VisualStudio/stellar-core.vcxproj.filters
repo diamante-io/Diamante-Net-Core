@@ -151,6 +151,12 @@
     <Filter Include="transactions\simulation">
       <UniqueIdentifier>{b342c551-848c-427d-8d3b-df060afe49aa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\fmt">
+      <UniqueIdentifier>{1bf54804-bf4a-430d-9416-16df128fd308}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\tracy">
+      <UniqueIdentifier>{59b37591-b830-4d78-9b4f-c7e2ddcea012}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\lib\util\getopt_long.c">
@@ -218,9 +224,6 @@
     </ClCompile>
     <ClCompile Include="..\..\lib\xdrpp\tests\srpc.cc">
       <Filter>lib\xdrpp</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\lib\util\format.cc">
-      <Filter>lib\util</Filter>
     </ClCompile>
     <ClCompile Include="..\..\lib\asio.cpp">
       <Filter>lib</Filter>
@@ -336,10 +339,13 @@
     <ClCompile Include="..\..\src\invariant\LedgerEntryIsValid.cpp">
       <Filter>invariant</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\main\DiamNetCoreVersion.cpp">
+    <ClCompile Include="..\..\src\main\DiamnetCoreVersion.cpp">
       <Filter>main\generated</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\invariant\LiabilitiesMatchOffers.cpp">
+      <Filter>invariant</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\invariant\SponsorshipCountIsValid.cpp">
       <Filter>invariant</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\numeric.cpp">
@@ -373,6 +379,9 @@
       <Filter>work</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\historywork\DownloadBucketsWork.cpp">
+      <Filter>historyWork</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\historywork\DownloadVerifyTxResultsWork.cpp">
       <Filter>historyWork</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\historywork\FetchRecentQsetsWork.cpp">
@@ -423,6 +432,9 @@
     <ClCompile Include="..\..\src\historywork\VerifyBucketWork.cpp">
       <Filter>historyWork</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\historywork\VerifyTxResultsWork.cpp">
+      <Filter>historyWork</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\historywork\WriteSnapshotWork.cpp">
       <Filter>historyWork</Filter>
     </ClCompile>
@@ -449,12 +461,6 @@
     </ClCompile>
     <ClCompile Include="..\..\src\bucket\PublishQueueBuckets.cpp">
       <Filter>bucket</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\crypto\ByteSliceHasher.cpp">
-      <Filter>crypto</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\crypto\ECDH.cpp">
-      <Filter>crypto</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\crypto\Hex.cpp">
       <Filter>crypto</Filter>
@@ -573,9 +579,6 @@
     <ClCompile Include="..\..\src\ledger\LedgerTxnTrustLineSQL.cpp">
       <Filter>ledger</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ledger\SyncingLedgerChain.cpp">
-      <Filter>ledger</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\ledger\TrustLineWrapper.cpp">
       <Filter>ledger</Filter>
     </ClCompile>
@@ -666,10 +669,10 @@
     <ClCompile Include="..\..\src\invariant\test\LiabilitiesMatchOffersTests.cpp">
       <Filter>invariant\tests</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ledger\test\LedgerHeaderTests.cpp">
-      <Filter>ledger\tests</Filter>
+    <ClCompile Include="..\..\src\invariant\test\SponsorshipCountIsValidTests.cpp">
+      <Filter>invariant\tests</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ledger\test\LedgerManagerTests.cpp">
+    <ClCompile Include="..\..\src\ledger\test\LedgerHeaderTests.cpp">
       <Filter>ledger\tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\ledger\test\LedgerTests.cpp">
@@ -684,10 +687,7 @@
     <ClCompile Include="..\..\src\ledger\test\LiabilitiesTests.cpp">
       <Filter>ledger\tests</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ledger\test\SyncingLedgerChainTests.cpp">
-      <Filter>ledger\tests</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\main\test\ApplicationTests.cpp">
+    <ClCompile Include="..\..\src\main\test\CommandHandlerTests.cpp">
       <Filter>main\tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\main\test\ConfigTests.cpp">
@@ -721,6 +721,9 @@
       <Filter>util\tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\test\FsTests.cpp">
+      <Filter>util\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\test\MathTests.cpp">
       <Filter>util\tests</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\test\StatusManagerTest.cpp">
@@ -960,21 +963,6 @@
     <ClCompile Include="..\..\src\bucket\MergeKey.cpp">
       <Filter>bucket</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\herder\simulation\SimulationTxSetFrame.cpp">
-      <Filter>herder\simulation</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\catchup\simulation\ApplyTransactionsWork.cpp">
-      <Filter>catchup\simulation</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\catchup\simulation\HistoryArchiveStream.cpp">
-      <Filter>catchup\simulation</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\transactions\simulation\SimulationMergeOpFrame.cpp">
-      <Filter>transactions\simulation</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\transactions\simulation\SimulationTransactionFrame.cpp">
-      <Filter>transactions\simulation</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\test\FuzzerImpl.cpp">
       <Filter>test</Filter>
     </ClCompile>
@@ -992,6 +980,162 @@
     </ClCompile>
     <ClCompile Include="..\..\src\transactions\PathPaymentStrictSendOpFrame.cpp">
       <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lib\util\siphash.cpp">
+      <Filter>lib\util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\crypto\ShortHash.cpp">
+      <Filter>crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\crypto\test\ShortHashTests.cpp">
+      <Filter>crypto\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\catchup\ApplyBufferedLedgersWork.cpp">
+      <Filter>catchup</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\catchup\ApplyLedgerWork.cpp">
+      <Filter>catchup</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ledger\InMemoryLedgerTxnRoot.cpp">
+      <Filter>ledger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ledger\test\LedgerCloseMetaStreamTests.cpp">
+      <Filter>ledger\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\crypto\Curve25519.cpp">
+      <Filter>crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\overlay\SurveyManager.cpp">
+      <Filter>overlay</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\overlay\SurveyMessageLimiter.cpp">
+      <Filter>overlay</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\overlay\test\SurveyManagerTests.cpp">
+      <Filter>overlay\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\overlay\test\SurveyMessageLimiterTests.cpp">
+      <Filter>overlay\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\test\MetricTests.cpp">
+      <Filter>util\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\FeeBumpTransactionTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\FeeBumpTransactionFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\TransactionBridge.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\TransactionFrameBase.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\TransactionSQL.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\catchup\CatchupRange.cpp">
+      <Filter>catchup</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\catchup\simulation\HistoryArchiveStream.cpp">
+      <Filter>catchup\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\catchup\simulation\TxSimApplyTransactionsWork.cpp">
+      <Filter>catchup\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimCreatePassiveSellOfferOpFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimFeeBumpTransactionFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimGenerateBucketsWork.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimManageBuyOfferOpFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimManageSellOfferOpFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimMergeOpFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimScaleBucketlistWork.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimTransactionFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimUtils.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\herder\simulation\TxSimTxSetFrame.cpp">
+      <Filter>herder\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\Scheduler.cpp">
+      <Filter>util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\test\SchedulerTests.cpp">
+      <Filter>util\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lib\tracy\TracyClient.cpp">
+      <Filter>lib\tracy</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ledger\GeneralizedLedgerEntry.cpp">
+      <Filter>ledger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\ledger\LedgerTxnClaimableBalanceSQL.cpp">
+      <Filter>ledger</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\ClaimClaimableBalanceOpFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\EndSponsoringFutureReservesOpFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\CreateClaimableBalanceOpFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\BeginSponsoringFutureReservesOpFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\SponsorshipUtils.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\RevokeSponsorshipOpFrame.cpp">
+      <Filter>transactions</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\ClaimableBalanceTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\EndSponsoringFutureReservesTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\CreateAccountTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\BeginSponsoringFutureReservesTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\SponsorshipTestUtils.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\test\RevokeSponsorshipTests.cpp">
+      <Filter>transactions\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\historywork\test\HistoryWorkTests.cpp">
+      <Filter>historyWork\tests</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\historywork\WriteVerifiedCheckpointHashesWork.cpp">
+      <Filter>historyWork</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\transactions\simulation\TxSimCreateClaimableBalanceOpFrame.cpp">
+      <Filter>transactions\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\XDRCereal.cpp">
+      <Filter>util</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1039,9 +1183,6 @@
     </ClInclude>
     <ClInclude Include="..\..\src\util\types.h">
       <Filter>util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\lib\util\format.h">
-      <Filter>lib\util</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lib\util\uint128_t.h">
       <Filter>lib\util</Filter>
@@ -1100,9 +1241,6 @@
     <ClInclude Include="..\..\src\util\GlobalChecks.h">
       <Filter>util</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\lib\util\lrucache.hpp">
-      <Filter>lib\util</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\util\HashOfHash.h">
       <Filter>util</Filter>
     </ClInclude>
@@ -1127,22 +1265,22 @@
     <ClInclude Include="..\..\lib\util\basen.h">
       <Filter>util</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-ledger.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-ledger.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-ledger-entries.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-ledger-entries.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-overlay.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-overlay.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-SCP.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-SCP.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-transaction.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-transaction.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
-    <ClInclude Include="src\generated\xdr\DiamNet-types.h">
+    <ClInclude Include="src\generated\xdr\Diamnet-types.h">
       <Filter>xdr\generated</Filter>
     </ClInclude>
     <ClInclude Include="..\..\lib\catch.hpp">
@@ -1220,6 +1358,9 @@
     <ClInclude Include="..\..\src\invariant\LiabilitiesMatchOffers.h">
       <Filter>invariant</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\invariant\SponsorshipCountIsValid.h">
+      <Filter>invariant</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\util\LogSlowExecution.h">
       <Filter>util</Filter>
     </ClInclude>
@@ -1260,6 +1401,9 @@
       <Filter>work</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\historywork\DownloadBucketsWork.h">
+      <Filter>historyWork</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\historywork\DownloadVerifyTxResultsWork.h">
       <Filter>historyWork</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\historywork\FetchRecentQsetsWork.h">
@@ -1310,6 +1454,9 @@
     <ClInclude Include="..\..\src\historywork\VerifyBucketWork.h">
       <Filter>historyWork</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\historywork\VerifyTxResultsWork.h">
+      <Filter>historyWork</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\historywork\WriteSnapshotWork.h">
       <Filter>historyWork</Filter>
     </ClInclude>
@@ -1344,12 +1491,6 @@
       <Filter>bucket</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\crypto\ByteSlice.h">
-      <Filter>crypto</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\crypto\ByteSliceHasher.h">
-      <Filter>crypto</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\crypto\ECDH.h">
       <Filter>crypto</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\crypto\Hex.h">
@@ -1475,13 +1616,10 @@
     <ClInclude Include="..\..\src\ledger\LedgerTxnImpl.h">
       <Filter>ledger</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\ledger\SyncingLedgerChain.h">
-      <Filter>ledger</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\ledger\TrustLineWrapper.h">
       <Filter>ledger</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\main\DiamNetCoreVersion.h">
+    <ClInclude Include="..\..\src\main\DiamnetCoreVersion.h">
       <Filter>main</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\main\Application.h">
@@ -1655,7 +1793,7 @@
     <ClInclude Include="..\..\src\overlay\RandomPeerSource.h">
       <Filter>overlay</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\overlay\DiamNetXDR.h">
+    <ClInclude Include="..\..\src\overlay\DiamnetXDR.h">
       <Filter>overlay</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\overlay\TCPPeer.h">
@@ -1688,21 +1826,6 @@
     <ClInclude Include="..\..\src\bucket\MergeKey.h">
       <Filter>bucket</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\herder\simulation\SimulationTxSetFrame.h">
-      <Filter>herder\simulation</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\catchup\simulation\ApplyTransactionsWork.h">
-      <Filter>catchup\simulation</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\catchup\simulation\HistoryArchiveStream.h">
-      <Filter>catchup\simulation</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\transactions\simulation\SimulationMergeOpFrame.h">
-      <Filter>transactions\simulation</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\transactions\simulation\SimulationTransactionFrame.h">
-      <Filter>transactions\simulation</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\test\FuzzerImpl.h">
       <Filter>test</Filter>
     </ClInclude>
@@ -1714,6 +1837,132 @@
     </ClInclude>
     <ClInclude Include="..\..\src\transactions\PathPaymentStrictSendOpFrame.h">
       <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lib\util\siphash.h">
+      <Filter>lib\util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\crypto\ShortHash.h">
+      <Filter>crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\crypto\XDRHasher.h">
+      <Filter>crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\catchup\ApplyBufferedLedgersWork.h">
+      <Filter>catchup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\catchup\ApplyLedgerWork.h">
+      <Filter>catchup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\ledger\InMemoryLedgerTxnRoot.h">
+      <Filter>ledger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\crypto\Curve25519.h">
+      <Filter>crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\overlay\SurveyManager.h">
+      <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\overlay\SurveyMessageLimiter.h">
+      <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\FeeBumpTransactionFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\TransactionBridge.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\TransactionFrameBase.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\TransactionSQL.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\catchup\CatchupRange.h">
+      <Filter>catchup</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\catchup\simulation\HistoryArchiveStream.h">
+      <Filter>catchup\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\catchup\simulation\TxSimApplyTransactionsWork.h">
+      <Filter>catchup\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimCreatePassiveSellOfferOpFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimFeeBumpTransactionFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimGenerateBucketsWork.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimManageBuyOfferOpFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimManageSellOfferOpFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimMergeOpFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimScaleBucketlistWork.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimTransactionFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimUtils.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\herder\simulation\TxSimTxSetFrame.h">
+      <Filter>herder\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lib\util\finally.h">
+      <Filter>lib\util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\util\Decoder.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\util\Scheduler.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\util\XDROperators.h">
+      <Filter>util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\lib\fmt\include\fmt\format.h">
+      <Filter>lib\fmt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\ledger\GeneralizedLedgerEntry.h">
+      <Filter>ledger</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\ClaimClaimableBalanceOpFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\EndSponsoringFutureReservesOpFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\CreateClaimableBalanceOpFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\BeginSponsoringFutureReservesOpFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\SponsorshipUtils.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\RevokeSponsorshipOpFrame.h">
+      <Filter>transactions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\test\SponsorshipTestUtils.h">
+      <Filter>transactions\tests</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\historywork\WriteVerifiedCheckpointHashesWork.h">
+      <Filter>historyWork</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\transactions\simulation\TxSimCreateClaimableBalanceOpFrame.h">
+      <Filter>transactions\simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\util\XDRCereal.h">
+      <Filter>util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1756,13 +2005,13 @@
     <None Include="..\..\docs\readme.md">
       <Filter>docs</Filter>
     </None>
-    <None Include="..\..\docs\DiamNet-core_example.cfg">
+    <None Include="..\..\docs\diamnet-core_example.cfg">
       <Filter>docs</Filter>
     </None>
-    <None Include="..\..\docs\DiamNet-core_standalone.cfg">
+    <None Include="..\..\docs\diamnet-core_standalone.cfg">
       <Filter>docs</Filter>
     </None>
-    <None Include="..\..\docs\DiamNet-core_testnet.cfg">
+    <None Include="..\..\docs\diamnet-core_testnet.cfg">
       <Filter>docs</Filter>
     </None>
     <None Include="..\..\docs\transaction.md">
@@ -1786,10 +2035,10 @@
     <None Include="..\..\CONTRIBUTING.md" />
     <None Include="..\..\README" />
     <None Include="..\..\travis-build.sh" />
-    <None Include="..\..\src\history\serialize-tests\DiamNet-history.livenet.15686975.json">
+    <None Include="..\..\src\history\serialize-tests\diamnet-history.livenet.15686975.json">
       <Filter>history\tests\serialize-tests</Filter>
     </None>
-    <None Include="..\..\src\history\serialize-tests\DiamNet-history.testnet.6714239.json">
+    <None Include="..\..\src\history\serialize-tests\diamnet-history.testnet.6714239.json">
       <Filter>history\tests\serialize-tests</Filter>
     </None>
     <None Include="..\..\performance-eval\performance-eval.md" />
@@ -1823,13 +2072,10 @@
     <None Include="..\..\docs\software\security-protocol-release-notes.md">
       <Filter>docs\software</Filter>
     </None>
-    <None Include="..\..\docs\DiamNet-core.1.md">
+    <None Include="..\..\docs\diamnet-core_testnet_legacy.cfg">
       <Filter>docs</Filter>
     </None>
-    <None Include="..\..\docs\DiamNet-core_testnet_legacy.cfg">
-      <Filter>docs</Filter>
-    </None>
-    <None Include="..\..\docs\DiamNet-core_example_validators.cfg">
+    <None Include="..\..\docs\diamnet-core_example_validators.cfg">
       <Filter>docs</Filter>
     </None>
     <None Include="..\..\.github\ISSUE_TEMPLATE\bug-report.md">
@@ -1844,27 +2090,33 @@
     <None Include="..\..\.github\PULL_REQUEST_TEMPLATE.md">
       <Filter>github</Filter>
     </None>
+    <None Include="..\..\docs\quick-reference.md">
+      <Filter>docs</Filter>
+    </None>
+    <None Include="..\..\docs\tx-simulation.md">
+      <Filter>docs</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-ledger.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-ledger.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-transaction.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-transaction.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-types.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-types.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-overlay.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-overlay.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-ledger-entries.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-ledger-entries.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\xdr\DiamNet-SCP.x">
+    <CustomBuild Include="..\..\src\xdr\Diamnet-SCP.x">
       <Filter>xdr</Filter>
     </CustomBuild>
-    <CustomBuild Include="..\..\src\main\DiamNetCoreVersion.cpp.in">
+    <CustomBuild Include="..\..\src\main\DiamnetCoreVersion.cpp.in">
       <Filter>main</Filter>
     </CustomBuild>
   </ItemGroup>

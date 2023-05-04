@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,8 +7,9 @@
 #include "historywork/GetRemoteFileWork.h"
 #include "historywork/GunzipFileWork.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 GetAndUnzipRemoteFileWork::GetAndUnzipRemoteFileWork(
@@ -69,6 +70,7 @@ GetAndUnzipRemoteFileWork::onSuccess()
 BasicWork::State
 GetAndUnzipRemoteFileWork::doWork()
 {
+    ZoneScoped;
     if (mGunzipFileWork)
     {
         // Download completed, unzipping started
@@ -105,7 +107,7 @@ GetAndUnzipRemoteFileWork::doWork()
             << "Downloading and unzipping " << mFt.remoteName();
         mGetRemoteFileWork =
             addWork<GetRemoteFileWork>(mFt.remoteName(), mFt.localPath_gz_tmp(),
-                                       nullptr, BasicWork::RETRY_NEVER);
+                                       mArchive, BasicWork::RETRY_NEVER);
         mDownloadStart.Mark();
         return State::WORK_RUNNING;
     }
@@ -114,6 +116,7 @@ GetAndUnzipRemoteFileWork::doWork()
 bool
 GetAndUnzipRemoteFileWork::validateFile()
 {
+    ZoneScoped;
     if (!fs::exists(mFt.localPath_gz_tmp()))
     {
         CLOG(ERROR, "History") << "Downloading and unzipping "

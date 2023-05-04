@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,18 +6,19 @@
 #include "history/HistoryArchive.h"
 #include "historywork/GetRemoteFileWork.h"
 #include "ledger/LedgerManager.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/ErrorMessages.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 #include <medida/meter.h>
 #include <medida/metrics_registry.h>
 
-namespace DiamNet
+namespace diamnet
 {
 GetHistoryArchiveStateWork::GetHistoryArchiveStateWork(
     Application& app, uint32_t seq, std::shared_ptr<HistoryArchive> archive,
-    size_t maxRetries)
+    std::string mode, size_t maxRetries)
     : Work(app, "get-archive-state", maxRetries)
     , mSeq(seq)
     , mArchive(archive)
@@ -27,13 +28,16 @@ GetHistoryArchiveStateWork::GetHistoryArchiveStateWork(
                   : app.getHistoryManager().localFilename(
                         HistoryArchiveState::baseName()))
     , mGetHistoryArchiveStateSuccess(app.getMetrics().NewMeter(
-          {"history", "download-history-archive-state", "success"}, "event"))
+          {"history", "download-history-archive-state" + std::move(mode),
+           "success"},
+          "event"))
 {
 }
 
 BasicWork::State
 GetHistoryArchiveStateWork::doWork()
 {
+    ZoneScoped;
     if (mGetRemoteFile)
     {
         auto state = mGetRemoteFile->getState();
@@ -51,7 +55,7 @@ GetHistoryArchiveStateWork::doWork()
                 CLOG(ERROR, "History") << "OR";
                 CLOG(ERROR, "History") << POSSIBLY_CORRUPTED_HISTORY;
                 CLOG(ERROR, "History") << "OR";
-                CLOG(ERROR, "History") << UPGRADE_DiamNet_CORE;
+                CLOG(ERROR, "History") << UPGRADE_DIAMNET_CORE;
                 return State::WORK_FAILURE;
             }
         }
@@ -60,8 +64,7 @@ GetHistoryArchiveStateWork::doWork()
 
     else
     {
-        auto name = mSeq == 0 ? HistoryArchiveState::wellKnownRemoteName()
-                              : HistoryArchiveState::remoteName(mSeq);
+        auto name = getRemoteName();
         CLOG(INFO, "History") << "Downloading history archive state: " << name;
         mGetRemoteFile = addWork<GetRemoteFileWork>(name, mLocalFilename,
                                                     mArchive, mRetries);
@@ -82,5 +85,20 @@ GetHistoryArchiveStateWork::onSuccess()
 {
     mGetHistoryArchiveStateSuccess.Mark();
     Work::onSuccess();
+}
+
+std::string
+GetHistoryArchiveStateWork::getRemoteName() const
+{
+    return mSeq == 0 ? HistoryArchiveState::wellKnownRemoteName()
+                     : HistoryArchiveState::remoteName(mSeq);
+}
+
+std::string
+GetHistoryArchiveStateWork::getStatus() const
+{
+    std::string ledgerString = mSeq == 0 ? "current" : std::to_string(mSeq);
+    return fmt::format("Downloading state file {} for ledger {}",
+                       getRemoteName(), ledgerString);
 }
 }

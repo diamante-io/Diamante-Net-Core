@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,8 +8,9 @@
 #include "main/Application.h"
 #include "transactions/TransactionFrame.h"
 #include "util/XDROperators.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 BumpSequenceOpFrame::BumpSequenceOpFrame(Operation const& op,
                                          OperationResult& res,
@@ -35,6 +36,7 @@ BumpSequenceOpFrame::isVersionSupported(uint32_t protocolVersion) const
 bool
 BumpSequenceOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
+    ZoneNamedN(applyZone, "BumpSequenceOp apply", true);
     LedgerTxn ltxInner(ltx);
     auto header = ltxInner.loadHeader();
     auto sourceAccountEntry = loadSourceAccount(ltxInner, header);

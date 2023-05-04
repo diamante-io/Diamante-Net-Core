@@ -1,4 +1,4 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,7 +7,7 @@
 #include "test/test.h"
 #include "work/WorkScheduler.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace testutil
@@ -21,6 +21,14 @@ crankSome(VirtualClock& clock)
          (i < 100 && clock.now() < (start + std::chrono::seconds(1)) &&
           clock.crank(false) > 0);
          ++i)
+        ;
+}
+
+void
+crankFor(VirtualClock& clock, VirtualClock::duration duration)
+{
+    auto start = clock.now();
+    while (clock.now() < (start + duration) && clock.crank(false) > 0)
         ;
 }
 
@@ -96,7 +104,7 @@ getTestDate(int day, int month, int year)
 {
     auto tm = getTestDateTime(day, month, year, 0, 0, 0);
 
-    VirtualClock::time_point tp = VirtualClock::tmToPoint(tm);
+    VirtualClock::system_time_point tp = VirtualClock::tmToSystemPoint(tm);
     time_t t = VirtualClock::to_time_t(tp);
 
     return t;
@@ -115,10 +123,10 @@ getTestDateTime(int day, int month, int year, int hour, int minute, int second)
     return tm;
 }
 
-VirtualClock::time_point
+VirtualClock::system_time_point
 genesis(int minute, int second)
 {
-    return VirtualClock::tmToPoint(
+    return VirtualClock::tmToSystemPoint(
         getTestDateTime(1, 7, 2014, 0, minute, second));
 }
 }

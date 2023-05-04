@@ -4,24 +4,24 @@ title: Security and Protocol release notes
 
 # Purpose of this document
 
-This document describes changes to the DiamNet protocol as well as other changes made to address security issues.
+This document describes changes to the Diamnet protocol as well as other changes made to address security issues.
 
 It is organized as a reverse chronological timeline of releases.
 
 ## Protocol updates
 
 * Changes to SCP.
-* Changes to the DiamNet Protocol (anything that modifies how the distributed ledger functions, including historical data).
+* Changes to the Diamnet Protocol (anything that modifies how the distributed ledger functions, including historical data).
 
 ## Security issues
 
 * DDoS.
 * Crashes (that could lead to remote code execution).
-* Other attacks that can be exploited (inside or outside of the DiamNet protocol).
+* Other attacks that can be exploited (inside or outside of the Diamnet protocol).
 
 ## Goals for this document
 
-* have a summary view of changes that affect the code base (DiamNet-core has to be able to replay all ledgers generated since genesis on the DiamNet public network).
+* have a summary view of changes that affect the code base (diamnet-core has to be able to replay all ledgers generated since genesis on the Diamnet public network).
 * drive transparency on issues that affected the network in the past as well as their impact.
 
 ## Security issues disclosure policy
@@ -31,8 +31,8 @@ It is organized as a reverse chronological timeline of releases.
 The goal is work with the larger security community on a responsible disclosure model.
 
 It then follows that:
-* this document is not where security disclosures are made, instead follow the process outlined in [DiamNet's bug bounty program](https://www.DiamNet.org/bug-bounty-program/) as a way to triage and respond to issues.
-* issues are reflected in this document 30 days after release of the version of DiamNet core containing fixes for the issues.
+* this document is not where security disclosures are made, instead follow the process outlined in [Diamnet's bug bounty program](https://www.diamnet.org/bug-bounty-program/) as a way to triage and respond to issues.
+* issues are reflected in this document 30 days after release of the version of Diamnet core containing fixes for the issues.
 
 # Format of each report
 
@@ -53,6 +53,51 @@ It then follows that:
 
 # List of releases
 
+## v14.0.0 (2020-08-20)
+
+* `Ledger` - protocol - CAP0023 - Two-Part Payments with ClaimableBalanceEntry
+* `Ledger` - protocol - CAP0033 - Sponsored Reserve
+
+## v13.0.0 (2020-04-29)
+
+* `Ledger` - protocol - CAP0015 - Fee-Bump Transactions
+* `Ledger` - protocol - CAP0018 - Fine-Grained Control of Authorization (eg. AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG)
+* `Ledger` - protocol - CAP0027 - First-class multiplexed accounts
+* `Ledger` - protocol - CAP0028 - Clear pre-auth transaction signer on failed transactions
+* `Ledger` - protocol - CAP0030 - Remove NO_ISSUER Operation Results
+
+## v12.1.0 (2019-10-24)
+
+* `SCP` - protocol - added `CRITICAL` quality to quorum config generator
+
+## v12.0.0 (2019-09-30)
+
+* `Ledger` - protocol - CAP0024 - Make PathPayment symmetrical
+* `Ledger` - protocol - CAP0025 - Remove bucket shadowing
+* `Ledger` - protocol - CAP0026 - Disable inflation
+
+## v11.4.0 (2019-08-28)
+
+* `Herder` - security - connection string to the database could be logged unencrypted
+    * exploited: no
+    * mitigation: code fix
+
+## v11.2.0 (2019-06-27)
+
+* `SCP` - protocol - switch to auto generated quorum configuration
+* `SCP` - protocol - persist SCP messages across restarts, increasing the chance of propagating externalize messages
+* `SCP` - protocol - added quorum intersection monitoring
+* `Ledger` - protocol - changed to reject a ledger containing an unknown upgrade instead of corrupting the local ledger state
+
+## v11.1.0 (2019-05-23)
+
+* `Ledger` - security - crash when processing bad archive files
+    * exploited: no
+    * mitigation: code fix
+* `Overlay` - security - ignore SCP messages from a previous incarnation of the network (testnet reset)
+    * exploited: no
+    * mitigation: code fix
+
 ## v11.0.0 (2019-04-24)
 
 * `Ledger` - protocol - implementing CAP0005 (Transaction pricing improvement)
@@ -65,6 +110,8 @@ It then follows that:
     * exploited: no
     * mitigation: code fix
     * bug bounty: [ahook](https://hackerone.com/ahook)
+
+* `SCP` - protocol - attach validator ID to values introduced by that validator
 
 ## v10.0.0 (2018-09-05)
 

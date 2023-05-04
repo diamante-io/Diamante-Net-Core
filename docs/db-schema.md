@@ -2,7 +2,7 @@
 title: DB Schema
 ---
 
-DiamNet-core maintains the current state of the ledger in a SQL DB. Currently
+diamnet-core maintains the current state of the ledger in a SQL DB. Currently
 it can be configured to use either sqlite or postgres.
 
 This database is the main way a dependent service such as Horizon can gather information on the current ledger state or transaction history.
@@ -51,8 +51,8 @@ homedomain | VARCHAR(44) | (BASE64)
 thresholds | TEXT | (BASE64)
 flags | INT NOT NULL |
 lastmodified | INT NOT NULL | lastModifiedLedgerSeq
-buyingliabilities | BIGINT CHECK (buyingliabilities >= 0) |
-sellingliabilities | BIGINT CHECK (sellingliabilities >= 0) |
+extension | TEXT | Extension specific to AccountEntry (XDR)
+ledgerext | TEXT | Extension common to all LedgerEntry types (XDR)
 signers | TEXT | (XDR)
 
 ## offers
@@ -73,6 +73,8 @@ priced | INT NOT NULL | Price.d
 price | DOUBLE PRECISION NOT NULL | computed price n/d, used for ordering offers
 flags | INT NOT NULL |
 lastmodified | INT NOT NULL | lastModifiedLedgerSeq
+extension | TEXT | Extension specific to OfferEntry (XDR)
+ledgerext | TEXT | Extension common to all LedgerEntry types (XDR)
 (offerid) | PRIMARY KEY |
 
 ## trustlines
@@ -91,8 +93,8 @@ tlimit | BIGINT NOT NULL DEFAULT 0 CHECK (tlimit >= 0) | limit
 balance | BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0) |
 flags | INT NOT NULL |
 lastmodified | INT NOT NULL | lastModifiedLedgerSeq
-buyingliabilities | BIGINT CHECK (buyingliabilities >= 0) |
-sellingliabilities | BIGINT CHECK (sellingliabilities >= 0) |
+extension | TEXT | Extension specific to TrustLineEntry (XDR)
+ledgerext | TEXT | Extension common to all LedgerEntry types (XDR)
 (accountid, issuer, assetcode) | PRIMARY KEY |
 
 ## accountdata
@@ -107,7 +109,21 @@ accountid | VARCHAR(56) NOT NULL | (STRKEY)
 dataname | VARCHAR(88) NOT NULL | (BASE64)
 datavalue | VARCHAR(112) NOT NULL | (BASE64)
 lastmodified | INT NOT NULL | lastModifiedLedgerSeq
+extension | TEXT | Extension specific to DataEntry (XDR)
+ledgerext | TEXT | Extension common to all LedgerEntry types (XDR)
 (accountid, dataname) | PRIMARY KEY |
+
+## claimablebalance
+
+Defined in [`src/ledger/LedgerTxnClaimableBalanceSQL.cpp`](/src/ledger/LedgerTxnClaimableBalanceSQL.cpp)
+
+Equivalent to _ClaimableBalanceEntry_
+
+Field | Type | Description
+------|------|---------------
+balanceid | VARCHAR(48) PRIMARY KEY | This is a ClaimableBalanceID (XDR)
+ledgerentry | TEXT NOT NULL | LedgerEntry that contains a ClaimableBalanceEntry (XDR)
+lastmodified | INT NOT NULL | lastModifiedLedgerSeq
 
 ## txhistory
 

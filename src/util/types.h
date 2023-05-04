@@ -1,17 +1,17 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "lib/util/uint128_t.h"
 #include "numeric.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "xdrpp/message.h"
 #include <type_traits>
 #include <vector>
 
-namespace DiamNet
+namespace diamnet
 {
 typedef std::vector<unsigned char> Blob;
 
@@ -69,6 +69,25 @@ strToAssetCode(xdr::opaque_array<N>& ret, std::string const& str)
     size_t n = std::min(ret.size(), str.size());
     std::copy(str.begin(), str.begin() + n, ret.begin());
 }
+
+inline std::string
+assetToString(const Asset& asset)
+{
+    auto r = std::string{};
+    switch (asset.type())
+    {
+    case diamnet::ASSET_TYPE_NATIVE:
+        r = std::string{"XLM"};
+        break;
+    case diamnet::ASSET_TYPE_CREDIT_ALPHANUM4:
+        assetCodeToStr(asset.alphaNum4().assetCode, r);
+        break;
+    case diamnet::ASSET_TYPE_CREDIT_ALPHANUM12:
+        assetCodeToStr(asset.alphaNum12().assetCode, r);
+        break;
+    }
+    return r;
+};
 
 bool addBalance(int64_t& balance, int64_t delta,
                 int64_t maxBalance = std::numeric_limits<int64_t>::max());

@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,7 +7,9 @@
 #include "crypto/Random.h"
 #include "crypto/SHA.h"
 #include "crypto/SecretKey.h"
+#include "crypto/ShortHash.h"
 #include "crypto/StrKey.h"
+#include "ledger/test/LedgerTestUtils.h"
 #include "lib/catch.hpp"
 #include "test/test.h"
 #include "util/Logging.h"
@@ -16,7 +18,7 @@
 #include <regex>
 #include <sodium.h>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 static std::map<std::vector<uint8_t>, std::string> hexTestVectors = {
     {{}, ""},
@@ -95,11 +97,59 @@ TEST_CASE("Stateful SHA256 tests", "[crypto]")
     for (auto const& pair : sha256TestVectors)
     {
         LOG(DEBUG) << "fixed test vector SHA256: \"" << pair.second << "\"";
-        auto h = SHA256::create();
-        h->add(pair.first);
-        auto hash = binToHex(h->finish());
+        SHA256 h;
+        h.add(pair.first);
+        auto hash = binToHex(h.finish());
         CHECK(hash.size() == pair.second.size());
         CHECK(hash == pair.second);
+    }
+}
+
+TEST_CASE("XDRSHA256 is identical to byte SHA256", "[crypto]")
+{
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        auto entry = LedgerTestUtils::generateValidLedgerEntry(100);
+        auto bytes_hash = sha256(xdr::xdr_to_opaque(entry));
+        auto stream_hash = xdrSha256(entry);
+        CHECK(bytes_hash == stream_hash);
+    }
+}
+
+TEST_CASE("SHA256 bytes bench", "[!hide][sha-bytes-bench]")
+{
+    shortHash::initialize();
+    autocheck::rng().seed(11111);
+    std::vector<LedgerEntry> entries;
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        entries.emplace_back(LedgerTestUtils::generateValidLedgerEntry(1000));
+    }
+    for (size_t i = 0; i < 10000; ++i)
+    {
+        for (auto const& e : entries)
+        {
+            auto opaque = xdr::xdr_to_opaque(e);
+            sha256(opaque);
+        }
+    }
+}
+
+TEST_CASE("SHA256 XDR bench", "[!hide][sha-xdr-bench]")
+{
+    shortHash::initialize();
+    autocheck::rng().seed(11111);
+    std::vector<LedgerEntry> entries;
+    for (size_t i = 0; i < 1000; ++i)
+    {
+        entries.emplace_back(LedgerTestUtils::generateValidLedgerEntry(1000));
+    }
+    for (size_t i = 0; i < 10000; ++i)
+    {
+        for (auto const& e : entries)
+        {
+            xdrSha256(e);
+        }
     }
 }
 
@@ -200,6 +250,32 @@ TEST_CASE("sign and verify benchmarking", "[crypto-bench][bench][!hide]")
         }
     }
 
+    {
+        for (auto& c : cases)
+        {
+            c.verify();
+        }
+    }
+}
+
+TEST_CASE("verify-hit benchmarking", "[crypto-bench][bench][!hide]")
+{
+    size_t k = 10;
+    size_t n = 100000;
+    std::vector<SignVerifyTestcase> cases;
+    for (size_t i = 0; i < k; ++i)
+    {
+        cases.push_back(SignVerifyTestcase::create());
+    }
+
+    for (auto& c : cases)
+    {
+        c.sign();
+    }
+
+    LOG(INFO) << "Benchmarking " << n << " verify-hits on " << k
+              << " signatures";
+    for (size_t i = 0; i < n; ++i)
     {
         for (auto& c : cases)
         {

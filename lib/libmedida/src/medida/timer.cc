@@ -159,7 +159,7 @@ Timer::Impl::Impl(Timer& self, std::chrono::nanoseconds duration_unit, std::chro
       duration_unit_nanos_ {duration_unit.count()},
       rate_unit_           {rate_unit},
       meter_               {"calls", rate_unit},
-      histogram_           {SamplingInterface::kBiased} {
+      histogram_           {SamplingInterface::kSliding} {
 }
 
 

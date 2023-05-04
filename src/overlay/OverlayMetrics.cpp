@@ -5,7 +5,7 @@
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
 
-namespace DiamNet
+namespace diamnet
 {
 
 OverlayMetrics::OverlayMetrics(Application& app)
@@ -13,6 +13,10 @@ OverlayMetrics::OverlayMetrics(Application& app)
           app.getMetrics().NewMeter({"overlay", "message", "read"}, "message"))
     , mMessageWrite(
           app.getMetrics().NewMeter({"overlay", "message", "write"}, "message"))
+    , mAsyncRead(
+          app.getMetrics().NewMeter({"overlay", "async", "read"}, "call"))
+    , mAsyncWrite(
+          app.getMetrics().NewMeter({"overlay", "async", "write"}, "call"))
     , mByteRead(app.getMetrics().NewMeter({"overlay", "byte", "read"}, "byte"))
     , mByteWrite(
           app.getMetrics().NewMeter({"overlay", "byte", "write"}, "byte"))
@@ -24,6 +28,11 @@ OverlayMetrics::OverlayMetrics(Application& app)
           app.getMetrics().NewMeter({"overlay", "timeout", "idle"}, "timeout"))
     , mTimeoutStraggler(app.getMetrics().NewMeter(
           {"overlay", "timeout", "straggler"}, "timeout"))
+    , mConnectionLatencyTimer(
+          app.getMetrics().NewTimer({"overlay", "connection", "latency"}))
+
+    , mItemFetcherNextPeer(app.getMetrics().NewMeter(
+          {"overlay", "item-fetcher", "next-peer"}, "item-fetcher"))
 
     , mRecvErrorTimer(app.getMetrics().NewTimer({"overlay", "recv", "error"}))
     , mRecvHelloTimer(app.getMetrics().NewTimer({"overlay", "recv", "hello"}))
@@ -56,6 +65,16 @@ OverlayMetrics::OverlayMetrics(Application& app)
     , mRecvSCPExternalizeTimer(
           app.getMetrics().NewTimer({"overlay", "recv", "scp-externalize"}))
 
+    , mRecvSurveyRequestTimer(
+          app.getMetrics().NewTimer({"overlay", "recv", "survey-request"}))
+    , mRecvSurveyResponseTimer(
+          app.getMetrics().NewTimer({"overlay", "recv", "survey-response"}))
+
+    , mMessageDelayInWriteQueueTimer(
+          app.getMetrics().NewTimer({"overlay", "delay", "write-queue"}))
+    , mMessageDelayInAsyncWriteTimer(
+          app.getMetrics().NewTimer({"overlay", "delay", "async-write"}))
+
     , mSendErrorMeter(
           app.getMetrics().NewMeter({"overlay", "send", "error"}, "message"))
     , mSendHelloMeter(
@@ -82,6 +101,10 @@ OverlayMetrics::OverlayMetrics(Application& app)
           {"overlay", "send", "scp-message"}, "message"))
     , mSendGetSCPStateMeter(app.getMetrics().NewMeter(
           {"overlay", "send", "get-scp-state"}, "message"))
+    , mSendSurveyRequestMeter(app.getMetrics().NewMeter(
+          {"overlay", "send", "survey-request"}, "message"))
+    , mSendSurveyResponseMeter(app.getMetrics().NewMeter(
+          {"overlay", "send", "survey-response"}, "message"))
     , mMessagesBroadcast(app.getMetrics().NewMeter(
           {"overlay", "message", "broadcast"}, "message"))
     , mPendingPeersSize(

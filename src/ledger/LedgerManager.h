@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "history/HistoryManager.h"
 #include <memory>
 
-namespace DiamNet
+namespace diamnet
 {
 
 class LedgerCloseData;
@@ -61,18 +61,8 @@ class LedgerManager
         LM_NUM_STATE
     };
 
-    enum class CatchupState
-    {
-        NONE,
-        WAITING_FOR_TRIGGER_LEDGER,
-        APPLYING_HISTORY,
-        APPLYING_BUFFERED_LEDGERS,
-        WAITING_FOR_CLOSING_LEDGER
-    };
-
-    virtual void bootstrap() = 0;
+    virtual void moveToSynced() = 0;
     virtual State getState() const = 0;
-    virtual CatchupState getCatchupState() const = 0;
     virtual std::string getStateHuman() const = 0;
 
     bool
@@ -125,6 +115,10 @@ class LedgerManager
     // ledger
     virtual uint32_t getLastMaxTxSetSize() const = 0;
 
+    // return the maximum size of a transaction set to apply to the current
+    // ledger expressed in number of operations
+    virtual uint32_t getLastMaxTxSetSizeOps() const = 0;
+
     // Return the (changing) number of seconds since the LCL closed.
     virtual uint64_t secondsSinceLastLedgerClose() const = 0;
 
@@ -148,7 +142,8 @@ class LedgerManager
     // LedgerManager detects it is desynchronized from SCP's consensus ledger.
     // This method is present in the public interface to permit testing and
     // offline catchups.
-    virtual void startCatchup(CatchupConfiguration configuration) = 0;
+    virtual void startCatchup(CatchupConfiguration configuration,
+                              std::shared_ptr<HistoryArchive> archive) = 0;
 
     // Forcibly close the current ledger, applying `ledgerData` as the consensus
     // changes.  This is normally done automatically as part of
@@ -159,6 +154,11 @@ class LedgerManager
     // deletes old entries stored in the database
     virtual void deleteOldEntries(Database& db, uint32_t ledgerSeq,
                                   uint32_t count) = 0;
+
+    virtual void
+    setLastClosedLedger(LedgerHeaderHistoryEntry const& lastClosed) = 0;
+
+    virtual void manuallyAdvanceLedgerHeader(LedgerHeader const& header) = 0;
 
     virtual ~LedgerManager()
     {

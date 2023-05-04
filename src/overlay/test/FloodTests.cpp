@@ -1,4 +1,4 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -22,7 +22,7 @@
 #include "util/Timer.h"
 #include "xdrpp/marshal.h"
 
-namespace DiamNet
+namespace diamnet
 {
 using namespace txtest;
 
@@ -60,7 +60,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             LedgerEntry gen;
             {
                 LedgerTxn ltx(app0->getLedgerTxnRoot());
-                gen = DiamNet::loadAccount(ltx, root.getPublicKey()).current();
+                gen = diamnet::loadAccount(ltx, root.getPublicKey()).current();
             }
 
             for (int i = 0; i < nbTx; i++)
@@ -143,7 +143,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
                 {createAccount(dest.getPublicKey(), txAmount)}, expectedSeq);
 
             // this is basically a modified version of Peer::recvTransaction
-            auto msg = tx1->toDiamNetMessage();
+            auto msg = tx1->toDiamnetMessage();
             auto res = inApp->getHerder().recvTransaction(tx1);
             REQUIRE(res == TransactionQueue::AddResult::ADD_STATUS_PENDING);
             inApp->getOverlayManager().broadcastMessage(msg);
@@ -233,7 +233,7 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             TxSetFrame txSet(lcl.hash);
             txSet.add(tx1);
             txSet.sortForHash();
-            auto& herder = inApp->getHerder();
+            auto& herder = static_cast<HerderImpl&>(inApp->getHerder());
 
             // build the quorum set used by this message
             // use sources as validators
@@ -246,9 +246,11 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
             // build an SCP message for the next ledger
             auto ct = std::max<uint64>(
                 lcl.header.scpValue.closeTime + 1,
-                VirtualClock::to_time_t(inApp->getClock().now()));
-            DiamNetValue sv(txSet.getContentsHash(), ct, emptyUpgradeSteps,
-                            DiamNet_VALUE_BASIC);
+                VirtualClock::to_time_t(inApp->getClock().system_now()));
+            DiamnetValue sv(txSet.getContentsHash(), ct, emptyUpgradeSteps,
+                            DIAMNET_VALUE_BASIC);
+
+            herder.signDiamnetValue(keys[0], sv);
 
             SCPEnvelope envelope;
 
@@ -276,11 +278,16 @@ TEST_CASE("Flooding", "[flood][overlay][acceptance]")
                 app->getLedgerManager().getLastClosedLedgerHeader();
 
             HerderImpl& herder = *static_cast<HerderImpl*>(&app->getHerder());
-            auto state =
-                herder.getSCP().getCurrentState(lcl.header.ledgerSeq + 1);
-            okCount = std::count_if(state.begin(), state.end(), [&](auto& e) {
-                return keysMap.find(e.statement.nodeID) != keysMap.end();
-            });
+            herder.getSCP().processCurrentState(
+                lcl.header.ledgerSeq + 1,
+                [&](SCPEnvelope const& e) {
+                    if (keysMap.find(e.statement.nodeID) != keysMap.end())
+                    {
+                        okCount++;
+                    }
+                    return true;
+                },
+                true);
             bool res = okCount == sources.size();
             LOG(DEBUG) << app->getConfig().PEER_PORT
                        << (res ? " OK " : " BEHIND ") << okCount << " / "

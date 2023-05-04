@@ -1,10 +1,9 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "overlay/LoadManager.h"
 #include "database/Database.h"
-#include "lib/util/format.h"
 #include "main/Application.h"
 #include "main/Config.h"
 #include "overlay/OverlayManager.h"
@@ -12,10 +11,12 @@
 #include "util/Logging.h"
 #include "util/XDROperators.h"
 #include "util/types.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
 #include <chrono>
 
-namespace DiamNet
+namespace diamnet
 {
 LoadManager::LoadManager() : mPeerCosts(128)
 {
@@ -182,6 +183,7 @@ LoadManager::PeerContext::PeerContext(Application& app, NodeID const& node)
 
 LoadManager::PeerContext::~PeerContext()
 {
+    ZoneScoped;
     if (!isZero(mNode.ed25519()))
     {
         auto pc = mApp.getOverlayManager().getLoadManager().getPeerCosts(mNode);
@@ -195,12 +197,6 @@ LoadManager::PeerContext::~PeerContext()
             mBytesRecvStart;
         auto query =
             (mApp.getDatabase().getQueryMeter().count() - mSQLQueriesStart);
-        if (Logging::logTrace("Overlay"))
-            CLOG(TRACE, "Overlay")
-                << "Debiting peer " << mApp.getConfig().toShortString(mNode)
-                << " time:" << timeMag(time.count())
-                << " send:" << byteMag(send) << " recv:" << byteMag(recv)
-                << " query:" << query;
         pc->mTimeSpent.Mark(time.count());
         pc->mBytesSend.Mark(send);
         pc->mBytesRecv.Mark(recv);

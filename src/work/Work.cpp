@@ -1,12 +1,13 @@
-// Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "work/Work.h"
-#include "lib/util/format.h"
 #include "util/Logging.h"
+#include <Tracy.hpp>
+#include <fmt/format.h>
 
-namespace DiamNet
+namespace diamnet
 {
 
 Work::Work(Application& app, std::string name, size_t maxRetries)
@@ -35,6 +36,7 @@ Work::getStatus() const
 void
 Work::shutdown()
 {
+    ZoneScoped;
     shutdownChildren();
     BasicWork::shutdown();
 }
@@ -42,6 +44,7 @@ Work::shutdown()
 BasicWork::State
 Work::onRun()
 {
+    ZoneScoped;
     if (mAbortChildrenButNotSelf)
     {
         // Stop whatever work was doing, just wait for children to abort
@@ -80,6 +83,7 @@ Work::onRun()
 bool
 Work::onAbort()
 {
+    ZoneScoped;
     auto child = yieldNextRunningChild();
     if (child)
     {
@@ -120,6 +124,7 @@ Work::shutdownChildren()
 void
 Work::onReset()
 {
+    ZoneScoped;
     clearChildren();
     mAbortChildrenButNotSelf = false;
     doReset();
@@ -133,6 +138,7 @@ Work::doReset()
 void
 Work::clearChildren()
 {
+    ZoneScoped;
     assert(allChildrenDone());
     mDoneChildren += mChildren.size();
     mChildren.clear();

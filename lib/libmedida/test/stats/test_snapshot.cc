@@ -34,27 +34,27 @@ TEST_F(SnapshotTest, hasAMedian) {
 
 
 TEST_F(SnapshotTest, hasAp75) {
-  EXPECT_DOUBLE_EQ(4.5, snapshot.get75thPercentile());
+  EXPECT_DOUBLE_EQ(4, snapshot.get75thPercentile());
 }
 
 
 TEST_F(SnapshotTest, hasAp95) {
-  EXPECT_DOUBLE_EQ(5.0, snapshot.get95thPercentile());
+  EXPECT_DOUBLE_EQ(4.7999999999999998, snapshot.get95thPercentile());
 }
 
 
 TEST_F(SnapshotTest, hasAp98) {
-  EXPECT_DOUBLE_EQ(5.0, snapshot.get98thPercentile());
+  EXPECT_DOUBLE_EQ(4.9199999999999999, snapshot.get98thPercentile());
 }
 
 
 TEST_F(SnapshotTest, hasAp99) {
-  EXPECT_DOUBLE_EQ(5.0, snapshot.get99thPercentile());
+  EXPECT_DOUBLE_EQ(4.96, snapshot.get99thPercentile());
 }
 
 
 TEST_F(SnapshotTest, hasAp999) {
-  EXPECT_DOUBLE_EQ(5.0, snapshot.get999thPercentile());
+  EXPECT_DOUBLE_EQ(4.9960000000000004, snapshot.get999thPercentile());
 }
 
 

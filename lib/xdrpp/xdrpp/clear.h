@@ -40,7 +40,7 @@ struct xdr_clear_t {
     else
       t._xdr_discriminant(dt, false);
   }
-  
+
   template<typename T> typename
   std::enable_if<xdr_traits<T>::is_numeric || xdr_traits<T>::is_enum>::type
   operator()(T &t) const { t = T{}; }

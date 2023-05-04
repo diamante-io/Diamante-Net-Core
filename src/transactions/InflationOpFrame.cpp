@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,7 +8,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
 #include "transactions/TransactionUtils.h"
 
 const uint32_t INFLATION_FREQUENCY = (60 * 60 * 24 * 7); // every 7 days
@@ -19,7 +19,7 @@ const int64_t INFLATION_WIN_MIN_PERCENT = 500000000LL; // .05%
 const int INFLATION_NUM_WINNERS = 2000;
 const time_t INFLATION_START_TIME = (1404172800LL); // 1-jul-2014 (unix epoch)
 
-namespace DiamNet
+namespace diamnet
 {
 InflationOpFrame::InflationOpFrame(Operation const& op, OperationResult& res,
                                    TransactionFrame& parentTx)
@@ -79,7 +79,7 @@ InflationOpFrame::doApply(AbstractLedgerTxn& ltx)
 
         if (lh.ledgerVersion >= 10)
         {
-            auto winner = DiamNet::loadAccountWithoutRecord(ltx, w.accountID);
+            auto winner = diamnet::loadAccountWithoutRecord(ltx, w.accountID);
             if (winner)
             {
                 toDoleThisWinner = std::min(getMaxAmountReceive(header, winner),
@@ -89,7 +89,7 @@ InflationOpFrame::doApply(AbstractLedgerTxn& ltx)
             }
         }
 
-        auto winner = DiamNet::loadAccount(ltx, w.accountID);
+        auto winner = diamnet::loadAccount(ltx, w.accountID);
         if (winner)
         {
             leftAfterDole -= toDoleThisWinner;

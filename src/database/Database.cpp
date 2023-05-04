@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -8,11 +8,14 @@
 #include "database/DatabaseTypeSpecificOperation.h"
 #include "main/Application.h"
 #include "main/Config.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
+#include "util/Decoder.h"
 #include "util/GlobalChecks.h"
 #include "util/Logging.h"
 #include "util/Timer.h"
 #include "util/types.h"
+#include <error.h>
+#include <fmt/format.h>
 
 #include "bucket/BucketManager.h"
 #include "herder/HerderPersistence.h"
@@ -25,13 +28,15 @@
 #include "overlay/BanManager.h"
 #include "overlay/OverlayManager.h"
 #include "overlay/PeerManager.h"
-#include "transactions/TransactionFrame.h"
+#include "transactions/TransactionSQL.h"
 
 #include "medida/counter.h"
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
+#include "xdr/Diamnet-ledger-entries.h"
 
 #include <lib/soci/src/backends/sqlite3/soci-sqlite3.h>
+#include <string>
 #ifdef USE_POSTGRES
 #include <lib/soci/src/backends/postgresql/soci-postgresql.h>
 #endif
@@ -47,7 +52,7 @@ sqlite3_carray_init(sqlite_api::sqlite3* db, char** pzErrMsg,
 // NOTE: soci will just crash and not throw
 //  if you misname a column in a query. yay!
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace soci;
@@ -56,8 +61,8 @@ using namespace std;
 bool Database::gDriversRegistered = false;
 
 // smallest schema version supported
-static unsigned long const MIN_SCHEMA_VERSION = 9;
-static unsigned long const SCHEMA_VERSION = 10;
+static unsigned long const MIN_SCHEMA_VERSION = 12;
+static unsigned long const SCHEMA_VERSION = 13;
 
 // These should always match our compiled version precisely, since we are
 // using a bundled version to get access to carray(). But in case someone
@@ -139,9 +144,22 @@ class DatabaseConfigureSessionOp : public DatabaseTypeSpecificOperation<void>
         }
 
         mSession << "PRAGMA journal_mode = WAL";
+        // FULL is needed as to ensure durability
+        // NORMAL is enough for non validating nodes
+        // mSession << "PRAGMA synchronous = NORMAL";
+
+        // number of pages in WAL file
+        mSession << "PRAGMA wal_autocheckpoint=10000";
+
         // busy_timeout gives room for external processes
         // that may lock the database for some time
         mSession << "PRAGMA busy_timeout = 10000";
+
+        // adjust caches
+        // 20000 pages
+        mSession << "PRAGMA cache_size=-20000";
+        // 100 MB map
+        mSession << "PRAGMA mmap_size=104857600";
 
         // Register the sqlite carray() extension we use for bulk operations.
         sqlite3_carray_init(sq->conn_, nullptr, nullptr);
@@ -191,9 +209,34 @@ Database::applySchemaUpgrade(unsigned long vers)
     soci::transaction tx(mSession);
     switch (vers)
     {
-    case 10:
-        // add tracking table information
-        mApp.getHerderPersistence().createQuorumTrackingTable(mSession);
+    case 13:
+        if (!mApp.getConfig().MODE_USES_IN_MEMORY_LEDGER)
+        {
+            // Add columns for the LedgerEntry extension to each of
+            // the tables that stores a type of ledger entry.
+            addTextColumn("accounts", "ledgerext");
+            addTextColumn("trustlines", "ledgerext");
+            addTextColumn("accountdata", "ledgerext");
+            addTextColumn("offers", "ledgerext");
+            // Absorb the explicit columns of the extension fields of
+            // AccountEntry and TrustLineEntry into single opaque
+            // blobs of XDR each of which represents an entire extension.
+            convertAccountExtensionsToOpaqueXDR();
+            convertTrustLineExtensionsToOpaqueXDR();
+            // Neither earlier schema versions nor the one that we're upgrading
+            // to now had any extension columns in the offers or accountdata
+            // tables, but we add columns in this version, even though we're not
+            // going to use them for anything other than writing out opaque
+            // base64-encoded empty v0 XDR extensions, so that, as with the
+            // other LedgerEntry extensions, we'll be able to add such
+            // extensions in the future without bumping the database schema
+            // version, writing any upgrade code, or changing the SQL that reads
+            // and writes those tables.
+            addTextColumn("offers", "extension");
+            addTextColumn("accountdata", "extension");
+
+            mApp.getLedgerTxnRoot().dropClaimableBalances();
+        }
         break;
     default:
         throw std::runtime_error("Unknown DB schema version");
@@ -220,6 +263,7 @@ Database::upgradeToCurrentSchema()
                          std::to_string(SCHEMA_VERSION));
         throw std::runtime_error(s);
     }
+    actBeforeDBSchemaUpgrade();
     while (vers < SCHEMA_VERSION)
     {
         ++vers;
@@ -230,6 +274,186 @@ Database::upgradeToCurrentSchema()
     }
     CLOG(INFO, "Database") << "DB schema is in current version";
     assert(vers == SCHEMA_VERSION);
+}
+
+void
+Database::addTextColumn(std::string const& table, std::string const& column)
+{
+    std::string addColumnStr("ALTER TABLE " + table + " ADD " + column +
+                             " TEXT;");
+    CLOG(INFO, "Database") << "Adding column '" << column << "' to table '"
+                           << table << "'";
+    mSession << addColumnStr;
+}
+
+void
+Database::dropNullableColumn(std::string const& table,
+                             std::string const& column)
+{
+    // SQLite doesn't give us a way of dropping a column with a single
+    // SQL command.  If we need it in production, we could re-create the
+    // table without the column and drop the old one.  Since we currently
+    // use SQLite only for testing and PostgreSQL in production, we simply
+    // leave the unused columm around in SQLite at the moment, and NULL
+    // out all of the cells in that column.
+    if (!isSqlite())
+    {
+        std::string dropColumnStr("ALTER TABLE " + table + " DROP COLUMN " +
+                                  column);
+        CLOG(INFO, "Database") << "Dropping column '" << column
+                               << "' from table '" << table << "'";
+
+        mSession << dropColumnStr;
+    }
+    else
+    {
+        std::string nullColumnStr("UPDATE " + table + " SET " + column +
+                                  " = NULL");
+        CLOG(INFO, "Database") << "Setting all cells of column '" << column
+                               << "' in table '" << table << "' to NULL";
+
+        mSession << nullColumnStr;
+    }
+}
+
+std::string
+Database::getOldLiabilitySelect(std::string const& table,
+                                std::string const& fields)
+{
+    return fmt::format("SELECT {}, "
+                       "buyingliabilities, sellingliabilities FROM {} WHERE "
+                       "buyingliabilities IS NOT NULL OR "
+                       "sellingliabilities IS NOT NULL",
+                       fields, table);
+}
+
+void
+Database::convertAccountExtensionsToOpaqueXDR()
+{
+    addTextColumn("accounts", "extension");
+    copyIndividualAccountExtensionFieldsToOpaqueXDR();
+    dropNullableColumn("accounts", "buyingliabilities");
+    dropNullableColumn("accounts", "sellingliabilities");
+}
+
+void
+Database::convertTrustLineExtensionsToOpaqueXDR()
+{
+    addTextColumn("trustlines", "extension");
+    copyIndividualTrustLineExtensionFieldsToOpaqueXDR();
+    dropNullableColumn("trustlines", "buyingliabilities");
+    dropNullableColumn("trustlines", "sellingliabilities");
+}
+
+void
+Database::copyIndividualAccountExtensionFieldsToOpaqueXDR()
+{
+    std::string const tableStr = "accounts";
+
+    CLOG(INFO, "Database") << "Updating extension schema for " << tableStr;
+
+    // <accountID, extension>
+    struct Fields
+    {
+        std::string mAccountID;
+        std::string mExtension;
+    };
+
+    std::string const fieldsStr = "accountid";
+    std::string const selectStr = getOldLiabilitySelect(tableStr, fieldsStr);
+    auto makeFields = [](soci::row const& row) {
+        AccountEntry::_ext_t extension;
+        // getOldLiabilitySelect() places the buying and selling extension
+        // column names after the key field in the SQL select string.
+        extension.v(1);
+        extension.v1().liabilities.buying = row.get<long long>(1);
+        extension.v1().liabilities.selling = row.get<long long>(2);
+        return Fields{row.get<std::string>(0),
+                      decoder::encode_b64(xdr::xdr_to_opaque(extension))};
+    };
+
+    std::string const updateStr =
+        "UPDATE accounts SET extension = :ext WHERE accountID = :id";
+    auto prepUpdate = [](soci::statement& st_update, Fields const& data) {
+        st_update.exchange(soci::use(data.mExtension)),
+            st_update.exchange(soci::use(data.mAccountID));
+    };
+
+    auto postUpdate = [](long long const affected_rows, Fields const& data) {
+        if (affected_rows != 1)
+        {
+            throw std::runtime_error(fmt::format(
+                "{}: updating account with account ID {} affected {} row(s) ",
+                __func__, data.mAccountID, affected_rows));
+        }
+    };
+
+    size_t numUpdated = selectUpdateMap<Fields>(
+        *this, selectStr, makeFields, updateStr, prepUpdate, postUpdate);
+
+    CLOG(INFO, "Database") << __func__ << ": updated " << numUpdated
+                           << " records(s) with liabilities in " << tableStr
+                           << " table";
+}
+
+void
+Database::copyIndividualTrustLineExtensionFieldsToOpaqueXDR()
+{
+    std::string const tableStr = "trustlines";
+
+    CLOG(INFO, "Database") << __func__ << ": updating extension schema for "
+                           << tableStr;
+
+    // <accountID, issuer_id, asset_id, extension>
+    struct Fields
+    {
+        std::string mAccountID;
+        std::string mIssuerID;
+        std::string mAssetID;
+        std::string mExtension;
+    };
+
+    std::string const fieldsStr = "accountid, issuer, assetcode";
+    std::string const selectStr = getOldLiabilitySelect(tableStr, fieldsStr);
+    auto makeFields = [](soci::row const& row) {
+        TrustLineEntry::_ext_t extension;
+        // getOldLiabilitySelect() places the buying and selling extension
+        // column names after the three key fields in the SQL select string.
+        extension.v(1);
+        extension.v1().liabilities.buying = row.get<long long>(3);
+        extension.v1().liabilities.selling = row.get<long long>(4);
+        return Fields{row.get<std::string>(0), row.get<std::string>(1),
+                      row.get<std::string>(2),
+                      decoder::encode_b64(xdr::xdr_to_opaque(extension))};
+    };
+
+    std::string const updateStr =
+        "UPDATE trustlines SET extension = :ext WHERE accountID = :id "
+        "AND issuer = :issuer_id AND assetcode = :asset_id";
+    auto prepUpdate = [](soci::statement& st_update, Fields const& data) {
+        st_update.exchange(soci::use(data.mExtension));
+        st_update.exchange(soci::use(data.mAccountID));
+        st_update.exchange(soci::use(data.mIssuerID));
+        st_update.exchange(soci::use(data.mAssetID));
+    };
+
+    auto postUpdate = [](long long const affected_rows, Fields const& data) {
+        if (affected_rows != 1)
+        {
+            throw std::runtime_error(fmt::format(
+                "{}: updating trustline with account ID {}, issuer {}, and "
+                "asset {} affected {} row(s)",
+                __func__, data.mAccountID, data.mIssuerID, data.mAssetID,
+                affected_rows));
+        }
+    };
+
+    size_t numUpdated = selectUpdateMap<Fields>(
+        *this, selectStr, makeFields, updateStr, prepUpdate, postUpdate);
+
+    CLOG(INFO, "Database") << __func__ << ": updated " << numUpdated
+                           << " records(s) with liabilities in " << tableStr
+                           << " table";
 }
 
 void
@@ -255,7 +479,7 @@ Database::getDBSchemaVersion()
     if (vers == 0)
     {
         throw std::runtime_error(
-            "No DB schema version found, try DiamNet-core new-db");
+            "No DB schema version found, try diamnet-core new-db");
     }
     return vers;
 }
@@ -335,6 +559,19 @@ Database::isSqlite() const
            std::string::npos;
 }
 
+std::string
+Database::getSimpleCollationClause() const
+{
+    if (isSqlite())
+    {
+        return "";
+    }
+    else
+    {
+        return " COLLATE \"C\" ";
+    }
+}
+
 bool
 Database::canUsePool() const
 {
@@ -364,19 +601,24 @@ Database::initialize()
     // only time this section should be modified is when
     // consolidating changes found in applySchemaUpgrade here
     Upgrades::dropAll(*this);
-    mApp.getLedgerTxnRoot().dropAccounts();
-    mApp.getLedgerTxnRoot().dropOffers();
-    mApp.getLedgerTxnRoot().dropTrustLines();
+    if (!mApp.getConfig().MODE_USES_IN_MEMORY_LEDGER)
+    {
+        mApp.getLedgerTxnRoot().dropAccounts();
+        mApp.getLedgerTxnRoot().dropOffers();
+        mApp.getLedgerTxnRoot().dropTrustLines();
+        mApp.getLedgerTxnRoot().dropData();
+        mApp.getLedgerTxnRoot().dropClaimableBalances();
+    }
     OverlayManager::dropAll(*this);
     PersistentState::dropAll(*this);
     ExternalQueue::dropAll(*this);
     LedgerHeaderUtils::dropAll(*this);
-    TransactionFrame::dropAll(*this);
+    dropTransactionHistory(*this);
     HistoryManager::dropAll(*this);
     HerderPersistence::dropAll(*this);
-    mApp.getLedgerTxnRoot().dropData();
     BanManager::dropAll(*this);
     putSchemaVersion(MIN_SCHEMA_VERSION);
+    mApp.getHerderPersistence().createQuorumTrackingTable(mSession);
 
     LOG(INFO) << "* ";
     LOG(INFO) << "* The database has been initialized";

@@ -1,4 +1,4 @@
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -19,27 +19,33 @@
 #include "overlay/OverlayMetrics.h"
 #include "overlay/PeerAuth.h"
 #include "overlay/PeerManager.h"
-#include "overlay/DiamNetXDR.h"
+#include "overlay/DiamnetXDR.h"
+#include "overlay/SurveyManager.h"
+#include "util/Decoder.h"
 #include "util/Logging.h"
 #include "util/XDROperators.h"
 
-#include "lib/util/format.h"
 #include "medida/meter.h"
 #include "medida/metrics_registry.h"
 #include "medida/timer.h"
 #include "xdrpp/marshal.h"
+#include <fmt/format.h>
 
+#include <Tracy.hpp>
 #include <soci.h>
 #include <time.h>
 
 // LATER: need to add some way of docking peers that are misbehaving by sending
 // you bad data
 
-namespace DiamNet
+namespace diamnet
 {
 
 using namespace std;
 using namespace soci;
+
+static constexpr VirtualClock::time_point PING_NOT_SENT =
+    VirtualClock::time_point::min();
 
 Peer::Peer(Application& app, PeerRole role)
     : mApp(app)
@@ -48,11 +54,14 @@ Peer::Peer(Application& app, PeerRole role)
     , mRemoteOverlayMinVersion(0)
     , mRemoteOverlayVersion(0)
     , mCreationTime(app.getClock().now())
-    , mIdleTimer(app)
+    , mRecurringTimer(app)
     , mLastRead(app.getClock().now())
     , mLastWrite(app.getClock().now())
-    , mLastEmpty(app.getClock().now())
+    , mEnqueueTimeOfLastWrite(app.getClock().now())
+    , mPeerMetrics(app.getClock().now())
 {
+    mPingSentTime = PING_NOT_SENT;
+    mLastPing = std::chrono::hours(24); // some default very high value
     auto bytes = randomBytes(mSendNonce.size());
     std::copy(bytes.begin(), bytes.end(), mSendNonce.begin());
 }
@@ -60,9 +69,10 @@ Peer::Peer(Application& app, PeerRole role)
 void
 Peer::sendHello()
 {
+    ZoneScoped;
     CLOG(DEBUG, "Overlay") << "Peer::sendHello to " << toString() << " @"
                            << mApp.getConfig().PEER_PORT;
-    DiamNetMessage msg;
+    DiamnetMessage msg;
     msg.type(HELLO);
     Hello& elo = msg.hello();
     elo.ledgerVersion = mApp.getConfig().LEDGER_PROTOCOL_VERSION;
@@ -118,27 +128,35 @@ Peer::receivedBytes(size_t byteCount, bool gotFullMessage)
     LoadManager::PeerContext loadCtx(mApp, mPeerID);
     mLastRead = mApp.getClock().now();
     if (gotFullMessage)
+    {
         getOverlayMetrics().mMessageRead.Mark();
+        ++mPeerMetrics.mMessageRead;
+    }
     getOverlayMetrics().mByteRead.Mark(byteCount);
+    mPeerMetrics.mByteRead += byteCount;
 }
 
 void
-Peer::startIdleTimer()
+Peer::startRecurrentTimer()
 {
+    constexpr std::chrono::seconds RECURRENT_TIMER_PERIOD(5);
+
     if (shouldAbort())
     {
         return;
     }
 
+    pingPeer();
+
     auto self = shared_from_this();
-    mIdleTimer.expires_from_now(getIOTimeout());
-    mIdleTimer.async_wait([self](asio::error_code const& error) {
-        self->idleTimerExpired(error);
+    mRecurringTimer.expires_from_now(RECURRENT_TIMER_PERIOD);
+    mRecurringTimer.async_wait([self](asio::error_code const& error) {
+        self->recurrentTimerExpired(error);
     });
 }
 
 void
-Peer::idleTimerExpired(asio::error_code const& error)
+Peer::recurrentTimerExpired(asio::error_code const& error)
 {
     if (!error)
     {
@@ -152,7 +170,7 @@ Peer::idleTimerExpired(asio::error_code const& error)
             drop("idle timeout", Peer::DropDirection::WE_DROPPED_REMOTE,
                  Peer::DropMode::IGNORE_WRITE_QUEUE);
         }
-        else if (((now - mLastEmpty) >= stragglerTimeout))
+        else if (((now - mEnqueueTimeOfLastWrite) >= stragglerTimeout))
         {
             getOverlayMetrics().mTimeoutStraggler.Mark();
             drop("straggling (cannot keep up)",
@@ -161,7 +179,7 @@ Peer::idleTimerExpired(asio::error_code const& error)
         }
         else
         {
-            startIdleTimer();
+            startRecurrentTimer();
         }
     }
 }
@@ -169,7 +187,8 @@ Peer::idleTimerExpired(asio::error_code const& error)
 void
 Peer::sendAuth()
 {
-    DiamNetMessage msg;
+    ZoneScoped;
+    DiamnetMessage msg;
     msg.type(AUTH);
     sendMessage(msg);
 }
@@ -202,7 +221,8 @@ Peer::connectHandler(asio::error_code const& error)
 void
 Peer::sendDontHave(MessageType type, uint256 const& itemID)
 {
-    DiamNetMessage msg;
+    ZoneScoped;
+    DiamnetMessage msg;
     msg.type(DONT_HAVE);
     msg.dontHave().reqHash = itemID;
     msg.dontHave().type = type;
@@ -213,7 +233,8 @@ Peer::sendDontHave(MessageType type, uint256 const& itemID)
 void
 Peer::sendSCPQuorumSet(SCPQuorumSetPtr qSet)
 {
-    DiamNetMessage msg;
+    ZoneScoped;
+    DiamnetMessage msg;
     msg.type(SCP_QUORUMSET);
     msg.qSet() = *qSet;
 
@@ -223,7 +244,8 @@ Peer::sendSCPQuorumSet(SCPQuorumSetPtr qSet)
 void
 Peer::sendGetTxSet(uint256 const& setID)
 {
-    DiamNetMessage newMsg;
+    ZoneScoped;
+    DiamnetMessage newMsg;
     newMsg.type(GET_TX_SET);
     newMsg.txSetHash() = setID;
 
@@ -233,11 +255,8 @@ Peer::sendGetTxSet(uint256 const& setID)
 void
 Peer::sendGetQuorumSet(uint256 const& setID)
 {
-    if (Logging::logTrace("Overlay"))
-        CLOG(TRACE, "Overlay") << "Get quorum set: " << hexAbbrev(setID) << " @"
-                               << mApp.getConfig().PEER_PORT;
-
-    DiamNetMessage newMsg;
+    ZoneScoped;
+    DiamnetMessage newMsg;
     newMsg.type(GET_SCP_QUORUMSET);
     newMsg.qSetHash() = setID;
 
@@ -247,9 +266,8 @@ Peer::sendGetQuorumSet(uint256 const& setID)
 void
 Peer::sendGetPeers()
 {
-    CLOG(TRACE, "Overlay") << "Get peers @" << mApp.getConfig().PEER_PORT;
-
-    DiamNetMessage newMsg;
+    ZoneScoped;
+    DiamnetMessage newMsg;
     newMsg.type(GET_PEERS);
 
     sendMessage(newMsg);
@@ -258,10 +276,8 @@ Peer::sendGetPeers()
 void
 Peer::sendGetScpState(uint32 ledgerSeq)
 {
-    CLOG(TRACE, "Overlay") << "Get SCP State for " << ledgerSeq << " @"
-                           << mApp.getConfig().PEER_PORT;
-
-    DiamNetMessage newMsg;
+    ZoneScoped;
+    DiamnetMessage newMsg;
     newMsg.type(GET_SCP_STATE);
     newMsg.getSCPLedgerSeq() = ledgerSeq;
 
@@ -271,7 +287,8 @@ Peer::sendGetScpState(uint32 ledgerSeq)
 void
 Peer::sendPeers()
 {
-    DiamNetMessage newMsg;
+    ZoneScoped;
+    DiamnetMessage newMsg;
     newMsg.type(PEERS);
     uint32 maxPeerCount = std::min<uint32>(50, newMsg.peers().max_size());
 
@@ -280,18 +297,22 @@ Peer::sendPeers()
         maxPeerCount, mAddress);
     assert(peers.size() <= maxPeerCount);
 
-    newMsg.peers().reserve(peers.size());
-    for (auto const& address : peers)
+    if (!peers.empty())
     {
-        newMsg.peers().push_back(toXdr(address));
+        newMsg.peers().reserve(peers.size());
+        for (auto const& address : peers)
+        {
+            newMsg.peers().push_back(toXdr(address));
+        }
+        sendMessage(newMsg);
     }
-    sendMessage(newMsg);
 }
 
 void
 Peer::sendError(ErrorCode error, std::string const& message)
 {
-    DiamNetMessage m;
+    ZoneScoped;
+    DiamnetMessage m;
     m.type(ERROR_MSG);
     m.error().code = error;
     m.error().msg = message;
@@ -302,12 +323,13 @@ void
 Peer::sendErrorAndDrop(ErrorCode error, std::string const& message,
                        DropMode dropMode)
 {
+    ZoneScoped;
     sendError(error, message);
     drop(message, DropDirection::WE_DROPPED_REMOTE, dropMode);
 }
 
-static std::string
-msgSummary(DiamNetMessage const& msg)
+std::string
+Peer::msgSummary(DiamnetMessage const& msg)
 {
     switch (msg.type())
     {
@@ -318,14 +340,15 @@ msgSummary(DiamNetMessage const& msg)
     case AUTH:
         return "AUTH";
     case DONT_HAVE:
-        return "DONTHAVE";
+        return fmt::format("DONTHAVE {}:{}", msg.dontHave().type,
+                           hexAbbrev(msg.dontHave().reqHash));
     case GET_PEERS:
         return "GETPEERS";
     case PEERS:
-        return "PEERS";
+        return fmt::format("PEERS {}", msg.peers().size());
 
     case GET_TX_SET:
-        return "GETTXSET";
+        return fmt::format("GETTXSET {}", hexAbbrev(msg.txSetHash()));
     case TX_SET:
         return "TXSET";
 
@@ -333,35 +356,54 @@ msgSummary(DiamNetMessage const& msg)
         return "TRANSACTION";
 
     case GET_SCP_QUORUMSET:
-        return "GET_SCP_QSET";
+        return fmt::format("GET_SCP_QSET {}", hexAbbrev(msg.qSetHash()));
     case SCP_QUORUMSET:
         return "SCP_QSET";
     case SCP_MESSAGE:
+    {
+        std::string t;
         switch (msg.envelope().statement.pledges.type())
         {
         case SCP_ST_PREPARE:
-            return "SCP::PREPARE";
+            t = "SCP::PREPARE";
+            break;
         case SCP_ST_CONFIRM:
-            return "SCP::CONFIRM";
+            t = "SCP::CONFIRM";
+            break;
         case SCP_ST_EXTERNALIZE:
-            return "SCP::EXTERNALIZE";
+            t = "SCP::EXTERNALIZE";
+            break;
         case SCP_ST_NOMINATE:
-            return "SCP::NOMINATE";
+            t = "SCP::NOMINATE";
+            break;
+        default:
+            t = "unknown";
         }
+        return fmt::format(
+            "{} ({})", t,
+            mApp.getConfig().toShortString(msg.envelope().statement.nodeID));
+    }
     case GET_SCP_STATE:
-        return "GET_SCP_STATE";
+        return fmt::format("GET_SCP_STATE {}", msg.getSCPLedgerSeq());
+
+    case SURVEY_REQUEST:
+    case SURVEY_RESPONSE:
+        return SurveyManager::getMsgSummary(msg);
     }
     return "UNKNOWN";
 }
 
 void
-Peer::sendMessage(DiamNetMessage const& msg)
+Peer::sendMessage(DiamnetMessage const& msg, bool log)
 {
-    if (Logging::logTrace("Overlay"))
+    ZoneScoped;
+    if (log && Logging::logTrace("Overlay"))
+    {
         CLOG(TRACE, "Overlay")
             << "send: " << msgSummary(msg)
             << " to : " << mApp.getConfig().toShortString(mPeerID) << " @"
             << mApp.getConfig().PEER_PORT;
+    }
 
     switch (msg.type())
     {
@@ -404,24 +446,36 @@ Peer::sendMessage(DiamNetMessage const& msg)
     case GET_SCP_STATE:
         getOverlayMetrics().mSendGetSCPStateMeter.Mark();
         break;
+    case SURVEY_REQUEST:
+        getOverlayMetrics().mSendSurveyRequestMeter.Mark();
+        break;
+    case SURVEY_RESPONSE:
+        getOverlayMetrics().mSendSurveyResponseMeter.Mark();
+        break;
     };
 
     AuthenticatedMessage amsg;
     amsg.v0().message = msg;
     if (msg.type() != HELLO && msg.type() != ERROR_MSG)
     {
+        ZoneNamedN(hmacZone, "message HMAC", true);
         amsg.v0().sequence = mSendMacSeq;
         amsg.v0().mac =
             hmacSha256(mSendMacKey, xdr::xdr_to_opaque(mSendMacSeq, msg));
         ++mSendMacSeq;
     }
-    xdr::msg_ptr xdrBytes(xdr::xdr_to_msg(amsg));
+    xdr::msg_ptr xdrBytes;
+    {
+        ZoneNamedN(xdrZone, "XDR serialize", true);
+        xdrBytes = xdr::xdr_to_msg(amsg);
+    }
     this->sendMessage(std::move(xdrBytes));
 }
 
 void
 Peer::recvMessage(xdr::msg_ptr const& msg)
 {
+    ZoneScoped;
     if (shouldAbort())
     {
         return;
@@ -429,11 +483,14 @@ Peer::recvMessage(xdr::msg_ptr const& msg)
 
     LoadManager::PeerContext loadCtx(mApp, mPeerID);
 
-    CLOG(TRACE, "Overlay") << "received xdr::msg_ptr";
     try
     {
+        ZoneNamedN(hmacZone, "message HMAC", true);
         AuthenticatedMessage am;
-        xdr::xdr_from_msg(msg, am);
+        {
+            ZoneNamedN(xdrZone, "XDR deserialize", true);
+            xdr::xdr_from_msg(msg, am);
+        }
         recvMessage(am);
     }
     catch (xdr::xdr_runtime_error& e)
@@ -474,6 +531,7 @@ Peer::shouldAbort() const
 void
 Peer::recvMessage(AuthenticatedMessage const& msg)
 {
+    ZoneScoped;
     if (shouldAbort())
     {
         return;
@@ -504,142 +562,241 @@ Peer::recvMessage(AuthenticatedMessage const& msg)
 }
 
 void
-Peer::recvMessage(DiamNetMessage const& DiamNetMsg)
+Peer::recvMessage(DiamnetMessage const& diamnetMsg)
 {
+    ZoneScoped;
     if (shouldAbort())
     {
         return;
     }
 
-    if (Logging::logTrace("Overlay"))
-        CLOG(TRACE, "Overlay")
-            << "recv: " << msgSummary(DiamNetMsg)
-            << " from:" << mApp.getConfig().toShortString(mPeerID) << " @"
-            << mApp.getConfig().PEER_PORT;
+    std::string cat;
+    Scheduler::ActionType type = Scheduler::ActionType::NORMAL_ACTION;
+    switch (diamnetMsg.type())
+    {
+    // group messages used during handshake, process those synchronously
+    case MessageType::HELLO:
+    case MessageType::AUTH:
+        Peer::recvRawMessage(diamnetMsg);
+        return;
 
-    if (!isAuthenticated() && (DiamNetMsg.type() != HELLO) &&
-        (DiamNetMsg.type() != AUTH) && (DiamNetMsg.type() != ERROR_MSG))
+    // control messages
+    case GET_PEERS:
+    case PEERS:
+    case ERROR_MSG:
+        cat = "CTRL";
+        break;
+
+    // high volume flooding
+    case TRANSACTION:
+        cat = "TX";
+        type = Scheduler::ActionType::DROPPABLE_ACTION;
+        break;
+
+    // consensus, inbound
+    case GET_TX_SET:
+    case GET_SCP_QUORUMSET:
+    case GET_SCP_STATE:
+        cat = "SCPQ";
+        type = Scheduler::ActionType::DROPPABLE_ACTION;
+        break;
+
+    // consensus, self
+    case DONT_HAVE:
+    case TX_SET:
+    case SCP_QUORUMSET:
+    case SCP_MESSAGE:
+        cat = "SCP";
+        break;
+
+    default:
+        cat = "MISC";
+    }
+
+    std::weak_ptr<Peer> weak(static_pointer_cast<Peer>(shared_from_this()));
+    std::string err =
+        fmt::format("Error RecvMessage T:{} cat:{} {} @{}", diamnetMsg.type(),
+                    cat, toString(), mApp.getConfig().PEER_PORT);
+
+    mApp.postOnMainThread([ err, weak, sm = DiamnetMessage(diamnetMsg) ]() {
+        auto self = weak.lock();
+        if (self)
+        {
+            try
+            {
+                self->recvRawMessage(sm);
+            }
+            catch (CryptoError const& e)
+            {
+                CLOG(ERROR, "Overlay") << fmt::format(
+                    "Dropping connection with {}: {}", err, e.what());
+                self->drop("Bad crypto request",
+                           Peer::DropDirection::WE_DROPPED_REMOTE,
+                           Peer::DropMode::IGNORE_WRITE_QUEUE);
+            }
+        }
+        else
+        {
+            CLOG(TRACE, "Overlay") << err;
+        }
+    },
+                          fmt::format("{} recvMessage", cat), type);
+}
+
+void
+Peer::recvRawMessage(DiamnetMessage const& diamnetMsg)
+{
+    ZoneScoped;
+    auto peerStr = toString();
+    ZoneText(peerStr.c_str(), peerStr.size());
+
+    if (shouldAbort())
+    {
+        return;
+    }
+
+    if (!isAuthenticated() && (diamnetMsg.type() != HELLO) &&
+        (diamnetMsg.type() != AUTH) && (diamnetMsg.type() != ERROR_MSG))
     {
         drop(fmt::format("received {} before completed handshake",
-                         DiamNetMsg.type()),
+                         diamnetMsg.type()),
              Peer::DropDirection::WE_DROPPED_REMOTE,
              Peer::DropMode::IGNORE_WRITE_QUEUE);
         return;
     }
 
-    assert(isAuthenticated() || DiamNetMsg.type() == HELLO ||
-           DiamNetMsg.type() == AUTH || DiamNetMsg.type() == ERROR_MSG);
-    mApp.getOverlayManager().recordDuplicateMessageMetric(DiamNetMsg);
+    assert(isAuthenticated() || diamnetMsg.type() == HELLO ||
+           diamnetMsg.type() == AUTH || diamnetMsg.type() == ERROR_MSG);
+    mApp.getOverlayManager().recordMessageMetric(diamnetMsg,
+                                                 shared_from_this());
 
-    switch (DiamNetMsg.type())
+    switch (diamnetMsg.type())
     {
     case ERROR_MSG:
     {
         auto t = getOverlayMetrics().mRecvErrorTimer.TimeScope();
-        recvError(DiamNetMsg);
+        recvError(diamnetMsg);
     }
     break;
 
     case HELLO:
     {
         auto t = getOverlayMetrics().mRecvHelloTimer.TimeScope();
-        this->recvHello(DiamNetMsg.hello());
+        this->recvHello(diamnetMsg.hello());
     }
     break;
 
     case AUTH:
     {
         auto t = getOverlayMetrics().mRecvAuthTimer.TimeScope();
-        this->recvAuth(DiamNetMsg);
+        this->recvAuth(diamnetMsg);
     }
     break;
 
     case DONT_HAVE:
     {
         auto t = getOverlayMetrics().mRecvDontHaveTimer.TimeScope();
-        recvDontHave(DiamNetMsg);
+        recvDontHave(diamnetMsg);
     }
     break;
 
     case GET_PEERS:
     {
         auto t = getOverlayMetrics().mRecvGetPeersTimer.TimeScope();
-        recvGetPeers(DiamNetMsg);
+        recvGetPeers(diamnetMsg);
     }
     break;
 
     case PEERS:
     {
         auto t = getOverlayMetrics().mRecvPeersTimer.TimeScope();
-        recvPeers(DiamNetMsg);
+        recvPeers(diamnetMsg);
+    }
+    break;
+
+    case SURVEY_REQUEST:
+    {
+        auto t = getOverlayMetrics().mRecvSurveyRequestTimer.TimeScope();
+        recvSurveyRequestMessage(diamnetMsg);
+    }
+    break;
+
+    case SURVEY_RESPONSE:
+    {
+        auto t = getOverlayMetrics().mRecvSurveyResponseTimer.TimeScope();
+        recvSurveyResponseMessage(diamnetMsg);
     }
     break;
 
     case GET_TX_SET:
     {
         auto t = getOverlayMetrics().mRecvGetTxSetTimer.TimeScope();
-        recvGetTxSet(DiamNetMsg);
+        recvGetTxSet(diamnetMsg);
     }
     break;
 
     case TX_SET:
     {
         auto t = getOverlayMetrics().mRecvTxSetTimer.TimeScope();
-        recvTxSet(DiamNetMsg);
+        recvTxSet(diamnetMsg);
     }
     break;
 
     case TRANSACTION:
     {
         auto t = getOverlayMetrics().mRecvTransactionTimer.TimeScope();
-        recvTransaction(DiamNetMsg);
+        recvTransaction(diamnetMsg);
     }
     break;
 
     case GET_SCP_QUORUMSET:
     {
         auto t = getOverlayMetrics().mRecvGetSCPQuorumSetTimer.TimeScope();
-        recvGetSCPQuorumSet(DiamNetMsg);
+        recvGetSCPQuorumSet(diamnetMsg);
     }
     break;
 
     case SCP_QUORUMSET:
     {
         auto t = getOverlayMetrics().mRecvSCPQuorumSetTimer.TimeScope();
-        recvSCPQuorumSet(DiamNetMsg);
+        recvSCPQuorumSet(diamnetMsg);
     }
     break;
 
     case SCP_MESSAGE:
     {
         auto t = getOverlayMetrics().mRecvSCPMessageTimer.TimeScope();
-        recvSCPMessage(DiamNetMsg);
+        recvSCPMessage(diamnetMsg);
     }
     break;
 
     case GET_SCP_STATE:
     {
         auto t = getOverlayMetrics().mRecvGetSCPStateTimer.TimeScope();
-        recvGetSCPState(DiamNetMsg);
+        recvGetSCPState(diamnetMsg);
     }
     break;
     }
 }
 
 void
-Peer::recvDontHave(DiamNetMessage const& msg)
+Peer::recvDontHave(DiamnetMessage const& msg)
 {
+    ZoneScoped;
+    maybeProcessPingResponse(msg.dontHave().reqHash);
+
     mApp.getHerder().peerDoesntHave(msg.dontHave().type, msg.dontHave().reqHash,
                                     shared_from_this());
 }
 
 void
-Peer::recvGetTxSet(DiamNetMessage const& msg)
+Peer::recvGetTxSet(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     auto self = shared_from_this();
     if (auto txSet = mApp.getHerder().getTxSet(msg.txSetHash()))
     {
-        DiamNetMessage newMsg;
+        DiamnetMessage newMsg;
         newMsg.type(TX_SET);
         txSet->toXDR(newMsg.txSet());
 
@@ -652,16 +809,18 @@ Peer::recvGetTxSet(DiamNetMessage const& msg)
 }
 
 void
-Peer::recvTxSet(DiamNetMessage const& msg)
+Peer::recvTxSet(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     TxSetFrame frame(mApp.getNetworkID(), msg.txSet());
     mApp.getHerder().recvTxSet(frame.getContentsHash(), frame);
 }
 
 void
-Peer::recvTransaction(DiamNetMessage const& msg)
+Peer::recvTransaction(DiamnetMessage const& msg)
 {
-    TransactionFramePtr transaction = TransactionFrame::makeTransactionFromWire(
+    ZoneScoped;
+    auto transaction = TransactionFrameBase::makeTransactionFromWire(
         mApp.getNetworkID(), msg.transaction());
     if (transaction)
     {
@@ -684,9 +843,58 @@ Peer::recvTransaction(DiamNetMessage const& msg)
     }
 }
 
-void
-Peer::recvGetSCPQuorumSet(DiamNetMessage const& msg)
+Hash
+Peer::pingIDfromTimePoint(VirtualClock::time_point const& tp)
 {
+    auto sh = shortHash::xdrComputeHash(
+        xdr::xdr_to_opaque(uint64_t(tp.time_since_epoch().count())));
+    Hash res;
+    assert(res.size() >= sizeof(sh));
+    std::memcpy(res.data(), &sh, sizeof(sh));
+    return res;
+}
+
+void
+Peer::pingPeer()
+{
+    if (isAuthenticated() && mPingSentTime == PING_NOT_SENT)
+    {
+        mPingSentTime = mApp.getClock().now();
+        auto h = pingIDfromTimePoint(mPingSentTime);
+        sendGetQuorumSet(h);
+    }
+}
+
+void
+Peer::maybeProcessPingResponse(Hash const& id)
+{
+    if (mPingSentTime != PING_NOT_SENT)
+    {
+        auto h = pingIDfromTimePoint(mPingSentTime);
+        if (h == id)
+        {
+            mLastPing = std::chrono::duration_cast<std::chrono::milliseconds>(
+                mApp.getClock().now() - mPingSentTime);
+            mPingSentTime = PING_NOT_SENT;
+            CLOG(DEBUG, "Overlay") << fmt::format(
+                "Latency {}: {} ms", toString(), mLastPing.count());
+            getOverlayMetrics().mConnectionLatencyTimer.Update(mLastPing);
+        }
+    }
+}
+
+std::chrono::milliseconds
+Peer::getPing() const
+{
+    return mLastPing;
+}
+
+void
+Peer::recvGetSCPQuorumSet(DiamnetMessage const& msg)
+{
+    ZoneScoped;
+    maybeProcessPingResponse(msg.qSetHash());
+
     SCPQuorumSetPtr qset = mApp.getHerder().getQSet(msg.qSetHash());
 
     if (qset)
@@ -703,21 +911,18 @@ Peer::recvGetSCPQuorumSet(DiamNetMessage const& msg)
     }
 }
 void
-Peer::recvSCPQuorumSet(DiamNetMessage const& msg)
+Peer::recvSCPQuorumSet(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     Hash hash = sha256(xdr::xdr_to_opaque(msg.qSet()));
     mApp.getHerder().recvSCPQuorumSet(hash, msg.qSet());
 }
 
 void
-Peer::recvSCPMessage(DiamNetMessage const& msg)
+Peer::recvSCPMessage(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     SCPEnvelope const& envelope = msg.envelope();
-    if (Logging::logTrace("Overlay"))
-        CLOG(TRACE, "Overlay")
-            << "recvSCPMessage node: "
-            << mApp.getConfig().toShortString(msg.envelope().statement.nodeID)
-            << " @" << mApp.getConfig().PEER_PORT;
 
     auto type = msg.envelope().statement.pledges.type();
     auto t = (type == SCP_ST_PREPARE
@@ -729,26 +934,49 @@ Peer::recvSCPMessage(DiamNetMessage const& msg)
                                       .mRecvSCPExternalizeTimer.TimeScope()
                                 : (getOverlayMetrics()
                                        .mRecvSCPNominateTimer.TimeScope()))));
+    std::string codeStr;
+    switch (type)
+    {
+    case SCP_ST_PREPARE:
+        codeStr = "PREPARE";
+        break;
+    case SCP_ST_CONFIRM:
+        codeStr = "CONFIRM";
+        break;
+    case SCP_ST_EXTERNALIZE:
+        codeStr = "EXTERNALIZE";
+        break;
+    case SCP_ST_NOMINATE:
+    default:
+        codeStr = "NOMINATE";
+        break;
+    }
+    ZoneText(codeStr.c_str(), codeStr.size());
+
+    // add it to the floodmap so that this peer gets credit for it
+    Hash msgID;
+    mApp.getOverlayManager().recvFloodedMsgID(msg, shared_from_this(), msgID);
 
     auto res = mApp.getHerder().recvSCPEnvelope(envelope);
-    if (res != Herder::ENVELOPE_STATUS_DISCARDED)
+    if (res == Herder::ENVELOPE_STATUS_DISCARDED)
     {
-        mApp.getOverlayManager().recvFloodedMsg(msg, shared_from_this());
+        // the message was discarded, remove it from the floodmap as well
+        mApp.getOverlayManager().forgetFloodedMsg(msgID);
     }
 }
 
 void
-Peer::recvGetSCPState(DiamNetMessage const& msg)
+Peer::recvGetSCPState(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     uint32 seq = msg.getSCPLedgerSeq();
-    CLOG(TRACE, "Overlay") << "get SCP State " << seq << " @"
-                           << mApp.getConfig().PEER_PORT;
     mApp.getHerder().sendSCPStateToPeer(seq, shared_from_this());
 }
 
 void
-Peer::recvError(DiamNetMessage const& msg)
+Peer::recvError(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     std::string codeStr = "UNKNOWN";
     switch (msg.error().code)
     {
@@ -807,6 +1035,7 @@ Peer::updatePeerRecordAfterAuthentication()
 void
 Peer::recvHello(Hello const& elo)
 {
+    ZoneScoped;
     if (mState >= GOT_HELLO)
     {
         drop("received unexpected HELLO",
@@ -846,6 +1075,13 @@ Peer::recvHello(Hello const& elo)
     mState = GOT_HELLO;
 
     auto ip = getIP();
+    if (ip.empty())
+    {
+        drop("failed to determine remote address",
+             Peer::DropDirection::WE_DROPPED_REMOTE,
+             Peer::DropMode::IGNORE_WRITE_QUEUE);
+        return;
+    }
     mAddress =
         PeerBareAddress{ip, static_cast<unsigned short>(elo.listeningPort)};
 
@@ -944,8 +1180,9 @@ Peer::recvHello(Hello const& elo)
 }
 
 void
-Peer::recvAuth(DiamNetMessage const& msg)
+Peer::recvAuth(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     if (mState != GOT_HELLO)
     {
         sendErrorAndDrop(ERR_MISC, "out-of-order AUTH message",
@@ -978,31 +1215,21 @@ Peer::recvAuth(DiamNetMessage const& msg)
         return;
     }
 
-    // ask for SCP state if not synced
-    // this requests data for slots lcl-window ... latest consensus (if
-    // possible) we need to ask for older slots in case other peers need
-    // messages we didn't need ourself
-    auto low = mApp.getLedgerManager().getLastClosedLedgerNum() + 1;
-    if (low > Herder::MAX_SLOTS_TO_REMEMBER)
-    {
-        low -= Herder::MAX_SLOTS_TO_REMEMBER;
-    }
-    else
-    {
-        low = 1;
-    }
+    auto low = mApp.getHerder().getMinLedgerSeqToAskPeers();
     sendGetScpState(low);
 }
 
 void
-Peer::recvGetPeers(DiamNetMessage const& msg)
+Peer::recvGetPeers(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     sendPeers();
 }
 
 void
-Peer::recvPeers(DiamNetMessage const& msg)
+Peer::recvPeers(DiamnetMessage const& msg)
 {
+    ZoneScoped;
     for (auto const& peer : msg.peers())
     {
         if (peer.port == 0 || peer.port > UINT16_MAX)
@@ -1044,5 +1271,38 @@ Peer::recvPeers(DiamNetMessage const& msg)
             mApp.getOverlayManager().getPeerManager().ensureExists(address);
         }
     }
+}
+
+void
+Peer::recvSurveyRequestMessage(DiamnetMessage const& msg)
+{
+    ZoneScoped;
+    mApp.getOverlayManager().getSurveyManager().relayOrProcessRequest(
+        msg, shared_from_this());
+}
+
+void
+Peer::recvSurveyResponseMessage(DiamnetMessage const& msg)
+{
+    ZoneScoped;
+    mApp.getOverlayManager().getSurveyManager().relayOrProcessResponse(
+        msg, shared_from_this());
+}
+
+Peer::PeerMetrics::PeerMetrics(VirtualClock::time_point connectedTime)
+    : mMessageRead(0)
+    , mMessageWrite(0)
+    , mByteRead(0)
+    , mByteWrite(0)
+    , mUniqueFloodBytesRecv(0)
+    , mDuplicateFloodBytesRecv(0)
+    , mUniqueFetchBytesRecv(0)
+    , mDuplicateFetchBytesRecv(0)
+    , mUniqueFloodMessageRecv(0)
+    , mDuplicateFloodMessageRecv(0)
+    , mUniqueFetchMessageRecv(0)
+    , mDuplicateFetchMessageRecv(0)
+    , mConnectedTime(connectedTime)
+{
 }
 }

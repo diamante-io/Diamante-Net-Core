@@ -1,4 +1,4 @@
-// Copyright 2016 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2016 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -7,9 +7,10 @@
 #include "crypto/SHA.h"
 #include "crypto/SecretKey.h"
 #include "crypto/SignerKey.h"
-#include "xdr/DiamNet-transaction.h"
+#include "xdr/Diamnet-transaction.h"
+#include <Tracy.hpp>
 
-namespace DiamNet
+namespace diamnet
 {
 
 namespace SignatureUtils
@@ -18,6 +19,7 @@ namespace SignatureUtils
 DecoratedSignature
 sign(SecretKey const& secretKey, Hash const& hash)
 {
+    ZoneScoped;
     DecoratedSignature result;
     result.signature = secretKey.sign(hash);
     result.hint = getHint(secretKey.getPublicKey().ed25519());
@@ -29,15 +31,23 @@ verify(DecoratedSignature const& sig, SignerKey const& signerKey,
        Hash const& hash)
 {
     auto pubKey = KeyUtils::convertKey<PublicKey>(signerKey);
-    if (!doesHintMatch(pubKey.ed25519(), sig.hint))
-        return false;
+    return verify(sig, pubKey, hash);
+}
 
+bool
+verify(DecoratedSignature const& sig, PublicKey const& pubKey, Hash const& hash)
+{
+    if (!doesHintMatch(pubKey.ed25519(), sig.hint))
+    {
+        return false;
+    }
     return PubKeyUtils::verifySig(pubKey, sig.signature, hash);
 }
 
 DecoratedSignature
 signHashX(const ByteSlice& x)
 {
+    ZoneScoped;
     DecoratedSignature result;
     Signature out(0, 0);
     out.resize(static_cast<uint32_t>(x.size()));
@@ -50,6 +60,7 @@ signHashX(const ByteSlice& x)
 bool
 verifyHashX(DecoratedSignature const& sig, SignerKey const& signerKey)
 {
+    ZoneScoped;
     if (!doesHintMatch(signerKey.hashX(), sig.hint))
         return false;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// Copyright 2014 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2014 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -11,10 +11,10 @@
 #include "scp/SCP.h"
 #include "util/HashOfHash.h"
 
-namespace DiamNet
+namespace diamnet
 {
 /**
- * This is one Node in the DiamNet network
+ * This is one Node in the diamnet network
  */
 class LocalNode
 {
@@ -45,9 +45,9 @@ class LocalNode
     // returns the quorum set {{X}}
     static SCPQuorumSetPtr getSingletonQSet(NodeID const& nodeID);
 
-    // runs proc over all nodes contained in qset
-    static void forAllNodes(SCPQuorumSet const& qset,
-                            std::function<void(NodeID const&)> proc);
+    // runs proc over all nodes contained in qset, but fast fails if proc fails
+    static bool forAllNodes(SCPQuorumSet const& qset,
+                            std::function<bool(NodeID const&)> proc);
 
     // returns the weight of the node within the qset
     // normalized between 0-UINT64_MAX
@@ -65,7 +65,7 @@ class LocalNode
     // this node.
     static bool
     isVBlocking(SCPQuorumSet const& qSet,
-                std::map<NodeID, SCPEnvelope> const& map,
+                std::map<NodeID, SCPEnvelopeWrapperPtr> const& map,
                 std::function<bool(SCPStatement const&)> const& filter =
                     [](SCPStatement const&) { return true; });
 
@@ -75,7 +75,8 @@ class LocalNode
     // SCPQuorumSetPtr from the SCPStatement for its associated node in map
     // (required for transitivity)
     static bool
-    isQuorum(SCPQuorumSet const& qSet, std::map<NodeID, SCPEnvelope> const& map,
+    isQuorum(SCPQuorumSet const& qSet,
+             std::map<NodeID, SCPEnvelopeWrapperPtr> const& map,
              std::function<SCPQuorumSetPtr(SCPStatement const&)> const& qfun,
              std::function<bool(SCPStatement const&)> const& filter =
                  [](SCPStatement const&) { return true; });
@@ -88,7 +89,8 @@ class LocalNode
                          std::set<NodeID> const& nodes, NodeID const* excluded);
 
     static std::vector<NodeID> findClosestVBlocking(
-        SCPQuorumSet const& qset, std::map<NodeID, SCPEnvelope> const& map,
+        SCPQuorumSet const& qset,
+        std::map<NodeID, SCPEnvelopeWrapperPtr> const& map,
         std::function<bool(SCPStatement const&)> const& filter =
             [](SCPStatement const&) { return true; },
         NodeID const* excluded = nullptr);

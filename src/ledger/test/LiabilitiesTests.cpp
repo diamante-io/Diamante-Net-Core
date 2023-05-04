@@ -1,4 +1,4 @@
-// Copyright 2018 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2018 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -10,10 +10,14 @@
 #include "main/Application.h"
 #include "test/TestUtils.h"
 #include "test/test.h"
+#include "transactions/SponsorshipUtils.h"
 #include "transactions/TransactionUtils.h"
 #include "util/Timer.h"
 
-using namespace DiamNet;
+#include "util/Logging.h"
+#include "xdrpp/printer.h"
+
+using namespace diamnet;
 
 TEST_CASE("liabilities", "[ledger][liabilities]")
 {
@@ -24,10 +28,12 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
 
     SECTION("add account selling liabilities")
     {
-        auto addSellingLiabilities = [&](uint32_t initNumSubEntries,
-                                         int64_t initBalance,
-                                         int64_t initSellingLiabilities,
-                                         int64_t deltaLiabilities) {
+        auto addSellingLiabilitiesHelper = [&](uint32_t initNumSubEntries,
+                                               uint32_t initNumSponsoring,
+                                               uint32_t initNumSponsored,
+                                               int64_t initBalance,
+                                               int64_t initSellingLiabilities,
+                                               int64_t deltaLiabilities) {
             AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
             ae.balance = initBalance;
             ae.numSubEntries = initNumSubEntries;
@@ -38,6 +44,18 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             ae.ext.v1().liabilities.selling = initSellingLiabilities;
             int64_t initBuyingLiabilities = ae.ext.v1().liabilities.buying;
 
+            if (initNumSponsoring != 0 || initNumSponsored != 0)
+            {
+                ae.ext.v1().ext.v(2);
+                ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+            }
+            else if (ae.ext.v1().ext.v() == 2)
+            {
+                ae.ext.v1().ext.v2().numSponsoring = 0;
+                ae.ext.v1().ext.v2().numSponsored = 0;
+            }
+
             LedgerEntry le;
             le.data.type(ACCOUNT);
             le.data.account() = ae;
@@ -46,7 +64,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                DiamNet::addSellingLiabilities(header, acc, deltaLiabilities);
+                diamnet::addSellingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getBuyingLiabilities(header, acc) == initBuyingLiabilities);
             if (res)
@@ -62,6 +80,45 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             }
             return res;
         };
+
+        auto addSellingLiabilities =
+            [&](uint32_t initNumSubEntries, int64_t initBalance,
+                int64_t initSellingLiabilities, int64_t deltaLiabilities) {
+                int32_t reserve = lm.getLastReserve();
+                uint32_t ledgerVersion = 0;
+                {
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+                }
+
+                auto res = addSellingLiabilitiesHelper(
+                    initNumSubEntries, 0, 0, initBalance,
+                    initSellingLiabilities, deltaLiabilities);
+                if (ledgerVersion < 14)
+                {
+                    return res;
+                }
+
+                for (int32_t i = 0; i < 3; ++i)
+                {
+                    for (int32_t j = 0; j < 3; ++j)
+                    {
+                        int64_t delta = (i - j) * reserve;
+                        if (delta > INT64_MAX - initBalance ||
+                            initBalance + delta < 0)
+                        {
+                            continue;
+                        }
+
+                        REQUIRE(addSellingLiabilitiesHelper(
+                                    initNumSubEntries, i, j,
+                                    initBalance + delta, initSellingLiabilities,
+                                    deltaLiabilities) == res);
+                    }
+                }
+                return res;
+            };
+
         auto addSellingLiabilitiesUninitialized =
             [&](uint32_t initNumSubEntries, int64_t initBalance,
                 int64_t deltaLiabilities) {
@@ -77,7 +134,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
                 auto acc = ltx.create(le);
-                bool res = DiamNet::addSellingLiabilities(header, acc,
+                bool res = diamnet::addSellingLiabilities(header, acc,
                                                           deltaLiabilities);
                 REQUIRE(acc.current().data.account().balance == initBalance);
                 REQUIRE(getBuyingLiabilities(header, acc) == 0);
@@ -218,10 +275,12 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
 
     SECTION("add account buying liabilities")
     {
-        auto addBuyingLiabilities = [&](uint32_t initNumSubEntries,
-                                        int64_t initBalance,
-                                        int64_t initBuyingLiabilities,
-                                        int64_t deltaLiabilities) {
+        auto addBuyingLiabilitiesHelper = [&](uint32_t initNumSubEntries,
+                                              uint32_t initNumSponsoring,
+                                              uint32_t initNumSponsored,
+                                              int64_t initBalance,
+                                              int64_t initBuyingLiabilities,
+                                              int64_t deltaLiabilities) {
             AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
             ae.balance = initBalance;
             ae.numSubEntries = initNumSubEntries;
@@ -232,6 +291,18 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             ae.ext.v1().liabilities.buying = initBuyingLiabilities;
             int64_t initSellingLiabilities = ae.ext.v1().liabilities.selling;
 
+            if (initNumSponsoring != 0 || initNumSponsored != 0)
+            {
+                ae.ext.v1().ext.v(2);
+                ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+            }
+            else if (ae.ext.v1().ext.v() == 2)
+            {
+                ae.ext.v1().ext.v2().numSponsoring = 0;
+                ae.ext.v1().ext.v2().numSponsored = 0;
+            }
+
             LedgerEntry le;
             le.data.type(ACCOUNT);
             le.data.account() = ae;
@@ -240,7 +311,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                DiamNet::addBuyingLiabilities(header, acc, deltaLiabilities);
+                diamnet::addBuyingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, acc) ==
                     initSellingLiabilities);
@@ -257,6 +328,37 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             }
             return res;
         };
+
+        auto addBuyingLiabilities =
+            [&](uint32_t initNumSubEntries, int64_t initBalance,
+                int64_t initBuyingLiabilities, int64_t deltaLiabilities) {
+                uint32_t ledgerVersion = 0;
+                {
+                    LedgerTxn ltx(app->getLedgerTxnRoot());
+                    ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+                }
+
+                auto res = addBuyingLiabilitiesHelper(
+                    initNumSubEntries, 0, 0, initBalance, initBuyingLiabilities,
+                    deltaLiabilities);
+                if (ledgerVersion < 14)
+                {
+                    return res;
+                }
+
+                for (int32_t i = 0; i < 3; ++i)
+                {
+                    for (int32_t j = 0; j < 3; ++j)
+                    {
+                        REQUIRE(addBuyingLiabilitiesHelper(
+                                    initNumSubEntries, i, j, initBalance,
+                                    initBuyingLiabilities,
+                                    deltaLiabilities) == res);
+                    }
+                }
+                return res;
+            };
+
         auto addBuyingLiabilitiesUninitialized = [&](uint32_t initNumSubEntries,
                                                      int64_t initBalance,
                                                      int64_t deltaLiabilities) {
@@ -273,7 +375,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
             bool res =
-                DiamNet::addBuyingLiabilities(header, acc, deltaLiabilities);
+                diamnet::addBuyingLiabilities(header, acc, deltaLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, acc) == 0);
             if (res)
@@ -459,7 +561,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                DiamNet::addSellingLiabilities(header, trust, deltaLiabilities);
+                diamnet::addSellingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getBuyingLiabilities(header, trust) ==
                     initBuyingLiabilities);
@@ -493,7 +595,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
                 LedgerTxn ltx(app->getLedgerTxnRoot());
                 auto header = ltx.loadHeader();
                 auto trust = ltx.create(le);
-                bool res = DiamNet::addSellingLiabilities(header, trust,
+                bool res = diamnet::addSellingLiabilities(header, trust,
                                                           deltaLiabilities);
                 REQUIRE(trust.current().data.trustLine().balance ==
                         initBalance);
@@ -601,7 +703,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                DiamNet::addBuyingLiabilities(header, trust, deltaLiabilities);
+                diamnet::addBuyingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, trust) ==
                     initSellingLiabilities);
@@ -635,7 +737,7 @@ TEST_CASE("liabilities", "[ledger][liabilities]")
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
             bool res =
-                DiamNet::addBuyingLiabilities(header, trust, deltaLiabilities);
+                diamnet::addBuyingLiabilities(header, trust, deltaLiabilities);
             REQUIRE(trust.current().data.trustLine().balance == initBalance);
             REQUIRE(getSellingLiabilities(header, trust) == 0);
             if (res)
@@ -728,35 +830,84 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
 
     SECTION("account add balance")
     {
+        auto addBalanceHelper =
+            [&](uint32_t initNumSubEntries, uint32_t initNumSponsoring,
+                uint32_t initNumSponsored, int64_t initBalance,
+                Liabilities initLiabilities, int64_t deltaBalance) {
+                AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
+                ae.balance = initBalance;
+                ae.numSubEntries = initNumSubEntries;
+                ae.ext.v(1);
+                ae.ext.v1().liabilities = initLiabilities;
+
+                if (initNumSponsoring != 0 || initNumSponsored != 0)
+                {
+                    ae.ext.v1().ext.v(2);
+                    ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                    ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+                }
+                else if (ae.ext.v1().ext.v() == 2)
+                {
+                    ae.ext.v1().ext.v2().numSponsoring = 0;
+                    ae.ext.v1().ext.v2().numSponsored = 0;
+                }
+
+                LedgerEntry le;
+                le.data.type(ACCOUNT);
+                le.data.account() = ae;
+
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                auto header = ltx.loadHeader();
+                auto acc = ltx.create(le);
+                bool res = diamnet::addBalance(header, acc, deltaBalance);
+                REQUIRE(getSellingLiabilities(header, acc) ==
+                        initLiabilities.selling);
+                REQUIRE(getBuyingLiabilities(header, acc) ==
+                        initLiabilities.buying);
+                if (res)
+                {
+                    REQUIRE(acc.current().data.account().balance ==
+                            initBalance + deltaBalance);
+                }
+                else
+                {
+                    REQUIRE(acc.current() == le);
+                }
+                return res;
+            };
+
         auto addBalance = [&](uint32_t initNumSubEntries, int64_t initBalance,
-                              Liabilities initLiabilities,
-                              int64_t deltaBalance) {
-            AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
-            ae.balance = initBalance;
-            ae.numSubEntries = initNumSubEntries;
-            ae.ext.v(1);
-            ae.ext.v1().liabilities = initLiabilities;
-
-            LedgerEntry le;
-            le.data.type(ACCOUNT);
-            le.data.account() = ae;
-
-            LedgerTxn ltx(app->getLedgerTxnRoot());
-            auto header = ltx.loadHeader();
-            auto acc = ltx.create(le);
-            bool res = DiamNet::addBalance(header, acc, deltaBalance);
-            REQUIRE(getSellingLiabilities(header, acc) ==
-                    initLiabilities.selling);
-            REQUIRE(getBuyingLiabilities(header, acc) ==
-                    initLiabilities.buying);
-            if (res)
+                              Liabilities initLiabilities, int64_t deltaBalance,
+                              bool adjustBalance = true) {
+            int32_t reserve = lm.getLastReserve();
+            uint32_t ledgerVersion = 0;
             {
-                REQUIRE(acc.current().data.account().balance ==
-                        initBalance + deltaBalance);
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
             }
-            else
+
+            auto res = addBalanceHelper(initNumSubEntries, 0, 0, initBalance,
+                                        initLiabilities, deltaBalance);
+            if (ledgerVersion < 14)
             {
-                REQUIRE(acc.current() == le);
+                return res;
+            }
+
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                for (int32_t j = 0; j < 3; ++j)
+                {
+                    int64_t delta = adjustBalance ? (i - j) * reserve : 0;
+                    if (delta > INT64_MAX - initBalance ||
+                        initBalance + delta < 0)
+                    {
+                        continue;
+                    }
+
+                    REQUIRE(addBalanceHelper(
+                                initNumSubEntries, i, j, initBalance + delta,
+                                initLiabilities, deltaBalance) == res);
+                }
             }
             return res;
         };
@@ -813,26 +964,32 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
                     "liabilities")
             {
                 // Maximum balance, no liabilities
-                REQUIRE(addBalance(0, INT64_MAX, Liabilities{0, 0}, 0));
-                REQUIRE(!addBalance(0, INT64_MAX, Liabilities{0, 0}, 1));
+                REQUIRE(addBalance(0, INT64_MAX, Liabilities{0, 0}, 0, false));
+                REQUIRE(!addBalance(0, INT64_MAX, Liabilities{0, 0}, 1, false));
 
                 // Below maximum balance, no liabilities
-                REQUIRE(addBalance(0, INT64_MAX - 1, Liabilities{0, 0}, 1));
-                REQUIRE(!addBalance(0, INT64_MAX - 1, Liabilities{0, 0}, 2));
+                REQUIRE(
+                    addBalance(0, INT64_MAX - 1, Liabilities{0, 0}, 1, false));
+                REQUIRE(
+                    !addBalance(0, INT64_MAX - 1, Liabilities{0, 0}, 2, false));
 
                 // Below maximum balance, with liabilities
-                REQUIRE(addBalance(0, INT64_MAX - 1, Liabilities{1, 0}, 0));
-                REQUIRE(!addBalance(0, INT64_MAX - 1, Liabilities{1, 0}, 1));
+                REQUIRE(
+                    addBalance(0, INT64_MAX - 1, Liabilities{1, 0}, 0, false));
+                REQUIRE(
+                    !addBalance(0, INT64_MAX - 1, Liabilities{1, 0}, 1, false));
             }
         });
     }
 
     SECTION("account add subentries")
     {
-        auto addSubEntries = [&](uint32_t initNumSubEntries,
-                                 int64_t initBalance,
-                                 int64_t initSellingLiabilities,
-                                 int32_t deltaNumSubEntries) {
+        auto addSubEntriesHelper = [&](uint32_t initNumSubEntries,
+                                       uint32_t initNumSponsoring,
+                                       uint32_t initNumSponsored,
+                                       int64_t initBalance,
+                                       int64_t initSellingLiabilities,
+                                       bool addEntry) {
             AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
             ae.balance = initBalance;
             ae.numSubEntries = initNumSubEntries;
@@ -843,6 +1000,18 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             ae.ext.v1().liabilities.selling = initSellingLiabilities;
             int64_t initBuyingLiabilities = ae.ext.v1().liabilities.buying;
 
+            if (initNumSponsoring != 0 || initNumSponsored != 0)
+            {
+                ae.ext.v1().ext.v(2);
+                ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+            }
+            else if (ae.ext.v1().ext.v() == 2)
+            {
+                ae.ext.v1().ext.v2().numSponsoring = 0;
+                ae.ext.v1().ext.v2().numSponsored = 0;
+            }
+
             LedgerEntry le;
             le.data.type(ACCOUNT);
             le.data.account() = ae;
@@ -850,21 +1019,36 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             LedgerTxn ltx(app->getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto acc = ltx.create(le);
-            bool res =
-                DiamNet::addNumEntries(header, acc, deltaNumSubEntries) ==
-                AddSubentryResult::SUCCESS;
+
+            DataEntry de = LedgerTestUtils::generateValidDataEntry();
+            LedgerEntry dataLe;
+            dataLe.data.type(DATA);
+            dataLe.data.data() = de;
+
+            bool res = true;
+            if (addEntry)
+            {
+                res = createEntryWithPossibleSponsorship(ltx, header, dataLe,
+                                                         acc) ==
+                      SponsorshipResult::SUCCESS;
+            }
+            else
+            {
+                removeEntryWithPossibleSponsorship(ltx, header, dataLe, acc);
+            }
+
             REQUIRE(getSellingLiabilities(header, acc) ==
                     initSellingLiabilities);
             REQUIRE(getBuyingLiabilities(header, acc) == initBuyingLiabilities);
             REQUIRE(acc.current().data.account().balance == initBalance);
             if (res)
             {
-                if (deltaNumSubEntries > 0)
+                if (addEntry)
                 {
                     REQUIRE(getAvailableBalance(header, acc) >= 0);
                 }
                 REQUIRE(acc.current().data.account().numSubEntries ==
-                        initNumSubEntries + deltaNumSubEntries);
+                        initNumSubEntries + (addEntry ? 1 : -1));
             }
             else
             {
@@ -873,49 +1057,96 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             return res;
         };
 
+        auto addSubEntries = [&](uint32_t initNumSubEntries,
+                                 int64_t initBalance,
+                                 int64_t initSellingLiabilities,
+                                 int64_t deltaLiabilities) {
+            int32_t reserve = lm.getLastReserve();
+            uint32_t ledgerVersion = 0;
+            {
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+            }
+
+            auto res =
+                addSubEntriesHelper(initNumSubEntries, 0, 0, initBalance,
+                                    initSellingLiabilities, deltaLiabilities);
+            if (ledgerVersion < 14)
+            {
+                return res;
+            }
+
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                for (int32_t j = 0; j < 3; ++j)
+                {
+                    int64_t delta = (i - j) * reserve;
+                    if (delta > INT64_MAX - initBalance ||
+                        initBalance + delta < 0)
+                    {
+                        continue;
+                    }
+
+                    REQUIRE(addSubEntriesHelper(initNumSubEntries, i, j,
+                                                initBalance + delta,
+                                                initSellingLiabilities,
+                                                deltaLiabilities) == res);
+                }
+            }
+            return res;
+        };
+
         for_versions_from(10, *app, [&] {
             SECTION("can decrease sub entries when below min balance")
             {
                 // Below reserve and below new reserve
-                REQUIRE(addSubEntries(1, 0, 0, -1));
-                REQUIRE(addSubEntries(1, lm.getLastMinBalance(0) - 1, 0, -1));
+                REQUIRE(addSubEntries(1, 0, 0, false));
+                REQUIRE(
+                    addSubEntries(1, lm.getLastMinBalance(0) - 1, 0, false));
 
                 // Below reserve but at new reserve
-                REQUIRE(addSubEntries(1, lm.getLastMinBalance(0), 0, -1));
+                REQUIRE(addSubEntries(1, lm.getLastMinBalance(0), 0, false));
 
                 // Below reserve but above new reserve
-                REQUIRE(addSubEntries(1, lm.getLastMinBalance(1) - 1, 0, -1));
-                REQUIRE(addSubEntries(1, lm.getLastMinBalance(0) + 1, 0, -1));
+                REQUIRE(
+                    addSubEntries(1, lm.getLastMinBalance(1) - 1, 0, false));
+                REQUIRE(
+                    addSubEntries(1, lm.getLastMinBalance(0) + 1, 0, false));
             }
 
             SECTION("cannot add sub entry without sufficient balance")
             {
                 // Below reserve, no liabilities
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(0) - 1, 0, 1));
+                REQUIRE(
+                    !addSubEntries(0, lm.getLastMinBalance(0) - 1, 0, true));
 
                 // At reserve, no liabilities
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(0), 0, 1));
+                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(0), 0, true));
 
                 // Above reserve but below new reserve, no liabilities
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(0) + 1, 0, 1));
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(1) - 1, 0, 1));
+                REQUIRE(
+                    !addSubEntries(0, lm.getLastMinBalance(0) + 1, 0, true));
+                REQUIRE(
+                    !addSubEntries(0, lm.getLastMinBalance(1) - 1, 0, true));
 
                 // Above reserve but below new reserve, with liabilities
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(0) + 2, 1, 1));
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(1), 1, 1));
+                REQUIRE(
+                    !addSubEntries(0, lm.getLastMinBalance(0) + 2, 1, true));
+                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(1), 1, true));
 
                 // Above reserve but at new reserve, no liabilities
-                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1), 0, 1));
+                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1), 0, true));
 
                 // Above reserve but at new reserve, with liabilities
-                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 1, 1));
+                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 1, true));
 
                 // Above reserve and above new reserve, no liabilities
-                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 0, 1));
+                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 0, true));
 
                 // Above reserve and above new reserve, with liabilities
-                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 1, 1));
-                REQUIRE(!addSubEntries(0, lm.getLastMinBalance(1) + 1, 2, 1));
+                REQUIRE(addSubEntries(0, lm.getLastMinBalance(1) + 1, 1, true));
+                REQUIRE(
+                    !addSubEntries(0, lm.getLastMinBalance(1) + 1, 2, true));
             }
         });
     }
@@ -939,7 +1170,7 @@ TEST_CASE("balance with liabilities", "[ledger][liabilities]")
             LedgerTxn ltx(app->getLedgerTxnRoot());
             auto header = ltx.loadHeader();
             auto trust = ltx.create(le);
-            bool res = DiamNet::addBalance(header, trust, deltaBalance);
+            bool res = diamnet::addBalance(header, trust, deltaBalance);
             REQUIRE(getSellingLiabilities(header, trust) ==
                     initLiabilities.selling);
             REQUIRE(getBuyingLiabilities(header, trust) ==
@@ -1000,9 +1231,11 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
 
     SECTION("account available balance")
     {
-        auto checkAvailableBalance = [&](uint32_t initNumSubEntries,
-                                         int64_t initBalance,
-                                         int64_t initSellingLiabilities) {
+        auto checkAvailableBalanceHelper = [&](uint32_t initNumSubEntries,
+                                               uint32_t initNumSponsoring,
+                                               uint32_t initNumSponsored,
+                                               int64_t initBalance,
+                                               int64_t initSellingLiabilities) {
             AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
             ae.balance = initBalance;
             ae.numSubEntries = initNumSubEntries;
@@ -1011,6 +1244,18 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
                 ae.ext.v(1);
             }
             ae.ext.v1().liabilities = Liabilities{0, initSellingLiabilities};
+
+            if (initNumSponsoring != 0 || initNumSponsored != 0)
+            {
+                ae.ext.v1().ext.v(2);
+                ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+            }
+            else if (ae.ext.v1().ext.v() == 2)
+            {
+                ae.ext.v1().ext.v2().numSponsoring = 0;
+                ae.ext.v1().ext.v2().numSponsored = 0;
+            }
 
             LedgerEntry le;
             le.data.type(ACCOUNT);
@@ -1021,8 +1266,43 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             auto acc = ltx.create(le);
             auto availableBalance =
                 std::max({int64_t(0), getAvailableBalance(header, acc)});
-            REQUIRE(!DiamNet::addBalance(header, acc, -availableBalance - 1));
-            REQUIRE(DiamNet::addBalance(header, acc, -availableBalance));
+            REQUIRE(!diamnet::addBalance(header, acc, -availableBalance - 1));
+            REQUIRE(diamnet::addBalance(header, acc, -availableBalance));
+        };
+
+        auto checkAvailableBalance = [&](uint32_t initNumSubEntries,
+                                         int64_t initBalance,
+                                         int64_t initSellingLiabilities) {
+            int32_t reserve = lm.getLastReserve();
+            uint32_t ledgerVersion = 0;
+            {
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+            }
+
+            checkAvailableBalanceHelper(initNumSubEntries, 0, 0, initBalance,
+                                        initSellingLiabilities);
+            if (ledgerVersion < 14)
+            {
+                return;
+            }
+
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                for (int32_t j = 0; j < 3; ++j)
+                {
+                    int64_t delta = (i - j) * reserve;
+                    if (delta > INT64_MAX - initBalance ||
+                        initBalance + delta < 0)
+                    {
+                        continue;
+                    }
+
+                    checkAvailableBalanceHelper(initNumSubEntries, i, j,
+                                                initBalance + delta,
+                                                initSellingLiabilities);
+                }
+            }
         };
 
         for_versions_from(10, *app, [&] {
@@ -1051,9 +1331,11 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
 
     SECTION("account available limit")
     {
-        auto checkAvailableLimit = [&](uint32_t initNumSubEntries,
-                                       int64_t initBalance,
-                                       int64_t initBuyingLiabilities) {
+        auto checkAvailableLimitHelper = [&](uint32_t initNumSubEntries,
+                                             uint32_t initNumSponsoring,
+                                             uint32_t initNumSponsored,
+                                             int64_t initBalance,
+                                             int64_t initBuyingLiabilities) {
             AccountEntry ae = LedgerTestUtils::generateValidAccountEntry();
             ae.balance = initBalance;
             ae.numSubEntries = initNumSubEntries;
@@ -1062,6 +1344,18 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
                 ae.ext.v(1);
             }
             ae.ext.v1().liabilities = Liabilities{initBuyingLiabilities, 0};
+
+            if (initNumSponsoring != 0 || initNumSponsored != 0)
+            {
+                ae.ext.v1().ext.v(2);
+                ae.ext.v1().ext.v2().numSponsoring = initNumSponsoring;
+                ae.ext.v1().ext.v2().numSponsored = initNumSponsored;
+            }
+            else if (ae.ext.v1().ext.v() == 2)
+            {
+                ae.ext.v1().ext.v2().numSponsoring = 0;
+                ae.ext.v1().ext.v2().numSponsored = 0;
+            }
 
             LedgerEntry le;
             le.data.type(ACCOUNT);
@@ -1074,9 +1368,36 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
                 std::max({int64_t(0), getMaxAmountReceive(header, acc)});
             if (availableLimit < INT64_MAX)
             {
-                REQUIRE(!DiamNet::addBalance(header, acc, availableLimit + 1));
+                REQUIRE(!diamnet::addBalance(header, acc, availableLimit + 1));
             }
-            REQUIRE(DiamNet::addBalance(header, acc, availableLimit));
+            REQUIRE(diamnet::addBalance(header, acc, availableLimit));
+        };
+
+        auto checkAvailableLimit = [&](uint32_t initNumSubEntries,
+                                       int64_t initBalance,
+                                       int64_t initBuyingLiabilities) {
+            uint32_t ledgerVersion = 0;
+            {
+                LedgerTxn ltx(app->getLedgerTxnRoot());
+                ledgerVersion = ltx.loadHeader().current().ledgerVersion;
+            }
+
+            checkAvailableLimitHelper(initNumSubEntries, 0, 0, initBalance,
+                                      initBuyingLiabilities);
+            if (ledgerVersion < 14)
+            {
+                return;
+            }
+
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                for (int32_t j = 0; j < 3; ++j)
+                {
+                    checkAvailableLimitHelper(initNumSubEntries, i, j,
+                                              initBalance,
+                                              initBuyingLiabilities);
+                }
+            }
         };
 
         for_versions_from(10, *app, [&] {
@@ -1144,8 +1465,8 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             auto trust = ltx.create(le);
             auto availableBalance =
                 std::max({int64_t(0), getAvailableBalance(header, trust)});
-            REQUIRE(!DiamNet::addBalance(header, trust, -availableBalance - 1));
-            REQUIRE(DiamNet::addBalance(header, trust, -availableBalance));
+            REQUIRE(!diamnet::addBalance(header, trust, -availableBalance - 1));
+            REQUIRE(diamnet::addBalance(header, trust, -availableBalance));
         };
 
         for_versions_from(10, *app, [&] {
@@ -1192,9 +1513,9 @@ TEST_CASE("available balance and limit", "[ledger][liabilities]")
             if (availableLimit < INT64_MAX)
             {
                 REQUIRE(
-                    !DiamNet::addBalance(header, trust, availableLimit + 1));
+                    !diamnet::addBalance(header, trust, availableLimit + 1));
             }
-            REQUIRE(DiamNet::addBalance(header, trust, availableLimit));
+            REQUIRE(diamnet::addBalance(header, trust, availableLimit));
         };
 
         for_versions_from(10, *app, [&] {

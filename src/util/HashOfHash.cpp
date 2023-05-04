@@ -1,14 +1,14 @@
 #include "HashOfHash.h"
-#include "crypto/ByteSliceHasher.h"
+#include "crypto/ShortHash.h"
 
 namespace std
 {
 
 size_t
-hash<DiamNet::uint256>::operator()(DiamNet::uint256 const& x) const noexcept
+hash<diamnet::uint256>::operator()(diamnet::uint256 const& x) const noexcept
 {
     size_t res =
-        DiamNet::shortHash::computeHash(DiamNet::ByteSlice(x.data(), 8));
+        diamnet::shortHash::computeHash(diamnet::ByteSlice(x.data(), 8));
 
     return res;
 }

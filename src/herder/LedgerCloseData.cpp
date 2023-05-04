@@ -10,12 +10,12 @@
 
 using namespace std;
 
-namespace DiamNet
+namespace diamnet
 {
 
 LedgerCloseData::LedgerCloseData(
     uint32_t ledgerSeq, std::shared_ptr<AbstractTxSetFrameForApply> txSet,
-    DiamNetValue const& v)
+    DiamnetValue const& v)
     : mLedgerSeq(ledgerSeq), mTxSet(txSet), mValue(v)
 {
     Value x;
@@ -25,12 +25,12 @@ LedgerCloseData::LedgerCloseData(
 }
 
 std::string
-DiamNetValueToString(Config const& c, DiamNetValue const& sv)
+diamnetValueToString(Config const& c, DiamnetValue const& sv)
 {
     std::stringstream res;
 
     res << "[";
-    if (sv.ext.v() == DiamNet_VALUE_SIGNED)
+    if (sv.ext.v() == DIAMNET_VALUE_SIGNED)
     {
         res << " SIGNED@" << c.toShortString(sv.ext.lcValueSignature().nodeID);
     }

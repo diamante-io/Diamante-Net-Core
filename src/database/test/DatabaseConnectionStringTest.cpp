@@ -1,4 +1,4 @@
-// Copyright 2017 DiamNet Development Foundation and contributors. Licensed
+// Copyright 2017 Diamnet Development Foundation and contributors. Licensed
 // under the Apache License, Version 2.0. See the COPYING file at the root
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
@@ -6,7 +6,7 @@
 #include "lib/catch.hpp"
 #include <soci.h>
 
-using namespace DiamNet;
+using namespace diamnet;
 
 TEST_CASE("remove password from database connection string",
           "[db][dbconnectionstring]")
@@ -19,15 +19,15 @@ TEST_CASE("remove password from database connection string",
     SECTION("password is removed if first")
     {
         REQUIRE(removePasswordFromConnectionString(
-                    R"(postgresql://password=abc dbname=DiamNet)") ==
-                R"(postgresql://password=******** dbname=DiamNet)");
+                    R"(postgresql://password=abc dbname=diamnet)") ==
+                R"(postgresql://password=******** dbname=diamnet)");
     }
 
     SECTION("password is removed if second")
     {
         REQUIRE(removePasswordFromConnectionString(
-                    R"(postgresql://dbname=DiamNet password=dbname)") ==
-                R"(postgresql://dbname=DiamNet password=********)");
+                    R"(postgresql://dbname=diamnet password=dbname)") ==
+                R"(postgresql://dbname=diamnet password=********)");
     }
 
     SECTION("database can be named password")
@@ -41,72 +41,72 @@ TEST_CASE("remove password from database connection string",
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet password='quoted password')") ==
-            R"(postgresql://dbname=DiamNet password=********)");
+                R"(postgresql://dbname=diamnet password='quoted password')") ==
+            R"(postgresql://dbname=diamnet password=********)");
     }
 
     SECTION("quoted password with quote is removed")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet password='quoted \' password')") ==
-            R"(postgresql://dbname=DiamNet password=********)");
+                R"(postgresql://dbname=diamnet password='quoted \' password')") ==
+            R"(postgresql://dbname=diamnet password=********)");
     }
 
     SECTION("quoted password with backslash is removed")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet password='quoted \\ password')") ==
-            R"(postgresql://dbname=DiamNet password=********)");
+                R"(postgresql://dbname=diamnet password='quoted \\ password')") ==
+            R"(postgresql://dbname=diamnet password=********)");
     }
 
     SECTION("quoted password with backslash and quote is removed")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet password='quoted \\ password')") ==
-            R"(postgresql://dbname=DiamNet password=********)");
+                R"(postgresql://dbname=diamnet password='quoted \\ password')") ==
+            R"(postgresql://dbname=diamnet password=********)");
     }
 
     SECTION("parameters after password remain unchanged")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet password='quoted \\ password' performance='as fast as possible')") ==
-            R"(postgresql://dbname=DiamNet password=******** performance='as fast as possible')");
+                R"(postgresql://dbname=diamnet password='quoted \\ password' performance='as fast as possible')") ==
+            R"(postgresql://dbname=diamnet password=******** performance='as fast as possible')");
     }
 
     SECTION("dbname can be quored")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname='DiamNet with spaces' password='quoted \\ password' performance='as fast as possible')") ==
-            R"(postgresql://dbname='DiamNet with spaces' password=******** performance='as fast as possible')");
+                R"(postgresql://dbname='diamnet with spaces' password='quoted \\ password' performance='as fast as possible')") ==
+            R"(postgresql://dbname='diamnet with spaces' password=******** performance='as fast as possible')");
     }
 
     SECTION("spaces before equals are accepted")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname ='DiamNet with spaces' password ='quoted \\ password' performance ='as fast as possible')") ==
-            R"(postgresql://dbname ='DiamNet with spaces' password =******** performance ='as fast as possible')");
+                R"(postgresql://dbname ='diamnet with spaces' password ='quoted \\ password' performance ='as fast as possible')") ==
+            R"(postgresql://dbname ='diamnet with spaces' password =******** performance ='as fast as possible')");
     }
 
     SECTION("spaces after equals are accepted")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname= 'DiamNet with spaces' password= 'quoted \\ password' performance= 'as fast as possible')") ==
-            R"(postgresql://dbname= 'DiamNet with spaces' password= ******** performance= 'as fast as possible')");
+                R"(postgresql://dbname= 'diamnet with spaces' password= 'quoted \\ password' performance= 'as fast as possible')") ==
+            R"(postgresql://dbname= 'diamnet with spaces' password= ******** performance= 'as fast as possible')");
     }
 
     SECTION("spaces around equals are accepted")
     {
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname = 'DiamNet with spaces' password = 'quoted \\ password' performance = 'as fast as possible')") ==
-            R"(postgresql://dbname = 'DiamNet with spaces' password = ******** performance = 'as fast as possible')");
+                R"(postgresql://dbname = 'diamnet with spaces' password = 'quoted \\ password' performance = 'as fast as possible')") ==
+            R"(postgresql://dbname = 'diamnet with spaces' password = ******** performance = 'as fast as possible')");
     }
 
     SECTION(
@@ -164,7 +164,7 @@ TEST_CASE("remove password from database connection string",
         // as such before.
         REQUIRE(
             removePasswordFromConnectionString(
-                R"(postgresql://dbname=DiamNet user=DiamNet password=thisshouldbesecret host=/var/run/postgresql/)") ==
-            R"(postgresql://dbname=DiamNet user=DiamNet password=******** host=/var/run/postgresql/)");
+                R"(postgresql://dbname=diamnet user=diamnet password=thisshouldbesecret host=/var/run/postgresql/)") ==
+            R"(postgresql://dbname=diamnet user=diamnet password=******** host=/var/run/postgresql/)");
     }
 }

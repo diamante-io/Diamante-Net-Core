@@ -1,16 +1,17 @@
 # -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-# Copyright 2015 DiamNet Development Foundation and contributors. Licensed
+# Copyright 2015 Diamnet Development Foundation and contributors. Licensed
 # under the Apache License, Version 2.0. See the COPYING file at the root
 # of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 AC_PREREQ([2.68])
-AC_INIT([DiamNet-core],[0.1],[],[],[http://www.DiamNet.org])
+AC_INIT([diamnet-core],[0.1],[],[],[http://www.diamnet.org])
 # tar-ustar is required for long file names when libsodium is bundled
 AM_INIT_AUTOMAKE([-Wall -Wextra -Wconversion subdir-objects tar-ustar silent-rules])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_MACRO_DIR([m4])
+AC_CANONICAL_HOST
 
 AC_ARG_VAR([LIBCXX_PATH], [path to libc++ and libc++abi])
 
@@ -50,6 +51,9 @@ AX_FRESH_COMPILER
 # -pthread seems to be required by -std=c++14 on some hosts
 AX_APPEND_COMPILE_FLAGS([-pthread])
 
+# additional defines
+AX_APPEND_COMPILE_FLAGS([-DFMT_HEADER_ONLY=1])
+
 AC_MSG_CHECKING([whether defect report N4387 is resolved])
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <tuple>
 std::tuple<int, int> f()
@@ -74,7 +78,7 @@ return !((weak1.expired()) && (weak1.lock() == nullptr));
 
 AC_ARG_ENABLE([sdfprefs],
     AS_HELP_STRING([--enable-sdfprefs],
-        [Enable build settings preferred by DiamNet developers]))
+        [Enable build settings preferred by Diamnet developers]))
 
 AS_IF([test xyes = "x$enable_sdfprefs"],
         [AM_SILENT_RULES([yes])
@@ -154,7 +158,7 @@ AC_ARG_ENABLE([extrachecks],
         [build with additional debugging checks enabled]))
 AS_IF([test "x$enable_extrachecks" = "xyes"], [
   # don't try to detect which c++ library we're using
-  CXXFLAGS="$CXXFLAGS -D_GLIBCXX_DEBUG=1 -D_LIBCPP_DEBUG=1"
+  CXXFLAGS="$CXXFLAGS -D_GLIBCXX_DEBUG=1 -D_GLIBCXX_SANITIZE_VECTOR=1 -D_LIBCPP_DEBUG=0"
 ])
 
 AC_ARG_ENABLE([ccache],
@@ -195,14 +199,14 @@ AS_IF([test "x$enable_afl" = "xyes"], [
                      CC="afl-clang-fast"
                      # below we hard code -std=c++14 since updates to AX_CXX_COMPILE_STDCXX circa 2015 append it to
                      # CXX, not to CXXFLAGS and thus when setting CXX we override this. For a more detailed explanation
-                     # see: https://github.com/DiamNet/docker-DiamNet-core/pull/66#issuecomment-521886881
+                     # see: https://github.com/diamnet/docker-diamnet-core/pull/66#issuecomment-521886881
                      CXX="afl-clang-fast++ -std=c++14 -DAFL_LLVM_MODE=1"],
           [gcc*],   [AC_CHECK_PROGS([AFL_GCC], [afl-gcc])
                      AC_CHECK_PROGS([AFL_GPP], [afl-g++])
                      CC="afl-gcc"
                      # below we hard code -std=c++14 since updates to AX_CXX_COMPILE_STDCXX circa 2015 append it to
                      # CXX, not to CXXFLAGS and thus when setting CXX we override this. For a more detailed explanation
-                     # see: https://github.com/DiamNet/docker-DiamNet-core/pull/66#issuecomment-521886881
+                     # see: https://github.com/diamnet/docker-diamnet-core/pull/66#issuecomment-521886881
                      CXX="afl-g++ -std=c++14"],
           [AC_MSG_ERROR([Don't know how to instrument CC=$CC with AFL])])
 ])
@@ -228,7 +232,7 @@ sqlite3_LIBS=
 AC_SUBST(sqlite3_CFLAGS)
 AC_SUBST(sqlite3_LIBS)
 
-PKG_CHECK_MODULES(libsodium, [libsodium >= 1.0.13], :, libsodium_INTERNAL=yes)
+PKG_CHECK_MODULES(libsodium, [libsodium >= 1.0.17], :, libsodium_INTERNAL=yes)
 
 AX_PKGCONFIG_SUBDIR(lib/libsodium)
 if test -n "$libsodium_INTERNAL"; then
@@ -289,6 +293,49 @@ AC_ARG_ENABLE(tests,
     AS_HELP_STRING([--disable-tests],
         [Disable building test suite]))
 AM_CONDITIONAL(BUILD_TESTS, [test x$enable_tests != xno])
+
+AC_ARG_ENABLE(tracy,
+    AS_HELP_STRING([--enable-tracy],
+        [Enable 'tracy' profiler/tracer client stub]))
+AM_CONDITIONAL(USE_TRACY, [test x$enable_tracy = xyes])
+tracy_CFLAGS='-DTRACY_ENABLE -DTRACY_ON_DEMAND -DTRACY_NO_BROADCAST -DTRACY_ONLY_LOCALHOST -DTRACY_ONLY_IPV4'
+if test x"$enable_tracy" = xyes; then
+    case "${host_os}" in
+        *darwin*)
+            ;;
+        *)
+            LDFLAGS+=" -ldl "
+            ;;
+    esac
+fi
+AC_SUBST(tracy_CFLAGS)
+
+AC_ARG_ENABLE(tracy-gui,
+    AS_HELP_STRING([--enable-tracy-gui],
+        [Enable 'tracy' profiler/tracer server GUI]))
+AM_CONDITIONAL(USE_TRACY_GUI, [test x$enable_tracy_gui = xyes])
+if test x"$enable_tracy_gui" = xyes; then
+    PKG_CHECK_MODULES(capstone, capstone)
+    PKG_CHECK_MODULES(freetype, freetype2)
+    PKG_CHECK_MODULES(glfw, glfw3)
+    case "${host_os}" in
+        *darwin*)
+            ;;
+        *)
+            PKG_CHECK_MODULES(gtk, gtk+-2.0)
+            ;;
+    esac
+fi
+
+AC_ARG_ENABLE(tracy-capture,
+    AS_HELP_STRING([--enable-tracy-capture],
+        [Enable 'tracy' profiler/tracer capture program]))
+AM_CONDITIONAL(USE_TRACY_CAPTURE, [test x$enable_tracy_capture = xyes])
+
+AC_ARG_ENABLE(easylogging,
+    AS_HELP_STRING([--disable-easylogging],
+        [Disable easylogging]))
+AM_CONDITIONAL(USE_EASYLOGGING, [test x$enable_easylogging != xno])
 
 # Need this to pass through ccache for xdrpp, libsodium
 esc() {
