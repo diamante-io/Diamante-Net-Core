@@ -2,12 +2,6 @@ Installation Instructions
 ==================
 These are instructions for building diamnet-core from source.
 
-For a potentially quicker set up, the following projects could be good alternatives:
-
-* diamnet-core in a [docker container](https://github.com/diamnet/docker-diamnet-core)
-* diamnet-core and [horizon](https://github.com/diamnet/go/tree/master/services/horizon) in a [docker container](https://github.com/diamnet/docker-diamnet-core-horizon)
-* pre-compiled [packages](https://github.com/diamnet/packages)
-
 ## Picking a version to run
 
 Best is to use the latest *stable* release that can be downloaded from https://github.com/diamnet/diamnet-core/releases
