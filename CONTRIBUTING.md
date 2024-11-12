@@ -3,7 +3,7 @@
 👍🎉 First off, thanks for taking the time to contribute! 🎉👍
 
 Check out the [Diamnet Contribution
-Guide](https://github.com/diamnet/.github/blob/master/CONTRIBUTING.md) for details on contributing
+Guide](./CONTRIBUTING.md) for details on contributing
 to diamnet-core and Diamnet's other repositories, especially with regard to our code of conduct and
 contributor license agreement.
 
