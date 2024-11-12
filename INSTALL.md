@@ -2,11 +2,6 @@ Installation Instructions
 ==================
 These are instructions for building diamnet-core from source.
 
-## Picking a version to run
-
-Best is to use the latest *stable* release that can be downloaded from https://github.com/diamnet/diamnet-core/releases
-
-
 Alternatively, branches are organized in the following way:
 
 | branch name | description | quality bar |
