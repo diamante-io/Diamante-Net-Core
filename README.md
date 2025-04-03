@@ -1,5 +1,5 @@
 <div align="center">
-<a href="https://diamnet.org"><img alt="Diamnet" src="https://github.com/diamnet/.github/raw/master/diamnet-logo.png" width="558" /></a>
+<a href="https://www.diamante.io"><img alt="Diamante" src="https://diam-ico.s3.us-west-1.amazonaws.com/DiamanteLogoComplete.png" width="558" /></a> 
 <br/>
 <strong>Creating equitable access to the global financial system</strong>
 <h1>Diamnet Core</h1>
