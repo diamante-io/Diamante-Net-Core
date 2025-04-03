@@ -9,15 +9,15 @@
 </p>
 
 Diamnet-core is a replicated state machine that maintains a local copy of a cryptographic ledger and processes transactions against it, in consensus with a set of peers.
-It implements the [Diamnet Consensus Protocol](https://github.com/diamnet/diamnet-core/blob/master/src/scp/readme.md), a _federated_ consensus protocol.
+It implements the [Diamante Consensus Protocol](https://github.com/diamante-io/Diamante-Net-Core/blob/master/src/scp/readme.md), a _federated_ consensus protocol.
 It is written in C++14 and runs on Linux, OSX and Windows.
-Learn more by reading the [overview document](https://github.com/diamnet/diamnet-core/blob/master/docs/readme.md).
+Learn more by reading the [overview document](https://github.com/diamante-io/Diamante-Net-Core/master/docs/readme.md).
 
 # Documentation
 
 Documentation of the code's layout and abstractions, as well as for the
 functionality available, can be found in
-[`./docs`](https://github.com/diamnet/diamnet-core/tree/master/docs).
+[`./docs`](https://github.com/diamante-io/Diamante-Net-Core/master/docs).
 
 # Installation
 
