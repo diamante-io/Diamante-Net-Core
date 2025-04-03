@@ -2,7 +2,7 @@
 <a href="https://www.diamante.io"><img alt="Diamante" src="https://diam-ico.s3.us-west-1.amazonaws.com/DiamanteLogoCompleteBlack.png" width="558" /></a> 
 <br/>
 <strong>Creating equitable access to the global financial system</strong>
-<h1>Diamnet Core</h1>
+<h1>Diamante Core</h1>
 </div>
 <p align="center">
 <a href="https://travis-ci.org/diamnet/diamnet-core"><img alt="Build Status" src="https://travis-ci.org/diamnet/diamnet-core.svg?branch=auto" /></a>
