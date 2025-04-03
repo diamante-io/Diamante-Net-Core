@@ -2,23 +2,23 @@
 title: Overview
 ---
 
-Diamnet is a decentralized, federated peer-to-peer network that allows people to
+Diamante is a decentralized, federated peer-to-peer network that allows people to
 send payments in any asset anywhere in the world instantaneously, and with
 minimal fee.
 
-`Diamnet-core` is the core component of this network. `Diamnet-core` is a C++
-implementation of the Diamnet Consensus Protocol configured to construct a chain
+`Diamante-core` is the core component of this network. `Diamante-core` is a C++
+implementation of the Diamante Consensus Protocol configured to construct a chain
 of ledgers that are guaranteed to be in agreement across all the participating
 nodes at all times.
 
-For more detail on the Diamnet Consensus Protocol and how it establishes this
+For more detail on the Diamante Consensus Protocol and how it establishes this
 guarantee see [`src/scp/readme.md`](/src/scp/readme.md).
 
 
 - [Building & Installing](/INSTALL.md)
-- [Diamnet-core administration](software/admin.md)
+- [Diamante-core administration](software/admin.md)
 - [Architecture](architecture.md)
-- [Key Concepts](https://www.diamnet.org/developers/guides/)
+- [Key Concepts](https://developers.diamante.io/#/)
 - [Integration with other services](integration.md)
 - [Major Components](#major-components)
 - [Supporting Code Directories](#supporting-code-directories)
@@ -32,15 +32,15 @@ There are a few major components of the system. Each component has a dedicated
 source directory and its own dedicated `readme.md`.
 
 
-* **SCP** is our implementation of the Diamnet Consensus Protocol (SCP). This
+* **DCP** is our implementation of the Diamante Consensus Protocol (DCP). This
   component is fully abstracted from the rest of the system. It receives
   candidate black-box values and signals when these values have reached
   consensus by the network (called _externalizing_ a value) (See
   [`src/scp/readme.md`](/src/scp/readme.md)).
 
-* **Herder** is responsible for interfacing between SCP and the rest of
-  `diamnet-core`. Herder provides SCP with concrete implementations of the
-  methods SCP uses to communicate with peers, to compare values, to determine
+* **Herder** is responsible for interfacing between DCP and the rest of
+  `Diamante-core`. Herder provides DCP with concrete implementations of the
+  methods DCP uses to communicate with peers, to compare values, to determine
   whether values contain valid signatures, and so forth. Herder often
   accomplishes its tasks by delegating to other components
   (See [`src/herder/readme.md`](/src/herder/readme.md)).
@@ -49,10 +49,10 @@ source directory and its own dedicated `readme.md`.
   about and is connected to. It floods messages and fetches from peers the data
   that is needed to accomplish consensus (See
   [`src/overlay/readme.md`](/src/overlay/readme.md)). All
-  other data downloads are handled without imposing on the SCP-nodes, see
+  other data downloads are handled without imposing on the DCP-nodes, see
   [`./architecture.md`](/docs/architecture.md).
 
-* **Ledger** applies the transaction set that is externalized by SCP. It also
+* **Ledger** applies the transaction set that is externalized by DCP. It also
   forwards the externalization event to other components: it submits the changed
   ledger entries to the bucket list, triggers the publishing of history, and
   informs the overlay system to update its map of flooded messages. Ledger also
@@ -81,7 +81,7 @@ source directory and its own dedicated `readme.md`.
   state flags. Launches the test suite if requested.
 
 * **src/crypto** contains standard cryptographic routines, including random
-  number generation, hashing, hex encoding and Diamnet Key encoding.
+  number generation, hashing, hex encoding and Diamante Key encoding.
 
 * **src/util** gathers assorted logging and utility routines.
 
