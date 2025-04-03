@@ -5,10 +5,9 @@
 <h1>Diamante Core</h1>
 </div>
 <p align="center">
-<a href="https://travis-ci.org/diamnet/diamnet-core"><img alt="Build Status" src="https://travis-ci.org/diamnet/diamnet-core.svg?branch=auto" /></a>
 </p>
 
-Diamnet-core is a replicated state machine that maintains a local copy of a cryptographic ledger and processes transactions against it, in consensus with a set of peers.
+Diamante-core is a replicated state machine that maintains a local copy of a cryptographic ledger and processes transactions against it, in consensus with a set of peers.
 It implements the [Diamante Consensus Protocol](https://github.com/diamante-io/Diamante-Net-Core/blob/master/src/scp/readme.md), a _federated_ consensus protocol.
 It is written in C++14 and runs on Linux, OSX and Windows.
 Learn more by reading the [overview document](https://github.com/diamante-io/Diamante-Net-Core/master/docs/readme.md).
